@@ -67,6 +67,38 @@ export interface Post {
     isAnonymous: boolean;
 }
 
+// Forum Types (独立于发现板块)
+export type ForumCategory = 'general' | 'activity' | 'guide' | 'lost_found';
+export type ForumSort = 'latest_reply' | 'latest_post';
+
+export interface ForumPost {
+    id: string;
+    title: string;
+    content?: string;
+    authorId: string;
+    authorName: string;
+    authorEmail?: string;
+    authorAvatar?: string;
+    category: ForumCategory;
+    images?: string[];
+    replyCount: number;
+    upvoteCount: number;
+    isUpvoted?: boolean;
+    lastReplyAt: Date;
+    createdAt: Date;
+}
+
+export interface ForumComment {
+    id: string;
+    postId: string;
+    authorId: string;
+    authorName: string;
+    authorEmail?: string;
+    authorAvatar?: string;
+    content: string;
+    createdAt: Date;
+}
+
 // Location Types
 export type LocationCategory = 'Food' | 'Study' | 'Campus Cats' | 'Sports' | 'Other';
 

@@ -16,7 +16,9 @@
         "tip": "提示",
         "error": "错误",
         "success": "成功",
-        "ok": "确定"
+        "ok": "确定",
+        "anonymous": "匿名",
+        "deleted": "已删除"
     },
     "teachers": {
         "title": "教师列表",
@@ -125,6 +127,14 @@
     "campus": {
         "title": "校园圈",
         "campus_filter": "校园",
+        "tabs": {
+            "discover": "发现",
+            "forum": "论坛"
+        },
+        "sort": {
+            "latest_post": "🕐 最新发布",
+            "most_liked": "🔥 最多点赞"
+        },
         "categories": {
             "all": "全部",
             "events": "活动",
@@ -145,6 +155,65 @@
             "delete_error": "删除失败",
             "post_success": "贴子发布成功",
             "post_error": "发布失败"
+        }
+    },
+    "forum": {
+        "tabs": {
+            "all": "全部",
+            "activity": "活动",
+            "guide": "攻略",
+            "lost_found": "失物"
+        },
+        "sort": {
+            "latest_reply": "最新回复",
+            "latest_post": "最新发布"
+        },
+        "empty": {
+            "title": "暂无帖子",
+            "subtitle": "来发第一帖吧 👋"
+        },
+        "compose": {
+            "title": "发布帖子",
+            "publish": "✏️ 立即发布",
+            "placeholder_title": "分享你的心情、观点和经历...",
+            "placeholder_content": "补充帖子内容（必填）",
+            "add_media": "添加图片或视频",
+            "max_images": "最多添加 9 张图片",
+            "error_title": "请填写标题",
+            "error_title_long": "标题不能超过 30 个字",
+            "error_content": "请填写内容",
+            "error_login": "请先登录",
+            "success": "发布成功！",
+            "category_label": {
+                "general": "综合",
+                "activity": "活动",
+                "guide": "攻略",
+                "lost_found": "失物招领"
+            }
+        },
+        "detail": {
+            "comments": "回复详情",
+            "no_comments": "暂无评论",
+            "comment_placeholder": "写评论...",
+            "post": "发布",
+            "image_preview": "图片预览",
+            "recommend": "推荐",
+            "replies_count": "{{count}} 条回复",
+            "empty_comments": "暂无回复，来说点什么吧 👇",
+            "delete_post_title": "删除帖子",
+            "delete_comment_title": "删除回复",
+            "delete_post_confirm": "确定删除这条帖子吗？此操作不可撤销。",
+            "delete_comment_confirm": "确定删除这条回复吗？",
+            "toast": {
+                "comment_success": "评论成功！",
+                "comment_error": "评论失败",
+                "delete_success": "已删除",
+                "delete_error": "删除失败"
+            }
+        },
+        "row": {
+            "replies": "回复",
+            "likes": "点赞"
         }
     },
     "classroom_tab": {

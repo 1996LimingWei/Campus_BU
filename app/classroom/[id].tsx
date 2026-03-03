@@ -1,10 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Building, Camera, ChevronLeft, Navigation, Share2 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    BackHandler,
     Dimensions,
     Image,
     ScrollView,
@@ -23,6 +24,7 @@ const { width, height } = Dimensions.get('window');
 export default function BuildingDetail() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
+    const navigation = useNavigation();
     const [photos, setPhotos] = useState<string[]>([]); // User uploaded photos
     const [isMapModalVisible, setIsMapModalVisible] = useState(false);
     const [building, setBuilding] = useState<CampusLocation | undefined>(CAMPUS_BUILDINGS.find(b => b.id === id));
@@ -50,6 +52,37 @@ export default function BuildingDetail() {
         fetchBuilding();
     }, [id]);
 
+    const handleBackToClassroom = React.useCallback(() => {
+        try {
+            (router as any).navigate('/classroom');
+        } catch {
+            router.push('/classroom' as any);
+        }
+    }, [router]);
+
+    React.useEffect(() => {
+        const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+            const actionType = e?.data?.action?.type;
+            if (actionType !== 'GO_BACK' && actionType !== 'POP' && actionType !== 'POP_TO_TOP') {
+                return;
+            }
+
+            e.preventDefault();
+            handleBackToClassroom();
+        });
+
+        return unsubscribe;
+    }, [navigation, handleBackToClassroom]);
+
+    React.useEffect(() => {
+        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+            handleBackToClassroom();
+            return true;
+        });
+
+        return () => subscription.remove();
+    }, [handleBackToClassroom]);
+
     if (loading) {
         return (
             <View style={styles.errorContainer}>
@@ -62,7 +95,7 @@ export default function BuildingDetail() {
         return (
             <View style={styles.errorContainer}>
                 <Text>Building not found</Text>
-                <TouchableOpacity onPress={goBackToClassroom}>
+                <TouchableOpacity onPress={handleBackToClassroom}>
                     <Text style={styles.backLink}>Back to list</Text>
                 </TouchableOpacity>
             </View>
@@ -88,7 +121,7 @@ export default function BuildingDetail() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton} onPress={goBackToClassroom}>
+                <TouchableOpacity style={styles.backButton} onPress={handleBackToClassroom}>
                     <ChevronLeft size={24} color="#111" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle} numberOfLines={1}>{building.name}</Text>

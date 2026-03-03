@@ -16,7 +16,9 @@
         "tip": "提示",
         "error": "錯誤",
         "success": "成功",
-        "ok": "確定"
+        "ok": "確定",
+        "anonymous": "匿名",
+        "deleted": "已刪除"
     },
     "teachers": {
         "title": "教師列表",
@@ -125,6 +127,14 @@
     "campus": {
         "title": "校園圈",
         "campus_filter": "校園",
+        "tabs": {
+            "discover": "發現",
+            "forum": "論壇"
+        },
+        "sort": {
+            "latest_post": "🕐 最新發佈",
+            "most_liked": "🔥 最多點讚"
+        },
         "categories": {
             "all": "全部",
             "events": "活動",
@@ -144,6 +154,65 @@
             "delete_error": "刪除失敗",
             "post_success": "貼文發布成功",
             "post_error": "發布失敗"
+        }
+    },
+    "forum": {
+        "tabs": {
+            "all": "全部",
+            "activity": "活動",
+            "guide": "攻略",
+            "lost_found": "失物"
+        },
+        "sort": {
+            "latest_reply": "最新回復",
+            "latest_post": "最新發佈"
+        },
+        "empty": {
+            "title": "暫無帖子",
+            "subtitle": "來發第一帖吧 👋"
+        },
+        "compose": {
+            "title": "發佈帖子",
+            "publish": "✏️ 立即發佈",
+            "placeholder_title": "分享你的心情、觀點和經歷...",
+            "placeholder_content": "補充帖子内容（必填）",
+            "add_media": "添加圖片或視頻",
+            "max_images": "最多添加 9 張圖片",
+            "error_title": "請填寫標題",
+            "error_title_long": "標題不能超過 30 個字",
+            "error_content": "請填寫內容",
+            "error_login": "請先登錄",
+            "success": "發佈成功！",
+            "category_label": {
+                "general": "綜合",
+                "activity": "活動",
+                "guide": "攻略",
+                "lost_found": "失物招領"
+            }
+        },
+        "detail": {
+            "comments": "回復詳情",
+            "no_comments": "暫無評論",
+            "comment_placeholder": "寫評論...",
+            "post": "發佈",
+            "image_preview": "圖片預覽",
+            "recommend": "推薦",
+            "replies_count": "{{count}} 條回复",
+            "empty_comments": "暫無回复，來說點什麼吧 👇",
+            "delete_post_title": "刪除帖子",
+            "delete_comment_title": "刪除回复",
+            "delete_post_confirm": "確定刪除這條帖子嗎？此操作不可撤銷。",
+            "delete_comment_confirm": "確定刪除這條回复嗎？",
+            "toast": {
+                "comment_success": "回复成功！",
+                "comment_error": "回复失敗",
+                "delete_success": "已刪除",
+                "delete_error": "刪除失敗"
+            }
+        },
+        "row": {
+            "replies": "回復",
+            "likes": "點讚"
         }
     },
     "classroom_tab": {

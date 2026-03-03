@@ -16,7 +16,9 @@
         "tip": "Tip",
         "error": "Error",
         "success": "Success",
-        "ok": "OK"
+        "ok": "OK",
+        "anonymous": "Anonymous",
+        "deleted": "Deleted"
     },
     "teachers": {
         "title": "Instructors",
@@ -125,6 +127,14 @@
     "campus": {
         "title": "Campus Circle",
         "campus_filter": "Campus",
+        "tabs": {
+            "discover": "Discover",
+            "forum": "Forum"
+        },
+        "sort": {
+            "latest_post": "🕐 Latest Post",
+            "most_liked": "🔥 Most Liked"
+        },
         "categories": {
             "all": "All",
             "events": "Events",
@@ -144,6 +154,65 @@
             "delete_error": "Failed to delete post",
             "post_success": "Post created successfully",
             "post_error": "Failed to create post"
+        }
+    },
+    "forum": {
+        "tabs": {
+            "all": "All",
+            "activity": "Activity",
+            "guide": "Guide",
+            "lost_found": "Lost"
+        },
+        "sort": {
+            "latest_reply": "Latest Reply",
+            "latest_post": "Latest Post"
+        },
+        "empty": {
+            "title": "No posts yet",
+            "subtitle": "Be the first to post! 👋"
+        },
+        "compose": {
+            "title": "Create Post",
+            "publish": "✏️ Publish Now",
+            "placeholder_title": "Share your thoughts, views and experiences...",
+            "placeholder_content": "Add post content (required)",
+            "add_media": "Add images or video",
+            "max_images": "Max 9 images",
+            "error_title": "Please enter a title",
+            "error_title_long": "Title cannot exceed 30 chars",
+            "error_content": "Please enter content",
+            "error_login": "Please log in first",
+            "success": "Published successfully!",
+            "category_label": {
+                "general": "General",
+                "activity": "Activity",
+                "guide": "Guide",
+                "lost_found": "Lost & Found"
+            }
+        },
+        "detail": {
+            "comments": "Comment Details",
+            "no_comments": "No comments yet",
+            "comment_placeholder": "Write a comment...",
+            "post": "Post",
+            "image_preview": "Image Preview",
+            "recommend": "Recommend",
+            "replies_count": "{{count}} Replies",
+            "empty_comments": "No comments yet, say something 👇",
+            "delete_post_title": "Delete Post",
+            "delete_comment_title": "Delete Comment",
+            "delete_post_confirm": "Are you sure you want to delete this post? This action cannot be undone.",
+            "delete_comment_confirm": "Are you sure you want to delete this comment?",
+            "toast": {
+                "comment_success": "Commented successfully!",
+                "comment_error": "Failed to comment",
+                "delete_success": "Deleted",
+                "delete_error": "Failed to delete"
+            }
+        },
+        "row": {
+            "replies": "Replies",
+            "likes": "Likes"
         }
     },
     "classroom_tab": {

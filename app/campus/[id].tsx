@@ -1,9 +1,18 @@
 import { formatDistanceToNow } from 'date-fns';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, MessageCircle, Send, Trash2 } from 'lucide-react-native';
+import {
+    ChevronLeft,
+    Heart,
+    MessageCircle,
+    MoreHorizontal,
+    Send,
+    Trash2,
+} from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Dimensions,
+    FlatList,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -14,16 +23,56 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import { ActionModal } from '../../components/campus/ActionModal';
-import { PostCard } from '../../components/campus/PostCard';
 import { Toast, ToastType } from '../../components/campus/Toast';
 import { EduBadge } from '../../components/common/EduBadge';
 import { getCurrentUser } from '../../services/auth';
-import { addPostComment, deleteComment, deletePost, fetchPostById, fetchPostComments, togglePostLike } from '../../services/campus';
+import {
+    addPostComment,
+    deleteComment,
+    deletePost,
+    fetchPostById,
+    fetchPostComments,
+    togglePostLike,
+} from '../../services/campus';
 import { Post } from '../../types';
 import { isHKBUEmail } from '../../utils/userUtils';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+
+// ── Palette for text-only cover (same as MasonryPostCard) ──────────────────
+const TEXT_CARD_PALETTES = [
+    { bg: '#1E3A8A', accent: '#3B82F6', text: '#fff' },
+    { bg: '#7C3AED', accent: '#A78BFA', text: '#fff' },
+    { bg: '#0F766E', accent: '#2DD4BF', text: '#fff' },
+    { bg: '#B45309', accent: '#FBBF24', text: '#fff' },
+    { bg: '#BE185D', accent: '#F472B6', text: '#fff' },
+    { bg: '#166534', accent: '#4ADE80', text: '#fff' },
+    { bg: '#1D4ED8', accent: '#93C5FD', text: '#fff' },
+    { bg: '#9D174D', accent: '#F9A8D4', text: '#fff' },
+    { bg: '#374151', accent: '#9CA3AF', text: '#fff' },
+    { bg: '#92400E', accent: '#FDE68A', text: '#fff' },
+];
+
+function getPalette(id: string) {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        hash = (hash * 31 + id.charCodeAt(i)) & 0xffffffff;
+    }
+    return TEXT_CARD_PALETTES[Math.abs(hash) % TEXT_CARD_PALETTES.length];
+}
+
+const isValidUrl = (url?: string) =>
+    !!url && (url.startsWith('http://') || url.startsWith('https://'));
+
+const categoryColors: Record<string, string> = {
+    Events: '#FF6B6B',
+    Reviews: '#4ECDC4',
+    Guides: '#FFB347',
+    'Lost & Found': '#95E1D3',
+};
 
 export default function PostDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -35,15 +84,15 @@ export default function PostDetailScreen() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [imgIndex, setImgIndex] = useState(0);
 
-    // UI State
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [deleteType, setDeleteType] = useState<'post' | 'comment'>('post');
     const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
     const [toast, setToast] = useState<{ visible: boolean; message: string; type: ToastType }>({
         visible: false,
         message: '',
-        type: 'success'
+        type: 'success',
     });
 
     const loadData = async () => {
@@ -70,28 +119,23 @@ export default function PostDetailScreen() {
     }, [id]);
 
     const handleLike = async () => {
-        if (!post) return;
+        if (!post || !currentUser) return;
         try {
-            if (!currentUser) return;
-
             await togglePostLike(post.id, currentUser.uid);
-            setPost(prev => prev ? {
-                ...prev,
-                isLiked: !prev.isLiked,
-                likes: prev.isLiked ? prev.likes - 1 : prev.likes + 1
-            } : null);
+            setPost(prev =>
+                prev
+                    ? { ...prev, isLiked: !prev.isLiked, likes: prev.isLiked ? prev.likes - 1 : prev.likes + 1 }
+                    : null
+            );
         } catch (error) {
             console.error('Error liking post:', error);
         }
     };
 
     const handleSendComment = async () => {
-        if (!commentText.trim() || !post) return;
-
+        if (!commentText.trim() || !post || !currentUser) return;
         try {
             setSubmitting(true);
-            if (!currentUser) return;
-
             const newComment = await addPostComment({
                 postId: post.id,
                 authorId: currentUser.uid,
@@ -100,17 +144,15 @@ export default function PostDetailScreen() {
                 authorAvatar: currentUser.avatarUrl || undefined,
                 content: commentText.trim(),
             });
-
             if (newComment) {
                 setComments(prev => [...prev, newComment]);
                 setPost(prev => prev ? { ...prev, comments: prev.comments + 1 } : null);
                 setCommentText('');
                 Keyboard.dismiss();
-                setToast({ visible: true, message: 'Comment added!', type: 'success' });
+                setToast({ visible: true, message: '评论成功！', type: 'success' });
             }
         } catch (error) {
-            console.error('Error adding comment:', error);
-            setToast({ visible: true, message: 'Failed to add comment', type: 'error' });
+            setToast({ visible: true, message: '评论失败', type: 'error' });
         } finally {
             setSubmitting(false);
         }
@@ -133,11 +175,10 @@ export default function PostDetailScreen() {
             try {
                 await deletePost(post.id);
                 setDeleteModalVisible(false);
-                setToast({ visible: true, message: 'Post deleted', type: 'success' });
+                setToast({ visible: true, message: '已删除', type: 'success' });
                 setTimeout(() => router.back(), 1000);
-            } catch (error) {
-                console.error('Error deleting post:', error);
-                setToast({ visible: true, message: 'Failed to delete post', type: 'error' });
+            } catch {
+                setToast({ visible: true, message: '删除失败', type: 'error' });
                 setDeleteModalVisible(false);
             }
         } else {
@@ -146,10 +187,9 @@ export default function PostDetailScreen() {
                 await deleteComment(selectedCommentId);
                 setComments(prev => prev.filter(c => c.id !== selectedCommentId));
                 setPost(prev => prev ? { ...prev, comments: Math.max(0, prev.comments - 1) } : null);
-                setToast({ visible: true, message: 'Comment deleted', type: 'success' });
-            } catch (error) {
-                console.error('Error deleting comment:', error);
-                setToast({ visible: true, message: 'Failed to delete comment', type: 'error' });
+                setToast({ visible: true, message: '评论已删除', type: 'success' });
+            } catch {
+                setToast({ visible: true, message: '删除失败', type: 'error' });
             } finally {
                 setDeleteModalVisible(false);
                 setSelectedCommentId(null);
@@ -157,123 +197,256 @@ export default function PostDetailScreen() {
         }
     };
 
+    // ── Loading / not found states ────────────────────────────────────────────
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <StatusBar barStyle="dark-content" />
+                <ActivityIndicator size="large" color="#1E3A8A" />
+            </View>
+        );
+    }
+
+    if (!post) {
+        return (
+            <View style={styles.loadingContainer}>
+                <Text style={{ color: '#6B7280', fontSize: 16 }}>帖子不存在</Text>
+                <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+                    <Text style={{ color: '#1E3A8A', fontSize: 15 }}>返回</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    // ── Prepare image list ────────────────────────────────────────────────────
+    const images = (post.images?.length ? post.images : post.imageUrl ? [post.imageUrl] : [])
+        .filter(isValidUrl);
+    const isTextOnly = images.length === 0;
+    const palette = isTextOnly ? getPalette(post.id) : null;
+
+    // ── Main render ───────────────────────────────────────────────────────────
     return (
         <KeyboardAvoidingView
-            style={styles.container}
+            style={styles.root}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-            <StatusBar barStyle="light-content" />
+            <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <ChevronLeft size={24} color="#fff" />
+            {/* ── Top header bar ── */}
+            <View style={styles.topBar}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <ChevronLeft size={24} color="#1E3A8A" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Post Detail</Text>
-                <View style={{ width: 24 }} />
+                <Text style={styles.topBarTitle}>HKCampus</Text>
+                {currentUser?.uid === post.authorId ? (
+                    <TouchableOpacity style={styles.backBtn} onPress={triggerDeletePost}>
+                        <MoreHorizontal size={22} color="#1E3A8A" />
+                    </TouchableOpacity>
+                ) : (
+                    <View style={{ width: 40 }} />
+                )}
             </View>
 
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#1E3A8A" />
-                </View>
-            ) : !post ? (
-                <View style={styles.emptyComments}>
-                    <Text style={styles.emptyText}>Post not found.</Text>
-                </View>
-            ) : (
-                <ScrollView
-                    style={styles.content}
-                    contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <PostCard
-                        post={post}
-                        onLike={handleLike}
-                        onDelete={triggerDeletePost}
-                        currentUserId={currentUser?.uid}
-                    />
-
-                    <View style={styles.commentsHeader}>
-                        <Text style={styles.commentsTitle}>Comments ({post.comments || 0})</Text>
+            <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                {/* ══ COVER AREA ══════════════════════════════════════════════ */}
+                {isTextOnly ? (
+                    /* Text-only cover */
+                    <View style={[styles.textCover, { backgroundColor: palette!.bg }]}>
+                        <View style={[styles.blob, styles.blobTR, { backgroundColor: palette!.accent + '55' }]} />
+                        <View style={[styles.blob, styles.blobBL, { backgroundColor: palette!.accent + '33' }]} />
+                        <Text style={[styles.textCoverContent, { color: palette!.text }]} numberOfLines={12}>
+                            {post.content}
+                        </Text>
                     </View>
-
-                    {comments && comments.length > 0 ? (
-                        <View style={styles.repliesList}>
-                            {comments.map(comment => (
-                                <View key={comment.id} style={styles.replyItem}>
-                                    <View style={styles.replyAvatar}>
-                                        {comment.author_avatar ? (
-                                            <Image source={{ uri: comment.author_avatar }} style={styles.avatarImage} />
-                                        ) : (
-                                            <Text style={styles.replyAvatarText}>
-                                                {comment.author_name ? comment.author_name.charAt(0) : '?'}
-                                            </Text>
-                                        )}
-                                    </View>
-                                    <View style={styles.replyInfo}>
-                                        <View style={styles.commentHeaderRow}>
-                                            <Text style={styles.replyAuthor}>{comment.author_name}</Text>
-                                            <EduBadge shouldShow={isHKBUEmail(comment.author_email)} size="small" />
-                                            {currentUser?.uid === comment.author_id && (
-                                                <TouchableOpacity
-                                                    onPress={() => triggerDeleteComment(comment.id)}
-                                                >
-                                                    <Trash2 size={16} color="#EF4444" />
-                                                </TouchableOpacity>
-                                            )}
-                                        </View>
-                                        <Text style={styles.replyContent}>{comment.content}</Text>
-                                        <Text style={styles.replyTime}>
-                                            {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
-                                        </Text>
-                                    </View>
+                ) : images.length === 1 ? (
+                    /* Single image — tall square */
+                    <View style={styles.singleImageWrapper}>
+                        <Image
+                            source={{ uri: images[0] }}
+                            style={styles.singleImage}
+                            resizeMode="cover"
+                        />
+                    </View>
+                ) : (
+                    /* Multi-image carousel */
+                    <View>
+                        <FlatList
+                            data={images}
+                            horizontal
+                            pagingEnabled
+                            showsHorizontalScrollIndicator={false}
+                            keyExtractor={(_, i) => String(i)}
+                            onMomentumScrollEnd={e => {
+                                setImgIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W));
+                            }}
+                            renderItem={({ item }) => (
+                                <View style={styles.singleImageWrapper}>
+                                    <Image source={{ uri: item }} style={styles.singleImage} resizeMode="cover" />
                                 </View>
+                            )}
+                        />
+                        {/* Dot indicator */}
+                        <View style={styles.dotRow}>
+                            {images.map((_, i) => (
+                                <View
+                                    key={i}
+                                    style={[styles.dot, i === imgIndex && styles.dotActive]}
+                                />
                             ))}
                         </View>
-                    ) : (
-                        <View style={styles.emptyComments}>
-                            <MessageCircle size={48} color="#D1D5DB" />
-                            <Text style={styles.emptyText}>No comments yet. Start the conversation!</Text>
+                    </View>
+                )}
+
+                {/* ══ AUTHOR INFO ═════════════════════════════════════════════ */}
+                <View style={styles.authorSection}>
+                    <View style={styles.authorAvatar}>
+                        {!post.isAnonymous && isValidUrl(post.authorAvatar) ? (
+                            <Image source={{ uri: post.authorAvatar }} style={styles.avatarImg} />
+                        ) : (
+                            <Text style={styles.avatarLetter}>
+                                {post.isAnonymous ? '?' : post.authorName.charAt(0).toUpperCase()}
+                            </Text>
+                        )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <View style={styles.authorNameRow}>
+                            <Text style={styles.authorName}>
+                                {post.isAnonymous ? '匿名用户' : post.authorName}
+                            </Text>
+                            <EduBadge shouldShow={!post.isAnonymous && isHKBUEmail(post.authorEmail)} />
+                        </View>
+                        <Text style={styles.timeText}>
+                            {formatDistanceToNow(post.createdAt, { addSuffix: true })}
+                        </Text>
+                    </View>
+                    {/* Category pill */}
+                    {post.category && post.category !== 'All' && (
+                        <View style={[styles.catPill, { backgroundColor: categoryColors[post.category] + '22' }]}>
+                            <Text style={[styles.catPillText, { color: categoryColors[post.category] }]}>
+                                {post.category}
+                            </Text>
                         </View>
                     )}
-                </ScrollView>
-            )}
+                    {/* (delete is now in the top bar) */}
+                </View>
 
-            {/* Sticky Input */}
-            <View style={styles.inputWrapper}>
-                <View style={styles.inputContainer}>
+                {/* ══ CONTENT ═════════════════════════════════════════════════ */}
+                <View style={styles.contentSection}>
+                    {/* For text-only posts the cover already shows content; show full text here too */}
+                    <Text style={styles.bodyText}>{post.content}</Text>
+
+                    {/* Location tag */}
+                    {post.location?.name && (
+                        <View style={styles.locationTag}>
+                            <Text style={styles.locationTagText}>📍 {post.location.name}</Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* ══ COMMENTS SECTION ════════════════════════════════════════ */}
+                <View style={styles.divider} />
+                <View style={styles.commentsSection}>
+                    <Text style={styles.commentsLabel}>
+                        {comments.length > 0 ? `共 ${comments.length} 条评论` : '暂无评论，来说点什么吧 👇'}
+                    </Text>
+
+                    {comments.map(comment => (
+                        <View key={comment.id} style={styles.commentItem}>
+                            <View style={styles.commentAvatar}>
+                                {comment.author_avatar && isValidUrl(comment.author_avatar) ? (
+                                    <Image source={{ uri: comment.author_avatar }} style={styles.avatarImg} />
+                                ) : (
+                                    <Text style={styles.avatarLetter}>
+                                        {comment.author_name?.charAt(0).toUpperCase() ?? '?'}
+                                    </Text>
+                                )}
+                            </View>
+                            <View style={styles.commentBody}>
+                                <View style={styles.commentHeader}>
+                                    <Text style={styles.commentAuthor}>{comment.author_name}</Text>
+                                    <EduBadge shouldShow={isHKBUEmail(comment.author_email)} size="small" />
+                                    {currentUser?.uid === comment.author_id && (
+                                        <TouchableOpacity
+                                            onPress={() => triggerDeleteComment(comment.id)}
+                                            style={styles.deleteCommentBtn}
+                                        >
+                                            <Trash2 size={14} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                                <Text style={styles.commentText}>{comment.content}</Text>
+                                <Text style={styles.commentTime}>
+                                    {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                                </Text>
+                            </View>
+                        </View>
+                    ))}
+
+                    {/* padding so content clears the bottom bar */}
+                    <View style={{ height: 100 }} />
+                </View>
+            </ScrollView>
+
+            {/* ══ BOTTOM ACTION BAR ═══════════════════════════════════════════ */}
+            <View style={styles.bottomBar}>
+                {/* Comment input */}
+                <View style={styles.inputPill}>
                     <TextInput
-                        style={styles.input}
-                        placeholder="Write a comment..."
+                        style={styles.textInput}
+                        placeholder="说点什么..."
+                        placeholderTextColor="#9CA3AF"
                         value={commentText}
                         onChangeText={setCommentText}
                         multiline
                     />
-                    <TouchableOpacity
-                        style={[styles.sendButton, (!commentText.trim() || submitting) && styles.sendButtonDisabled]}
-                        onPress={handleSendComment}
-                        disabled={!commentText.trim() || submitting}
-                    >
-                        {submitting ? (
-                            <ActivityIndicator size="small" color="#1E3A8A" />
-                        ) : (
-                            <Send size={20} color={commentText.trim() ? "#1E3A8A" : "#9CA3AF"} />
-                        )}
-                    </TouchableOpacity>
+                    {commentText.trim().length > 0 && (
+                        <TouchableOpacity
+                            style={styles.sendBtn}
+                            onPress={handleSendComment}
+                            disabled={submitting}
+                        >
+                            {submitting ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Send size={16} color="#fff" />
+                            )}
+                        </TouchableOpacity>
+                    )}
                 </View>
+
+                {/* Like */}
+                <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
+                    <Heart
+                        size={24}
+                        color={post.isLiked ? '#EF4444' : '#6B7280'}
+                        fill={post.isLiked ? '#EF4444' : 'transparent'}
+                    />
+                    <Text style={[styles.actionCount, post.isLiked && { color: '#EF4444' }]}>
+                        {post.likes}
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Comment count */}
+                <TouchableOpacity style={styles.actionBtn}>
+                    <MessageCircle size={24} color="#6B7280" />
+                    <Text style={styles.actionCount}>{post.comments}</Text>
+                </TouchableOpacity>
             </View>
 
+            {/* ── Modals ── */}
             <ActionModal
                 visible={deleteModalVisible}
-                title={deleteType === 'post' ? "Delete Post" : "Delete Comment"}
-                message={`Are you sure you want to delete this ${deleteType}? This action cannot be undone.`}
+                title={deleteType === 'post' ? '删除帖子' : '删除评论'}
+                message={`确定删除这条${deleteType === 'post' ? '帖子' : '评论'}吗？此操作不可撤销。`}
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteModalVisible(false)}
-                confirmText="Delete"
+                confirmText="删除"
             />
-
             <Toast
                 visible={toast.visible}
                 message={toast.message}
@@ -284,145 +457,294 @@ export default function PostDetailScreen() {
     );
 }
 
+const COVER_HEIGHT = SCREEN_W; // 1:1 square, same as XHS
+
 const styles = StyleSheet.create({
-    container: {
+    root: {
         flex: 1,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: '#fff',
     },
     loadingContainer: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: '#fff',
     },
-    header: {
-        paddingTop: 56,
-        paddingBottom: 16,
-        paddingHorizontal: 20,
-        backgroundColor: '#1E3A8A',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    content: {
+    scroll: {
         flex: 1,
     },
     scrollContent: {
-        padding: 16,
-        paddingBottom: 32,
+        paddingBottom: 20,
     },
-    commentsHeader: {
-        marginTop: 24,
-        marginBottom: 16,
-        paddingHorizontal: 4,
-    },
-    commentsTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#111827',
-    },
-    repliesList: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    replyItem: {
-        flexDirection: 'row',
-        marginBottom: 20,
-    },
-    replyAvatar: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: '#F3E8FF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
+
+    // ── Cover ─────────────────────────────────────────────────────────────────
+    textCover: {
+        width: SCREEN_W,
+        height: COVER_HEIGHT,
+        padding: 28,
+        justifyContent: 'flex-end',
         overflow: 'hidden',
     },
-    avatarImage: {
+    textCoverContent: {
+        fontSize: 22,
+        fontWeight: '700',
+        lineHeight: 32,
+        letterSpacing: 0.2,
+    },
+    blob: {
+        position: 'absolute',
+        borderRadius: 999,
+    },
+    blobTR: {
+        width: 180,
+        height: 180,
+        top: -40,
+        right: -40,
+    },
+    blobBL: {
+        width: 120,
+        height: 120,
+        bottom: 60,
+        left: -20,
+    },
+    singleImageWrapper: {
+        width: SCREEN_W,
+        height: COVER_HEIGHT,
+        backgroundColor: '#F3F4F6',
+    },
+    singleImage: {
         width: '100%',
         height: '100%',
     },
-    replyAvatarText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#7C3AED',
+    dotRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 6,
+        marginTop: 10,
+        marginBottom: 4,
     },
-    replyInfo: {
+    dot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#D1D5DB',
+    },
+    dotActive: {
+        backgroundColor: '#1E3A8A',
+        width: 16,
+    },
+
+    // Top navigation bar
+    topBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#fff',
+        paddingTop: Platform.OS === 'ios' ? 54 : 16,
+        paddingBottom: 14,
+        paddingHorizontal: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F2F8',
+    },
+    backBtn: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 20,
+    },
+    topBarTitle: {
         flex: 1,
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#1E3A8A',
+        textAlign: 'center',
+        letterSpacing: -0.5,
     },
-    replyAuthor: {
-        fontSize: 14,
+
+    // ── Author row ────────────────────────────────────────────────────────────
+    authorSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 10,
+        gap: 10,
+    },
+    authorAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#1E3A8A',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    avatarImg: {
+        width: '100%',
+        height: '100%',
+    },
+    avatarLetter: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    authorNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    authorName: {
+        fontSize: 15,
         fontWeight: '700',
         color: '#111827',
     },
-    commentHeaderRow: {
+    timeText: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginTop: 2,
+    },
+    catPill: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 10,
+    },
+    catPillText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    moreBtn: {
+        padding: 6,
+    },
+
+    // ── Body text ─────────────────────────────────────────────────────────────
+    contentSection: {
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+    },
+    bodyText: {
+        fontSize: 16,
+        lineHeight: 26,
+        color: '#1F2937',
+        fontWeight: '400',
+    },
+    locationTag: {
+        marginTop: 12,
+        alignSelf: 'flex-start',
+        backgroundColor: '#EFF6FF',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    locationTagText: {
+        fontSize: 12,
+        color: '#1E3A8A',
+        fontWeight: '600',
+    },
+
+    // ── Comments ──────────────────────────────────────────────────────────────
+    divider: {
+        height: 8,
+        backgroundColor: '#F4F6FB',
+    },
+    commentsSection: {
+        paddingHorizontal: 16,
+        paddingTop: 16,
+    },
+    commentsLabel: {
+        fontSize: 13,
+        color: '#6B7280',
+        fontWeight: '500',
+        marginBottom: 16,
+    },
+    commentItem: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        marginBottom: 20,
+        gap: 10,
+    },
+    commentAvatar: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: '#1E3A8A',
         alignItems: 'center',
-        marginBottom: 2,
+        justifyContent: 'center',
+        overflow: 'hidden',
+        flexShrink: 0,
     },
-    replyContent: {
+    commentBody: {
+        flex: 1,
+    },
+    commentHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 4,
+    },
+    commentAuthor: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    deleteCommentBtn: {
+        marginLeft: 'auto',
+        padding: 4,
+    },
+    commentText: {
         fontSize: 14,
-        color: '#374151',
         lineHeight: 20,
+        color: '#374151',
     },
-    replyTime: {
+    commentTime: {
         fontSize: 11,
         color: '#9CA3AF',
         marginTop: 4,
     },
-    emptyComments: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 60,
-    },
-    emptyText: {
-        marginTop: 12,
-        fontSize: 14,
-        color: '#6B7280',
-        textAlign: 'center',
-    },
-    inputWrapper: {
-        backgroundColor: '#fff',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
-        paddingBottom: Platform.OS === 'ios' ? 32 : 12,
-    },
-    inputContainer: {
+
+    // ── Bottom bar ────────────────────────────────────────────────────────────
+    bottomBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F3F4F6',
-        borderRadius: 24,
+        gap: 12,
         paddingHorizontal: 16,
-        paddingVertical: 8,
+        paddingTop: 12,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 14,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#F0F2F8',
     },
-    input: {
+    inputPill: {
         flex: 1,
-        fontSize: 15,
-        color: '#111827',
-        maxHeight: 100,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F4F6FB',
+        borderRadius: 24,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        minHeight: 40,
     },
-    sendButton: {
-        padding: 8,
+    textInput: {
+        flex: 1,
+        fontSize: 14,
+        color: '#111827',
+        maxHeight: 80,
+    },
+    sendBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#1E3A8A',
+        alignItems: 'center',
+        justifyContent: 'center',
         marginLeft: 8,
     },
-    sendButtonDisabled: {
-        opacity: 0.5,
+    actionBtn: {
+        alignItems: 'center',
+        gap: 2,
+    },
+    actionCount: {
+        fontSize: 11,
+        color: '#6B7280',
+        fontWeight: '600',
     },
 });
