@@ -28,9 +28,11 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { EduBadge } from '../../components/common/EduBadge';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
 import { getCurrentUser } from '../../services/auth';
 import { addFoodReview, fetchFoodReviews, toggleFoodReviewLike, uploadFoodImage } from '../../services/food';
+import { isHKBUEmail } from '../../utils/userUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -309,6 +311,7 @@ export default function OutletDetailScreen() {
                 outletId: id as string,
                 authorId: currentUser.uid,
                 authorName: currentUser.displayName || 'Anonymous',
+                authorEmail: (currentUser as any).email,
                 authorAvatar: currentUser.photoURL || undefined,
                 rating: newRating,
                 content: newContent,
@@ -383,7 +386,10 @@ export default function OutletDetailScreen() {
         <View style={styles.reviewCard}>
             <View style={styles.reviewHeader}>
                 <View>
-                    <Text style={styles.reviewAuthor}>{item.authorName}</Text>
+                    <View style={styles.reviewAuthorRow}>
+                        <Text style={styles.reviewAuthor}>{item.authorName}</Text>
+                        <EduBadge shouldShow={isHKBUEmail(item.authorEmail)} size="small" />
+                    </View>
                     <Text style={styles.reviewTime}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 </View>
                 <View style={styles.ratingRow}>
@@ -829,6 +835,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 12,
+    },
+    reviewAuthorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     reviewAuthor: {
         fontSize: 16,

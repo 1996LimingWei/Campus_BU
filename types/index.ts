@@ -37,6 +37,7 @@ export interface Post {
     id: string;
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorMajor?: string;
     authorTags?: string[];
     authorAvatar?: string;
@@ -116,6 +117,7 @@ export interface Review {
     courseId: string;
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorAvatar: string;
     rating?: number; // Overall (optional for follow-up updates)
     difficulty: number; // 1-5
@@ -176,6 +178,7 @@ export interface CourseTeaming {
     courseId: string;
     userId: string;
     userName: string;
+    userEmail?: string;
     userAvatar: string;
     userMajor?: string;
     section: string;
@@ -194,6 +197,7 @@ export interface TeamingComment {
     teamingId: string; // Specific ID for the teaming request
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorAvatar: string;
     content: string;
     createdAt: Date;
@@ -230,6 +234,7 @@ export interface TeacherReview {
     teacherId: string;
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorAvatar?: string;
     rating: number;
     difficulty: number;

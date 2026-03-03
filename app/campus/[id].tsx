@@ -19,9 +19,11 @@ import {
 import { ActionModal } from '../../components/campus/ActionModal';
 import { PostCard } from '../../components/campus/PostCard';
 import { Toast, ToastType } from '../../components/campus/Toast';
+import { EduBadge } from '../../components/common/EduBadge';
 import { getCurrentUser } from '../../services/auth';
 import { addPostComment, deleteComment, deletePost, fetchPostById, fetchPostComments, togglePostLike } from '../../services/campus';
 import { Post } from '../../types';
+import { isHKBUEmail } from '../../utils/userUtils';
 
 export default function PostDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -94,6 +96,7 @@ export default function PostDetailScreen() {
                 postId: post.id,
                 authorId: currentUser.uid,
                 authorName: currentUser.displayName || 'Anonymous',
+                authorEmail: (currentUser as any).email,
                 authorAvatar: currentUser.avatarUrl || undefined,
                 content: commentText.trim(),
             });
@@ -212,6 +215,7 @@ export default function PostDetailScreen() {
                                     <View style={styles.replyInfo}>
                                         <View style={styles.commentHeaderRow}>
                                             <Text style={styles.replyAuthor}>{comment.author_name}</Text>
+                                            <EduBadge shouldShow={isHKBUEmail(comment.author_email)} size="small" />
                                             {currentUser?.uid === comment.author_id && (
                                                 <TouchableOpacity
                                                     onPress={() => triggerDeleteComment(comment.id)}

@@ -24,6 +24,8 @@ import { addReview, getCourseById, getReviews, hasUserReviewed, likeReview } fro
 import { supabase } from '../../services/supabase';
 import { fetchTeamingComments, fetchTeamingRequests, postTeamingComment, postTeamingRequest, toggleTeamingLike } from '../../services/teaming';
 import { ContactMethod, Course, CourseTeaming, Review, TeamingComment } from '../../types';
+import { isHKBUEmail } from '../../utils/userUtils';
+import { EduBadge } from '../../components/common/EduBadge';
 
 // Helper function to check if string is a URL
 const isImageUrl = (str: string): boolean => {
@@ -125,7 +127,7 @@ export default function CourseDetailScreen() {
         // Load existing messages
         const { data } = await supabase
             .from('messages')
-            .select('*, users(display_name, avatar_url)')
+            .select('*, users(display_name, avatar_url, email)')
             .eq('course_id', id as string)
             .order('created_at', { ascending: true });
 
@@ -171,7 +173,7 @@ export default function CourseDetailScreen() {
                 // Fetch user info for the new message
                 const { data: userData } = await supabase
                     .from('users')
-                    .select('display_name, avatar_url')
+                    .select('display_name, avatar_url, email')
                     .eq('id', payload.new.sender_id)
                     .single();
 
@@ -212,7 +214,8 @@ export default function CourseDetailScreen() {
                 created_at: new Date().toISOString(),
                 users: {
                     display_name: user.displayName || 'Me',
-                    avatar_url: user.avatarUrl || '👤'
+                    avatar_url: user.avatarUrl || '👤',
+                    email: user.email || ''
                 }
             };
             setMessages(prev => [...prev, optimisticMsg]);
@@ -463,7 +466,10 @@ export default function CourseDetailScreen() {
                         )}
                     </View>
                     <View>
-                        <Text style={styles.authorName}>{item.authorName}</Text>
+                        <View style={styles.nameRow}>
+                            <Text style={styles.authorName}>{item.authorName}</Text>
+                            <EduBadge shouldShow={isHKBUEmail(item.authorEmail)} size="small" />
+                        </View>
                         <Text style={styles.semester}>{item.semester}</Text>
                     </View>
                 </View>
@@ -526,7 +532,10 @@ export default function CourseDetailScreen() {
                         )}
                     </View>
                     <View>
-                        <Text style={styles.authorName}>{item.userName}</Text>
+                        <View style={styles.nameRow}>
+                            <Text style={styles.authorName}>{item.userName}</Text>
+                            <EduBadge shouldShow={isHKBUEmail(item.userEmail)} size="small" />
+                        </View>
                         <Text style={styles.userMajor}>{item.userMajor || 'Student'}</Text>
                     </View>
                 </View>
@@ -711,9 +720,16 @@ export default function CourseDetailScreen() {
                                         styles.messageBubble,
                                         msg.sender_id === user?.uid ? styles.myBubble : styles.otherBubble
                                     ]}>
-                                        <Text style={msg.sender_id === user?.uid ? styles.myMessageAuthor : styles.messageAuthor}>
-                                            {msg.users?.display_name || 'Student'}
-                                        </Text>
+                                        <View style={styles.messageAuthorRow}>
+                                            <Text style={msg.sender_id === user?.uid ? styles.myMessageAuthor : styles.messageAuthor}>
+                                                {msg.users?.display_name || 'Student'}
+                                            </Text>
+                                            {isHKBUEmail(msg.users?.email) && (
+                                                <View style={styles.chatEduStarBadge}>
+                                                    <Text style={styles.chatEduStarText}>Edu</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                         <Text style={msg.sender_id === user?.uid ? styles.myMessageText : styles.messageText}>
                                             {msg.content}
                                         </Text>
@@ -1139,7 +1155,10 @@ export default function CourseDetailScreen() {
                                             )}
                                             <View style={{ flex: 1 }}>
                                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                    <Text style={{ fontWeight: '700', color: '#111827' }}>{item.authorName}</Text>
+                                                    <View style={styles.commentAuthorRow}>
+                                                        <Text style={styles.commentAuthorName}>{item.authorName}</Text>
+                                                        <EduBadge shouldShow={isHKBUEmail(item.authorEmail)} size="small" />
+                                                    </View>
                                                     <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
                                                         {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </Text>
@@ -1355,7 +1374,8 @@ const styles = StyleSheet.create({
     avatarFallbackText: {
         fontSize: 18,
     },
-    authorName: { fontSize: 14, fontWeight: '600', color: '#111827' },
+    authorName: { fontSize: 14, fontWeight: '600', color: '#111827', marginRight: 6 },
+    nameRow: { flexDirection: 'row', alignItems: 'center' },
     semester: { fontSize: 11, color: '#9CA3AF' },
     reviewRating: {
         flexDirection: 'row',
@@ -1399,8 +1419,26 @@ const styles = StyleSheet.create({
     messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
     myBubble: { backgroundColor: '#4B0082', borderBottomRightRadius: 4 },
     otherBubble: { backgroundColor: '#fff', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E5E7EB' },
-    messageAuthor: { fontSize: 10, color: '#9CA3AF', marginBottom: 4 },
-    myMessageAuthor: { fontSize: 10, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
+    messageAuthor: { fontSize: 10, color: '#9CA3AF', marginBottom: 4, marginRight: 6 },
+    myMessageAuthor: { fontSize: 10, color: 'rgba(255,255,255,0.7)', marginBottom: 4, marginRight: 6 },
+    messageAuthorRow: { flexDirection: 'row', alignItems: 'center' },
+    chatEduStarBadge: {
+        height: 13,
+        paddingHorizontal: 4,
+        borderRadius: 7,
+        borderWidth: 1,
+        borderColor: '#F59E0B',
+        backgroundColor: 'rgba(245,158,11,0.12)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 4,
+    },
+    chatEduStarText: {
+        fontSize: 9,
+        color: '#F59E0B',
+        fontWeight: '700',
+        lineHeight: 10,
+    },
     messageText: { fontSize: 14, color: '#374151' },
     myMessageText: { fontSize: 14, color: '#fff' },
     inputBar: {
@@ -1592,6 +1630,17 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#6B7280',
         marginTop: 2,
+    },
+    commentAuthorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        marginRight: 8,
+    },
+    commentAuthorName: {
+        fontWeight: '700',
+        color: '#111827',
+        marginRight: 6,
     },
     chipContainer: {
         flexDirection: 'row',

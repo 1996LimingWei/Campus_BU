@@ -39,7 +39,7 @@ export const generateDefaultNickname = () => {
 
 /**
  * Send a 6-digit OTP to the school email.
- * For HKBU, we expect the email to end with @hkbu.edu.hk
+ * For HKBU, we expect the email to end with @life.hkbu.edu.hk
  */
 export const sendOTP = async (email: string) => {
     const normalizedEmail = email.toLowerCase().trim();
@@ -164,7 +164,8 @@ export const createUserProfile = async (
     displayName: string,
     socialTags: string[],
     major: string,
-    avatarUrl: string = ''
+    avatarUrl: string = '',
+    email: string = ''
 ) => {
     const userData: User = {
         uid, // Will be stored as 'id' in DB if column name differs, but usually we map JSON
@@ -186,6 +187,7 @@ export const createUserProfile = async (
             major: major,
             avatar_url: avatarUrl,
             social_tags: socialTags,
+            email: email,
             updated_at: new Date().toISOString(),
         });
 
@@ -243,7 +245,8 @@ export const getCurrentUser = async () => {
             avatarUrl: demoAvatar,
             photoURL: demoAvatar, // Backwards compatibility
             isAnonymous: false,
-            isDemo: true
+            isDemo: true,
+            email: APP_CONFIG.demoCredentials.email
         };
     }
 
@@ -261,7 +264,8 @@ export const getCurrentUser = async () => {
             major: profile?.major || 'Student',
             avatarUrl: avatar,
             photoURL: avatar, // Backwards compatibility
-            socialTags: profile?.socialTags || []
+            socialTags: profile?.socialTags || [],
+            email: user.email // Explicitly include email
         };
     }
     return null;

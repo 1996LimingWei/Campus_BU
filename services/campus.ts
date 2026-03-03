@@ -43,6 +43,7 @@ const mapSupabaseToPost = (row: any): Post => {
         id: row.id,
         authorId: row.author_id,
         authorName: (row.is_anonymous || !author) ? row.author_name : (author.display_name || author.displayName),
+        authorEmail: row.author_email || (row.is_anonymous || !author ? undefined : author.email),
         authorMajor: (row.is_anonymous || !author) ? row.author_major : author.major,
         authorAvatar: (row.is_anonymous || !author) ? row.author_avatar : author.avatar_url,
         content: row.content,
@@ -151,6 +152,7 @@ export const fetchPostById = async (postId: string, currentUserId?: string): Pro
 export const createPost = async (postData: {
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorMajor?: string;
     authorAvatar?: string;
     content: string;
@@ -162,6 +164,7 @@ export const createPost = async (postData: {
     const insertData = {
         author_id: postData.authorId,
         author_name: postData.isAnonymous ? '匿名用户' : postData.authorName,
+        author_email: postData.isAnonymous ? null : postData.authorEmail,
         author_major: postData.isAnonymous ? 'Anonymous' : postData.authorMajor,
         author_avatar: postData.isAnonymous ? null : postData.authorAvatar,
         content: postData.content,
@@ -187,7 +190,13 @@ export const createPost = async (postData: {
         console.error('Supabase error in createPost:', error);
         throw error;
     }
-    return mapSupabaseToPost(data);
+    
+    // Map to post, but include the email from the input data
+    const post = mapSupabaseToPost(data);
+    if (!post.isAnonymous) {
+        post.authorEmail = postData.authorEmail;
+    }
+    return post;
 };
 
 /**
@@ -310,6 +319,7 @@ export const addPostComment = async (commentData: {
     postId: string;
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorAvatar?: string;
     content: string;
 }) => {
@@ -319,6 +329,7 @@ export const addPostComment = async (commentData: {
             post_id: commentData.postId,
             author_id: commentData.authorId,
             author_name: commentData.authorName,
+            author_email: commentData.authorEmail,
             author_avatar: commentData.authorAvatar,
             content: commentData.content,
         }])

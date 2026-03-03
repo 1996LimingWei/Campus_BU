@@ -25,8 +25,10 @@ import Animated, {
     useSharedValue,
     withSpring
 } from 'react-native-reanimated';
+import { EduBadge } from '../../components/common/EduBadge';
 import { getCurrentUser } from '../../services/auth';
 import { addFoodReview, fetchFoodReviews, toggleFoodReviewLike, uploadFoodImage } from '../../services/food';
+import { isHKBUEmail } from '../../utils/userUtils';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 48) / 2;
@@ -385,6 +387,7 @@ export default function FoodScreen() {
                 outletId: outlet?.id || 'o1',
                 authorId: currentUser.uid,
                 authorName: currentUser.displayName || 'Anonymous',
+                authorEmail: (currentUser as any).email,
                 authorAvatar: currentUser.photoURL || undefined,
                 rating: newRating,
                 content: newContent,
@@ -422,7 +425,10 @@ export default function FoodScreen() {
                         <Text style={styles.avatarText}>{String(item.authorName).charAt(0)}</Text>
                     </View>
                     <View style={styles.authorMeta}>
-                        <Text style={styles.authorName}>{String(item.authorName)}</Text>
+                        <View style={styles.authorNameRow}>
+                            <Text style={styles.authorName}>{String(item.authorName)}</Text>
+                            <EduBadge shouldShow={isHKBUEmail(item.authorEmail)} size="small" />
+                        </View>
                         <Text style={styles.postTime}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                     </View>
                     <View style={styles.statsRow}>
@@ -847,6 +853,10 @@ const styles = StyleSheet.create({
     authorMeta: {
         flex: 1,
         marginLeft: 12,
+    },
+    authorNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     authorName: {
         fontSize: 14,

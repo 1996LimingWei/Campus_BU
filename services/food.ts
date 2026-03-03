@@ -6,6 +6,7 @@ export interface FoodReview {
     outletId: string;
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorAvatar?: string;
     rating: number;
     content: string;
@@ -37,6 +38,7 @@ export const fetchFoodReviews = async (outletId?: string, userId?: string): Prom
         outletId: review.outlet_id,
         authorId: review.author_id,
         authorName: review.author_name,
+        authorEmail: review.author_email,
         authorAvatar: review.author_avatar,
         rating: review.rating,
         content: review.content,
@@ -51,6 +53,7 @@ export const addFoodReview = async (reviewData: {
     outletId: string;
     authorId: string;
     authorName: string;
+    authorEmail?: string;
     authorAvatar?: string;
     rating: number;
     content: string;
@@ -62,6 +65,7 @@ export const addFoodReview = async (reviewData: {
             outlet_id: reviewData.outletId,
             author_id: reviewData.authorId,
             author_name: reviewData.authorName,
+            author_email: reviewData.authorEmail,
             author_avatar: reviewData.authorAvatar,
             rating: reviewData.rating,
             content: reviewData.content,
@@ -74,6 +78,7 @@ export const addFoodReview = async (reviewData: {
         console.error('Supabase error in addFoodReview:', error);
         throw error;
     }
+    
     return data;
 };
 

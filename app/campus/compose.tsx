@@ -99,6 +99,7 @@ export default function ComposeScreen() {
             await createPost({
                 authorId: user.uid,
                 authorName: user.displayName || 'Anonymous',
+                authorEmail: (user as any).email,
                 authorMajor: (user as any).major || 'Student',
                 authorAvatar: user.avatarUrl || undefined,
                 content: content.trim(),

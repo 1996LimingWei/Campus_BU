@@ -11,6 +11,8 @@ import { createUserProfile, getCurrentUser, getUserProfile, signOut, uploadAndUp
 import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
 import { supabase } from '../../services/supabase';
 import { SOCIAL_TAGS, User as UserProfile } from '../../types';
+import { isHKBUEmail } from '../../utils/userUtils';
+import { EduBadge } from '../../components/common/EduBadge';
 import { changeLanguage } from '../i18n/i18n';
 
 const DEMO_MODE_KEY = 'hkcampus_demo_mode';
@@ -39,6 +41,7 @@ export default function ProfileScreen() {
     const [loadingProfile, setLoadingProfile] = useState(true);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState('');
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -48,6 +51,7 @@ export default function ProfileScreen() {
             const user = await getCurrentUser();
             if (user) {
                 setUserId(user.uid);
+                setUserEmail(user.email || '');
 
                 // Load Notifications
                 const notifData = await fetchNotifications(user.uid);
@@ -193,12 +197,14 @@ export default function ProfileScreen() {
         // Persist to DB
         if (userId && profile) {
             try {
+                const user = await getCurrentUser();
                 await createUserProfile(
                     userId,
                     profile.displayName,
                     newTags,
                     profile.major,
-                    profile.avatarUrl
+                    profile.avatarUrl,
+                    user?.email || ''
                 );
             } catch (error) {
                 console.error('Failed to persist tags:', error);
@@ -281,7 +287,10 @@ export default function ProfileScreen() {
                     </View>
                 </TouchableOpacity>
                 <View style={styles.profileInfo}>
-                    <Text style={styles.profileName}>{profile?.displayName || (loadingProfile ? '...' : 'Demo Student')}</Text>
+                    <View style={styles.profileNameRow}>
+                        <Text style={styles.profileName}>{profile?.displayName || (loadingProfile ? '...' : 'Demo Student')}</Text>
+                        <EduBadge shouldShow={isHKBUEmail(userEmail)} size="medium" />
+                    </View>
                     <Text style={styles.profileMajor}>{profile?.major || (loadingProfile ? '...' : 'HKBU Student')}</Text>
                 </View>
                 <TouchableOpacity style={styles.editButton} onPress={() => router.push('/(auth)/setup')}>
@@ -630,6 +639,11 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#111827',
+        marginRight: 6,
+    },
+    profileNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     profileMajor: {
         fontSize: 14,

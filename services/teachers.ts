@@ -84,7 +84,7 @@ export const getTeacherReviews = async (teacherId: string, userId?: string): Pro
         .from('teacher_reviews')
         .select(`
             *,
-            author:users!author_id(*),
+            author:users!author_id(email, display_name, avatar_url),
             teacher_review_likes!left(user_id)
         `)
         .eq('teacher_id', teacherId)
@@ -101,6 +101,7 @@ export const getTeacherReviews = async (teacherId: string, userId?: string): Pro
         teacherId: r.teacher_id,
         authorId: r.author_id,
         authorName: r.author && r.author_name !== '匿名的同学' ? (r.author.display_name || r.author.displayName) : r.author_name,
+        authorEmail: r.author && r.author_name !== '匿名的同学' ? r.author.email : undefined,
         authorAvatar: r.author && r.author_name !== '匿名的同学' ? r.author.avatar_url : r.author_avatar,
         rating: r.rating,
         difficulty: r.difficulty || 3,

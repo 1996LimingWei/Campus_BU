@@ -223,7 +223,7 @@ export const getReviews = async (courseId: string): Promise<Review[]> => {
     // Query Supabase for all courses (including local_ ones)
     const { data, error } = await supabase
         .from('course_reviews')
-        .select('*')
+        .select('*, author:users!author_id(email, display_name, avatar_url)')
         .eq('course_id', courseId)
         .order('created_at', { ascending: false });
 
@@ -233,12 +233,14 @@ export const getReviews = async (courseId: string): Promise<Review[]> => {
     }
     if (!data) return [];
     return data.map(r => {
+        const author = r.author;
         return {
             id: r.id,
             courseId: r.course_id,
             authorId: r.author_id,
-            authorName: r.author_name || 'Anonymous',
-            authorAvatar: r.author_avatar || '👤',
+            authorName: r.author_name || author?.display_name || 'Anonymous',
+            authorEmail: author?.email,
+            authorAvatar: r.author_avatar || author?.avatar_url || '👤',
             rating: r.rating,
             difficulty: r.difficulty || 3,
             content: r.content || '',

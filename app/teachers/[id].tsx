@@ -30,6 +30,8 @@ import {
     summarizeTeacherReviews
 } from '../../services/teachers';
 import { Teacher, TeacherReview } from '../../types';
+import { isHKBUEmail } from '../../utils/userUtils';
+import { EduBadge } from '../../components/common/EduBadge';
 
 // 根据姓名生成首字母
 const getInitials = (name: string): string => {
@@ -235,9 +237,12 @@ export default function TeacherDetailScreen() {
                                                 )}
                                             </View>
                                             <View>
-                                                <Text style={styles.reviewerName}>
-                                                    {review.authorName || t('teachers.anonymous_student')}
-                                                </Text>
+                                                <View style={styles.reviewerNameRow}>
+                                                    <Text style={styles.reviewerName}>
+                                                        {review.authorName || t('teachers.anonymous_student')}
+                                                    </Text>
+                                                    <EduBadge shouldShow={isHKBUEmail(review.authorEmail)} size="small" />
+                                                </View>
                                                 <Text style={styles.reviewDate}>
                                                     {new Date(review.createdAt).toLocaleDateString()}
                                                 </Text>
@@ -589,6 +594,11 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#111827',
+        marginRight: 6,
+    },
+    reviewerNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     reviewDate: {
         fontSize: 12,

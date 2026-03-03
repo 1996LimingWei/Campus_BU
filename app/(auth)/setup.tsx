@@ -106,7 +106,7 @@ export default function SetupScreen() {
 
         setLoading(true);
         try {
-            await createUserProfile(user.id, finalDisplayName, selectedTags, finalMajor, avatar || '');
+            await createUserProfile(user.id, finalDisplayName, selectedTags, finalMajor, avatar || '', user.email || '');
 
             Alert.alert(
                 isEditMode ? t('common.success', 'Success') : t('setup.welcome_title', '欢迎加入!'),
