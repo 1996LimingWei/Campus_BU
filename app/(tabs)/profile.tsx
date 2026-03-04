@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { formatDistanceToNow } from 'date-fns';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,14 +6,14 @@ import { Bell, Bot, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { EduBadge } from '../../components/common/EduBadge';
+import storage from '../../lib/storage';
 import { createUserProfile, getCurrentUser, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
 import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
 import { supabase } from '../../services/supabase';
 import { SOCIAL_TAGS, User as UserProfile } from '../../types';
 import { isHKBUEmail } from '../../utils/userUtils';
-import { EduBadge } from '../../components/common/EduBadge';
 import { changeLanguage } from '../i18n/i18n';
-
 const DEMO_MODE_KEY = 'hkcampus_demo_mode';
 
 // Helper to check if avatar URL is valid (not a local file path)
@@ -168,7 +167,7 @@ export default function ProfileScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         await signOut();
-                        await AsyncStorage.removeItem(DEMO_MODE_KEY);
+                        await storage.removeItem(DEMO_MODE_KEY);
                         router.replace('/(auth)/login');
                     }
                 }
@@ -247,10 +246,10 @@ export default function ProfileScreen() {
 
         try {
             const newAvatarUrl = await uploadAndUpdateAvatar(userId, imageUri);
-            
+
             // Update local profile state
             setProfile(prev => prev ? { ...prev, avatarUrl: newAvatarUrl } : null);
-            
+
             Alert.alert(t('common.success', 'Success'), t('profile.avatar_updated', 'Avatar updated successfully'));
         } catch (error: any) {
             console.error('Avatar upload failed:', error);

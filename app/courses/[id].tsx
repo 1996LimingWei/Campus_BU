@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Info, MessageCircle, MessageSquare, Plus, Send, Star, Tag, ThumbsUp, UserPlus, Users, X } from 'lucide-react-native';
@@ -19,14 +18,14 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { EduBadge } from '../../components/common/EduBadge';
+import storage from '../../lib/storage';
 import { getCurrentUser } from '../../services/auth';
 import { addReview, getCourseById, getReviews, hasUserReviewed, likeReview } from '../../services/courses';
 import { supabase } from '../../services/supabase';
 import { fetchTeamingComments, fetchTeamingRequests, postTeamingComment, postTeamingRequest, toggleTeamingLike } from '../../services/teaming';
 import { ContactMethod, Course, CourseTeaming, Review, TeamingComment } from '../../types';
 import { isHKBUEmail } from '../../utils/userUtils';
-import { EduBadge } from '../../components/common/EduBadge';
-
 // Helper function to check if string is a URL
 const isImageUrl = (str: string): boolean => {
     if (!str) return false;
@@ -111,8 +110,7 @@ export default function CourseDetailScreen() {
 
         // Load liked reviews from local storage (for all course types)
         try {
-            const likedStr = await AsyncStorage.getItem('hkcampus_liked_reviews');
-            if (likedStr) setLikedReviewIds(JSON.parse(likedStr));
+            const likedStr = await storage.getItem('hkcampus_liked_reviews');
         } catch (e) {
             console.error('Error loading liked reviews:', e);
         }
@@ -313,7 +311,7 @@ export default function CourseDetailScreen() {
         setLikedReviewIds(newLikedIds);
 
         try {
-            await AsyncStorage.setItem('hkcampus_liked_reviews', JSON.stringify(newLikedIds));
+            await storage.setItem('hkcampus_liked_reviews', JSON.stringify(newLikedIds));
         } catch (e) {
             console.error('Error saving like status:', e);
         }
@@ -715,27 +713,27 @@ export default function CourseDetailScreen() {
                                     ]}>
                                         {msg.sender_id !== user?.uid && (
                                             <Text style={styles.chatAvatar}>{msg.users?.avatar_url || '👤'}</Text>
-                                    )}
-                                    <View style={[
-                                        styles.messageBubble,
-                                        msg.sender_id === user?.uid ? styles.myBubble : styles.otherBubble
-                                    ]}>
-                                        <View style={styles.messageAuthorRow}>
-                                            <Text style={msg.sender_id === user?.uid ? styles.myMessageAuthor : styles.messageAuthor}>
-                                                {msg.users?.display_name || 'Student'}
+                                        )}
+                                        <View style={[
+                                            styles.messageBubble,
+                                            msg.sender_id === user?.uid ? styles.myBubble : styles.otherBubble
+                                        ]}>
+                                            <View style={styles.messageAuthorRow}>
+                                                <Text style={msg.sender_id === user?.uid ? styles.myMessageAuthor : styles.messageAuthor}>
+                                                    {msg.users?.display_name || 'Student'}
+                                                </Text>
+                                                {isHKBUEmail(msg.users?.email) && (
+                                                    <View style={styles.chatEduStarBadge}>
+                                                        <Text style={styles.chatEduStarText}>Edu</Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            <Text style={msg.sender_id === user?.uid ? styles.myMessageText : styles.messageText}>
+                                                {msg.content}
                                             </Text>
-                                            {isHKBUEmail(msg.users?.email) && (
-                                                <View style={styles.chatEduStarBadge}>
-                                                    <Text style={styles.chatEduStarText}>Edu</Text>
-                                                </View>
-                                            )}
                                         </View>
-                                        <Text style={msg.sender_id === user?.uid ? styles.myMessageText : styles.messageText}>
-                                            {msg.content}
-                                        </Text>
                                     </View>
-                                </View>
-                            ))
+                                ))
                             )}
                         </View>
                     ) : (
@@ -1146,8 +1144,8 @@ export default function CourseDetailScreen() {
                                             borderBottomColor: '#F3F4F6'
                                         }}>
                                             {isImageUrl(item.authorAvatar) ? (
-                                                <Image 
-                                                    source={{ uri: item.authorAvatar }} 
+                                                <Image
+                                                    source={{ uri: item.authorAvatar }}
                                                     style={{ width: 36, height: 36, borderRadius: 18, marginRight: 12 }}
                                                 />
                                             ) : (
