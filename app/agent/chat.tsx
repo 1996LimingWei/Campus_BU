@@ -219,7 +219,7 @@ export default function AgentChatScreen() {
                                     styles.messageText,
                                     msg.role === 'user' ? styles.userText : styles.botText
                                 ]}>
-                                    {renderFormattedText(msg.content)}
+                                    {renderFormattedText(msg.content, msg.role === 'user')}
                                 </Text>
                             </View>
 
@@ -650,16 +650,18 @@ const styles = StyleSheet.create({
 /**
  * Helper to render basic Markdown
  */
-function renderFormattedText(text: string) {
+function renderFormattedText(text: string, isUser: boolean = false) {
     if (!text) return null;
     const lines = text.split('\n');
+    const textColor = isUser ? '#fff' : '#1F2937';
+
     return lines.map((line, i) => {
         // Bullet points
         if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
             return (
                 <View key={i} style={{ flexDirection: 'row', paddingLeft: 8, marginBottom: 4 }}>
-                    <Text style={{ fontSize: 13, marginRight: 6 }}>•</Text>
-                    <Text style={{ fontSize: 15, color: '#1F2937', flex: 1 }}>{line.trim().substring(2)}</Text>
+                    <Text style={{ fontSize: 13, marginRight: 6, color: textColor }}>•</Text>
+                    <Text style={{ fontSize: 15, color: textColor, flex: 1 }}>{line.trim().substring(2)}</Text>
                 </View>
             );
         }
@@ -672,7 +674,7 @@ function renderFormattedText(text: string) {
             if (match.index > lastIndex) {
                 parts.push(line.substring(lastIndex, match.index));
             }
-            parts.push(<Text key={match.index} style={{ fontWeight: 'bold' }}>{match[1]}</Text>);
+            parts.push(<Text key={match.index} style={{ fontWeight: 'bold', color: textColor }}>{match[1]}</Text>);
             lastIndex = boldRegex.lastIndex;
         }
         if (lastIndex < line.length) {
@@ -680,7 +682,7 @@ function renderFormattedText(text: string) {
         }
 
         return (
-            <Text key={i} style={{ fontSize: 15, color: '#1F2937', marginBottom: 4 }}>
+            <Text key={i} style={{ fontSize: 15, color: textColor, marginBottom: 4 }}>
                 {parts.length > 0 ? parts : line}
             </Text>
         );
