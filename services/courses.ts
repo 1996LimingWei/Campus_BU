@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SEM2_COURSES_DATA } from '../constants/courses_sem2';
+import storage from '../lib/storage';
 import { Course, Review } from '../types';
 import { supabase } from './supabase';
 
@@ -8,7 +8,7 @@ const LOCAL_REVIEWS_KEY = 'hkcampus_local_reviews';
 
 export const getLocalReviews = async (courseId: string): Promise<Review[]> => {
     try {
-        const jsonValue = await AsyncStorage.getItem(LOCAL_REVIEWS_KEY);
+        const jsonValue = await storage.getItem(LOCAL_REVIEWS_KEY);
         const allReviews: Review[] = jsonValue != null ? JSON.parse(jsonValue) : [];
         // Convert string dates back to Date objects
         return allReviews
@@ -22,7 +22,7 @@ export const getLocalReviews = async (courseId: string): Promise<Review[]> => {
 
 export const addLocalReview = async (review: Partial<Review>): Promise<{ error: any }> => {
     try {
-        const jsonValue = await AsyncStorage.getItem(LOCAL_REVIEWS_KEY);
+        const jsonValue = await storage.getItem(LOCAL_REVIEWS_KEY);
         const allReviews: Review[] = jsonValue != null ? JSON.parse(jsonValue) : [];
 
         const newReview: Review = {
@@ -41,7 +41,7 @@ export const addLocalReview = async (review: Partial<Review>): Promise<{ error: 
         };
 
         const updated = [newReview, ...allReviews];
-        await AsyncStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(updated));
+        await storage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(updated));
 
         // Update local course rating if needed (optional refinement)
         const localCourses = await getLocalCourses();
@@ -51,7 +51,7 @@ export const addLocalReview = async (review: Partial<Review>): Promise<{ error: 
             const sum = courseReviews.reduce((acc, curr) => acc + (curr.rating || 0), 0);
             localCourses[courseIndex].rating = parseFloat((sum / courseReviews.length).toFixed(1));
             localCourses[courseIndex].reviewCount = courseReviews.length;
-            await AsyncStorage.setItem(LOCAL_COURSES_KEY, JSON.stringify(localCourses));
+            await storage.setItem(LOCAL_COURSES_KEY, JSON.stringify(localCourses));
         }
 
         return { error: null };
@@ -62,7 +62,7 @@ export const addLocalReview = async (review: Partial<Review>): Promise<{ error: 
 
 export const getLocalCourses = async (): Promise<Course[]> => {
     try {
-        const jsonValue = await AsyncStorage.getItem(LOCAL_COURSES_KEY);
+        const jsonValue = await storage.getItem(LOCAL_COURSES_KEY);
         const storageCourses: Course[] = jsonValue != null ? JSON.parse(jsonValue) : [];
 
         // Merge with static Sem2 data
@@ -129,7 +129,7 @@ export const addLocalCourse = async (course: Partial<Course>): Promise<{ data: a
         };
 
         const updated = [newCourse, ...existing];
-        await AsyncStorage.setItem(LOCAL_COURSES_KEY, JSON.stringify(updated));
+        await storage.setItem(LOCAL_COURSES_KEY, JSON.stringify(updated));
         return { data: newCourse, error: null };
     } catch (e: any) {
         return { data: null, error: e };
@@ -319,14 +319,14 @@ export const likeReview = async (reviewId: string, courseId: string, isUnlike: b
     // 1. Check for Local Review
     if (reviewId.startsWith('lrev_')) {
         try {
-            const jsonValue = await AsyncStorage.getItem(LOCAL_REVIEWS_KEY);
+            const jsonValue = await storage.getItem(LOCAL_REVIEWS_KEY);
             const allReviews: Review[] = jsonValue != null ? JSON.parse(jsonValue) : [];
             const index = allReviews.findIndex(r => r.id === reviewId);
 
             if (index !== -1) {
                 const currentLikes = allReviews[index].likes || 0;
                 allReviews[index].likes = isUnlike ? Math.max(0, currentLikes - 1) : currentLikes + 1;
-                await AsyncStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(allReviews));
+                await storage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(allReviews));
                 return { error: null };
             }
             return { error: { message: 'Review not found' } };

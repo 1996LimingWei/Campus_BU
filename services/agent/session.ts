@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import storage from '../../lib/storage';
 const COOKIE_STORAGE_KEY = 'agent_webview_cookies';
 
 /**
@@ -7,7 +6,7 @@ const COOKIE_STORAGE_KEY = 'agent_webview_cookies';
  */
 export const saveWebViewCookies = async (cookies: string) => {
     try {
-        await AsyncStorage.setItem(COOKIE_STORAGE_KEY, cookies);
+        await storage.setItem(COOKIE_STORAGE_KEY, cookies);
         console.log('[Session] Cookies saved successfully');
     } catch (e) {
         console.error('[Session] Failed to save cookies', e);
@@ -19,10 +18,10 @@ export const saveWebViewCookies = async (cookies: string) => {
  */
 export const getCookieInjectionScript = async () => {
     try {
-        const cookies = await AsyncStorage.getItem(COOKIE_STORAGE_KEY);
+        const cookies = await storage.getItem(COOKIE_STORAGE_KEY);
         if (cookies) {
             // Split cookies and inject them one by one
-            return cookies.split(';').map(c => {
+            return cookies.split(';').map((c: string) => {
                 return `document.cookie = "${c.trim()}; path=/; domain=.hkbu.edu.hk; expires=Tue, 19 Jan 2038 03:14:07 GMT";`;
             }).join('\n');
         }

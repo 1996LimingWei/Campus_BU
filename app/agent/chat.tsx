@@ -16,7 +16,6 @@ import { WebView } from 'react-native-webview';
 import { APP_CONFIG } from '../../constants/Config';
 import { agentBridge } from '../../services/agent/bridge';
 import { AgentExecutor } from '../../services/agent/executor';
-import { LangGraphExecutor } from '../../services/agent/langgraph_executor';
 import { getCookieInjectionScript } from '../../services/agent/session';
 import { AgentStep } from '../../services/agent/types';
 import { getCurrentUser } from '../../services/auth';
@@ -37,7 +36,7 @@ export default function AgentChatScreen() {
     const scrollViewRef = useRef<ScrollView>(null);
     const webViewRef = useRef<WebView>(null);
     const agentRef = useRef<AgentExecutor>(new AgentExecutor('demo-user'));
-    const langGraphAgentRef = useRef<LangGraphExecutor>(new LangGraphExecutor('demo-user'));
+    const langGraphAgentRef = useRef<any>(null); // Will be initialized dynamically
     const [cookieScript, setCookieScript] = useState('');
     const [webViewUrl, setWebViewUrl] = useState('https://library.hkbu.edu.hk/');
 
@@ -60,22 +59,40 @@ export default function AgentChatScreen() {
 
     // Wire LangGraph callbacks for WebView control & real-time message push
     useEffect(() => {
-        langGraphAgentRef.current.setCallbacks({
-            onShowWebView: () => setShowWebView(true),
-            onHideWebView: () => setShowWebView(false),
-            onNavigateWebView: (url: string) => setWebViewUrl(url),
-            onPushMessage: (content: string, quickReplies?: string[]) => {
-                // Push a real-time assistant message into the chat
-                setMessages(prev => [...prev, {
-                    role: 'assistant' as const,
-                    content,
-                    quickReplies,
-                }]);
-                // Auto-scroll
-                setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-            },
-        });
-    }, []);
+        const setupLangGraphCallbacks = async () => {
+            if (useLangGraph) {
+                try {
+                    // Dynamically import and initialize LangGraphExecutor only when needed
+                    const { LangGraphExecutor } = await import('../../services/agent/langgraph_executor');
+                    if (!langGraphAgentRef.current) {
+                        langGraphAgentRef.current = new LangGraphExecutor('demo-user');
+                    }
+
+                    if (langGraphAgentRef.current) {
+                        langGraphAgentRef.current.setCallbacks({
+                            onShowWebView: () => setShowWebView(true),
+                            onHideWebView: () => setShowWebView(false),
+                            onNavigateWebView: (url: string) => setWebViewUrl(url),
+                            onPushMessage: (content: string, quickReplies?: string[]) => {
+                                // Push a real-time assistant message into the chat
+                                setMessages(prev => [...prev, {
+                                    role: 'assistant' as const,
+                                    content,
+                                    quickReplies,
+                                }]);
+                                // Auto-scroll
+                                setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+                            },
+                        });
+                    }
+                } catch (error) {
+                    console.error('Failed to load LangGraphExecutor:', error);
+                }
+            }
+        };
+
+        setupLangGraphCallbacks();
+    }, [useLangGraph]);
 
     const handleSend = async (overrideText?: string) => {
         const textToSend = overrideText || input;
@@ -90,6 +107,11 @@ export default function AgentChatScreen() {
             let response;
             if (useLangGraph) {
                 console.log('[Agent] Using LangGraph Pilot...');
+                // Dynamically ensure LangGraphExecutor is loaded
+                if (!langGraphAgentRef.current) {
+                    const { LangGraphExecutor } = await import('../../services/agent/langgraph_executor');
+                    langGraphAgentRef.current = new LangGraphExecutor('demo-user');
+                }
                 response = await langGraphAgentRef.current.process(userMsg);
             } else {
                 response = await agentRef.current.process(userMsg);

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -25,6 +24,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { CAMPUS_BUILDINGS } from '../../data/buildings';
+import storage from '../../lib/storage';
 import { getCurrentUser } from '../../services/auth';
 import { getBuildings } from '../../services/buildings';
 import { fetchPosts } from '../../services/campus';
@@ -657,7 +657,7 @@ export default function MapScreen() {
 
     useEffect(() => {
         if (buildingsData !== CAMPUS_BUILDINGS) {
-            AsyncStorage.setItem('savedBuildingsData', JSON.stringify(buildingsData)).catch(e => console.error(e));
+            storage.setItem('savedBuildingsData', JSON.stringify(buildingsData)).catch((e: any) => console.error(e));
         }
     }, [buildingsData]);
 

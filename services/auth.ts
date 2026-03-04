@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { APP_CONFIG } from '../constants/Config';
+import storage from '../lib/storage';
 import { User } from '../types';
 import { supabase } from './supabase';
 
@@ -25,7 +25,7 @@ export const isDemoMode = async () => {
     if (!APP_CONFIG.useDemoAuth) return false;
 
     // Priority 2: Check local persistence (for switching modes inside app)
-    const value = await AsyncStorage.getItem(DEMO_MODE_KEY);
+    const value = await storage.getItem(DEMO_MODE_KEY);
     return value === 'true';
 };
 
@@ -125,7 +125,7 @@ export const signIn = async (email: string, password: string) => {
             isDemo: true
         };
         // Persist demo mode
-        await AsyncStorage.setItem(DEMO_MODE_KEY, 'true');
+        await storage.setItem(DEMO_MODE_KEY, 'true');
         return demoUser;
     }
 
@@ -136,7 +136,7 @@ export const signIn = async (email: string, password: string) => {
     if (error) throw error;
 
     // Clear demo mode if logging into a real account
-    await AsyncStorage.removeItem(DEMO_MODE_KEY);
+    await storage.removeItem(DEMO_MODE_KEY);
 
     return data.user ? { ...data.user, uid: data.user.id } : null;
 };
@@ -144,7 +144,7 @@ export const signIn = async (email: string, password: string) => {
 // Sign out
 export const signOut = async () => {
     await supabase.auth.signOut();
-    await AsyncStorage.removeItem(DEMO_MODE_KEY);
+    await storage.removeItem(DEMO_MODE_KEY);
 };
 
 /**
