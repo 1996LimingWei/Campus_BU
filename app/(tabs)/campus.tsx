@@ -1,3 +1,4 @@
+import { Image as ExpoImageLib } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Check, X as CloseIcon, Globe, Plus, Search } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -149,6 +150,9 @@ export default function CampusScreen() {
   );
 
   // ─── Data loading ─────────────────────────────────────────────────────────
+  const isValidCoverUrl = (url?: string) =>
+    !!url && (url.startsWith('http://') || url.startsWith('https://'));
+
   const loadPosts = async (isSilent = false) => {
     try {
       if (!isSilent && posts.length === 0) setLoading(true);
@@ -156,6 +160,12 @@ export default function CampusScreen() {
       setCurrentUser(user);
       const data = await fetchPosts(activeCategory, user?.uid);
       setPosts(data);
+      // Pre-warm expo-image's own disk+memory cache (must use expo-image's prefetch, not RN's)
+      data.forEach(post => {
+        const imgs = post.images?.length ? post.images : post.imageUrl ? [post.imageUrl] : [];
+        const cover = imgs.find(img => isValidCoverUrl(img));
+        if (cover) ExpoImageLib.prefetch(cover).catch(() => { });
+      });
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {
@@ -197,9 +207,17 @@ export default function CampusScreen() {
 
   const handlePostPress = useCallback(
     (postId: string) => {
-      router.push(`/campus/${postId}`);
+      // Pass cover image URL so the detail page can render it immediately from cache
+      const post = posts.find(p => p.id === postId);
+      const imgs = post?.images?.length ? post.images : post?.imageUrl ? [post.imageUrl] : [];
+      const cover = imgs.find(img => isValidCoverUrl(img)) ?? '';
+      const textOnly = !cover ? '1' : '0';
+      router.push({
+        pathname: '/campus/[id]' as any,
+        params: { id: postId, coverImage: cover, isTextOnly: textOnly },
+      });
     },
-    [router]
+    [router, posts]
   );
 
   const handleCompose = useCallback(() => {
@@ -415,6 +433,7 @@ export default function CampusScreen() {
                 data={sortedPosts}
                 columnGap={8}
                 columnPadding={12}
+                keyExtractor={(post: Post) => post.id}
                 renderItem={(post: Post, index: number) => (
                   <MasonryPostCard
                     key={post.id}

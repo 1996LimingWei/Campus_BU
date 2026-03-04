@@ -472,7 +472,13 @@ export default function ExchangeScreen() {
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.replace('/(tabs)/course')} style={styles.backButton}>
+                <TouchableOpacity onPress={() => {
+                    if (router.canGoBack()) {
+                        router.back();
+                    } else {
+                        router.replace('/(tabs)/course');
+                    }
+                }} style={styles.backButton}>
                     <ArrowLeft size={24} color="#fff" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>換課</Text>
@@ -497,371 +503,371 @@ export default function ExchangeScreen() {
                 </View>
             </View>
 
-                {loading ? (
-                    <ActivityIndicator style={{ marginTop: 40 }} color="#8B5CF6" />
-                ) : (
-                    <FlatList
-                        data={filteredExchanges}
-                        keyExtractor={(item) => item.id}
-                        renderItem={viewMode === 'card' ? renderExchangeItem : renderCompactItem}
-                        numColumns={viewMode === 'card' ? 1 : 2}
-                        key={viewMode}
-                        contentContainerStyle={styles.listContent}
-                        columnWrapperStyle={viewMode === 'compact' ? { gap: 12 } : undefined}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <ArrowLeftRight size={48} color="#D1D5DB" />
-                                <Text style={styles.emptyText}>No swap requests found.</Text>
-                            </View>
-                        }
+            {loading ? (
+                <ActivityIndicator style={{ marginTop: 40 }} color="#8B5CF6" />
+            ) : (
+                <FlatList
+                    data={filteredExchanges}
+                    keyExtractor={(item) => item.id}
+                    renderItem={viewMode === 'card' ? renderExchangeItem : renderCompactItem}
+                    numColumns={viewMode === 'card' ? 1 : 2}
+                    key={viewMode}
+                    contentContainerStyle={styles.listContent}
+                    columnWrapperStyle={viewMode === 'compact' ? { gap: 12 } : undefined}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <ArrowLeftRight size={48} color="#D1D5DB" />
+                            <Text style={styles.emptyText}>No swap requests found.</Text>
+                        </View>
+                    }
+                />
+            )}
+
+            {/* Post FAB */}
+            <TouchableOpacity
+                style={styles.fab}
+                onPress={() => setIsPostModalVisible(true)}
+            >
+                <Plus size={30} color="#fff" />
+            </TouchableOpacity>
+
+            <Modal visible={isPostModalVisible} animationType="slide" transparent={true}>
+                <View style={{ flex: 1 }}>
+                    <Pressable
+                        style={[styles.modalOverlay, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
+                        onPress={() => setIsPostModalVisible(false)}
                     />
-                )}
-
-                {/* Post FAB */}
-                <TouchableOpacity
-                    style={styles.fab}
-                    onPress={() => setIsPostModalVisible(true)}
-                >
-                    <Plus size={30} color="#fff" />
-                </TouchableOpacity>
-
-                <Modal visible={isPostModalVisible} animationType="slide" transparent={true}>
-                    <View style={{ flex: 1 }}>
-                        <Pressable
-                            style={[styles.modalOverlay, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
-                            onPress={() => setIsPostModalVisible(false)}
-                        />
-                        <KeyboardAvoidingView
-                            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-                            style={{ flex: 1, justifyContent: 'flex-end' }}
-                            pointerEvents="box-none"
-                        >
-                            <View style={[styles.modalContent, { maxHeight: '90%' }]} onStartShouldSetResponder={() => true}>
-                                <View style={styles.modalHeader}>
-                                    <Text style={styles.modalTitle}>Post Swap Request</Text>
-                                    <TouchableOpacity onPress={() => setIsPostModalVisible(false)}>
-                                        <X size={24} color="#6B7280" />
-                                    </TouchableOpacity>
-                                </View>
-
-                                <ScrollView
-                                    style={styles.formContent}
-                                    contentContainerStyle={{ paddingBottom: 100 }}
-                                    showsVerticalScrollIndicator={false}
-                                    keyboardDismissMode="interactive"
-                                    keyboardShouldPersistTaps="handled"
-                                >
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.inputLabel}>I Have (Course Code)</Text>
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Course Code"
-                                            placeholderTextColor="#9CA3AF"
-                                            value={haveCourse}
-                                            onChangeText={(text) => setHaveCourse(text.toUpperCase().replace(/[^A-Z0-9.]/g, ''))}
-                                            autoCapitalize="characters"
-                                        />
-                                        <View style={styles.rowInputs}>
-                                            <TouchableOpacity
-                                                style={[styles.input, { flex: 1, marginRight: 10, marginTop: 10, justifyContent: 'center' }]}
-                                                onPress={() => openSectionPicker('have')}
-                                            >
-                                                <Text style={{ color: haveSection ? '#111' : '#9CA3AF' }}>
-                                                    {haveSection ? `Section ${haveSection}` : 'Section'}
-                                                </Text>
-                                            </TouchableOpacity>
-                                            <TextInput
-                                                style={[styles.input, { flex: 2, marginTop: 10 }]}
-                                                placeholder="Teacher"
-                                                placeholderTextColor="#9CA3AF"
-                                                value={haveTeacher}
-                                                onChangeText={setHaveTeacher}
-                                            />
-                                        </View>
-                                        <TextInput
-                                            style={[styles.input, { marginTop: 10 }]}
-                                            placeholder="Class Time"
-                                            placeholderTextColor="#9CA3AF"
-                                            value={haveTime}
-                                            onChangeText={setHaveTime}
-                                        />
-                                    </View>
-
-                                    <View style={styles.inputGroup}>
-                                        <View style={styles.sectionHeader}>
-                                            <Text style={styles.inputLabel}>I Want (One or Multiple)</Text>
-                                            <TouchableOpacity onPress={addWantCourse} style={styles.addBtn}>
-                                                <PlusCircle size={20} color="#8B5CF6" />
-                                                <Text style={styles.addBtnText}>Add Course</Text>
-                                            </TouchableOpacity>
-                                        </View>
-
-                                        {wantCourses.map((want, index) => (
-                                            <View key={index} style={[styles.wantFormItem, index > 0 && { marginTop: 20, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 20 }]}>
-                                                <View style={styles.wantFormHeader}>
-                                                    <Text style={styles.wantFormTitle}>Target Course #{index + 1}</Text>
-                                                    {wantCourses.length > 1 && (
-                                                        <TouchableOpacity onPress={() => removeWantCourse(index)}>
-                                                            <Trash2 size={18} color="#EF4444" />
-                                                        </TouchableOpacity>
-                                                    )}
-                                                </View>
-                                                <TextInput
-                                                    style={styles.input}
-                                                    placeholder="Course Code"
-                                                    placeholderTextColor="#9CA3AF"
-                                                    value={want.code}
-                                                    onChangeText={(text) => updateWantCourse(index, 'code', text.toUpperCase().replace(/[^A-Z0-9.]/g, ''))}
-                                                    autoCapitalize="characters"
-                                                />
-                                                <View style={styles.rowInputs}>
-                                                    <TouchableOpacity
-                                                        style={[styles.input, { flex: 1, marginRight: 10, marginTop: 10, justifyContent: 'center' }]}
-                                                        onPress={() => openSectionPicker('want', index)}
-                                                    >
-                                                        <Text style={{ color: want.section ? '#111' : '#9CA3AF' }}>
-                                                            {want.section ? `Section ${want.section}` : 'Section'}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                    <TextInput
-                                                        style={[styles.input, { flex: 2, marginTop: 10 }]}
-                                                        placeholder="Teacher"
-                                                        placeholderTextColor="#9CA3AF"
-                                                        value={want.teacher}
-                                                        onChangeText={(text) => updateWantCourse(index, 'teacher', text)}
-                                                    />
-                                                </View>
-                                                <TextInput
-                                                    style={[styles.input, { marginTop: 10 }]}
-                                                    placeholder="Class Time"
-                                                    placeholderTextColor="#9CA3AF"
-                                                    value={want.time}
-                                                    onChangeText={(text) => updateWantCourse(index, 'time', text)}
-                                                />
-                                            </View>
-                                        ))}
-                                    </View>
-
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.inputLabel}>Contact Methods (Select one or more)</Text>
-                                        <View style={styles.chipContainer}>
-                                            {CONTACT_PLATFORMS.map(platform => (
-                                                <TouchableOpacity
-                                                    key={platform.value}
-                                                    style={[
-                                                        styles.chip,
-                                                        selectedMethods.includes(platform.value) && styles.chipActive
-                                                    ]}
-                                                    onPress={() => toggleMethod(platform.value)}
-                                                >
-                                                    <Text style={styles.chipIcon}>{platform.icon}</Text>
-                                                    <Text style={[
-                                                        styles.chipText,
-                                                        selectedMethods.includes(platform.value) && styles.chipTextActive
-                                                    ]}>
-                                                        {platform.label}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-
-                                    {selectedMethods.map(method => (
-                                        <View key={method} style={styles.dynamicInputContainer}>
-                                            <View style={styles.dynamicHeader}>
-                                                <Text style={styles.dynamicLabel}>
-                                                    {method === 'Other' ? 'Custom Platform' : `${method} ID`}
-                                                </Text>
-                                                <TouchableOpacity onPress={() => toggleMethod(method)}>
-                                                    <X size={14} color="#EF4444" />
-                                                </TouchableOpacity>
-                                            </View>
-
-                                            {method === 'Other' && (
-                                                <TextInput
-                                                    style={[styles.input, { marginBottom: 10 }]}
-                                                    placeholder="Platform Name (e.g. Line, Kakao)"
-                                                    value={otherPlatformName}
-                                                    onChangeText={setOtherPlatformName}
-                                                />
-                                            )}
-
-                                            <TextInput
-                                                style={styles.input}
-                                                placeholder={method === 'Email' ? 'example@email.com' : `Enter your ${method === 'Other' ? 'ID/Info' : method}`}
-                                                value={contactValues[method] || ''}
-                                                onChangeText={(text) => setContactValues(prev => ({ ...prev, [method]: text }))}
-                                                keyboardType={method === 'Email' ? 'email-address' : 'default'}
-                                            />
-                                        </View>
-                                    ))}
-
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.inputLabel}>Reason (Optional)</Text>
-                                        <TextInput
-                                            style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-                                            placeholder="Reason"
-                                            placeholderTextColor="#9CA3AF"
-                                            multiline
-                                            value={reason}
-                                            onChangeText={setReason}
-                                        />
-                                    </View>
-
-                                    <TouchableOpacity
-                                        style={[styles.submitButton, submitting && { opacity: 0.7 }]}
-                                        onPress={handlePostExchange}
-                                        disabled={submitting}
-                                    >
-                                        {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Publish Request</Text>}
-                                    </TouchableOpacity>
-                                    <View style={{ height: 40 }} />
-                                </ScrollView>
-
-                                {/* Inline Section Picker Overlay */}
-                                {isSectionPickerVisible && (
-                                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000 }]}>
-                                        <Pressable style={{ flex: 1 }} onPress={() => setIsSectionPickerVisible(false)} />
-                                        <View style={styles.pickerContent}>
-                                            <View style={styles.pickerHeader}>
-                                                <Text style={styles.pickerTitle}>Select Section</Text>
-                                                <TouchableOpacity onPress={() => setIsSectionPickerVisible(false)}>
-                                                    <X size={24} color="#6B7280" />
-                                                </TouchableOpacity>
-                                            </View>
-                                            <View style={styles.pickerGrid}>
-                                                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
-                                                    const currentSelection = (pickerTarget?.type === 'have' ? haveSection : wantCourses[pickerTarget?.index || 0]?.section || '');
-                                                    const isSelected = currentSelection.split(', ').includes(num.toString());
-
-                                                    return (
-                                                        <TouchableOpacity
-                                                            key={num}
-                                                            style={[styles.pickerItem, isSelected && styles.pickerItemActive]}
-                                                            onPress={() => handleSelectSection(num.toString())}
-                                                        >
-                                                            <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextActive]}>{num}</Text>
-                                                        </TouchableOpacity>
-                                                    );
-                                                })}
-                                            </View>
-                                            <TouchableOpacity
-                                                style={styles.pickerConfirmBtn}
-                                                onPress={() => setIsSectionPickerVisible(false)}
-                                            >
-                                                <Text style={styles.pickerConfirmText}>Confirm</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                )}
-                            </View>
-                        </KeyboardAvoidingView>
-                    </View>
-                </Modal>
-
-                {/* Comment Modal */}
-                <Modal visible={isCommentModalVisible} animationType="fade" transparent={true}>
-                    <View style={{ flex: 1 }}>
-                        <Pressable
-                            style={[styles.modalOverlay, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
-                            onPress={() => setIsCommentModalVisible(false)}
-                        />
-                        <KeyboardAvoidingView
-                            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                            style={{ flex: 1, justifyContent: 'flex-end' }}
-                            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-                            pointerEvents="box-none"
-                        >
-                            <View style={styles.commentContent} onStartShouldSetResponder={() => true}>
-                                <View style={styles.commentHeader}>
-                                    <Text style={styles.commentTitle}>Comments</Text>
-                                    <TouchableOpacity onPress={() => setIsCommentModalVisible(false)}>
-                                        <X size={24} color="#6B7280" />
-                                    </TouchableOpacity>
-                                </View>
-
-                                {loadingComments ? (
-                                    <ActivityIndicator style={{ padding: 40 }} />
-                                ) : (
-                                    <FlatList
-                                        data={comments}
-                                        keyExtractor={(item) => item.id}
-                                        renderItem={({ item }) => (
-                                            <View style={styles.commentRow}>
-                                                {renderAvatar(item.authorAvatar, styles.commentAvatar)}
-                                                <View style={styles.commentInfo}>
-                                                    <Text style={styles.commentAuthor}>{item.authorName}</Text>
-                                                    <Text style={styles.commentText}>{item.content}</Text>
-                                                    <Text style={styles.commentTime}>{new Date(item.createdAt).toLocaleTimeString()}</Text>
-                                                </View>
-                                            </View>
-                                        )}
-                                        contentContainerStyle={{ padding: 20 }}
-                                        ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#9CA3AF', margin: 40 }}>No comments yet.</Text>}
-                                    />
-                                )}
-
-                                <View style={styles.commentInputRow}>
-                                    <TextInput
-                                        style={styles.commentInput}
-                                        placeholder="Write a comment..."
-                                        value={newComment}
-                                        onChangeText={setNewComment}
-                                        multiline={false}
-                                    />
-                                    <TouchableOpacity style={styles.sendButton} onPress={handleSendComment}>
-                                        <Send size={20} color="#fff" />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        </KeyboardAvoidingView>
-                    </View>
-                </Modal>
-
-                <Modal visible={isContactModalVisible} animationType="fade" transparent={true}>
-                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                        <Pressable
-                            style={[styles.modalOverlay, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
-                            onPress={() => setIsContactModalVisible(false)}
-                        />
-                        <View style={[styles.commentContent, { height: 'auto', maxHeight: '60%', width: '85%', borderRadius: 24 }]}>
-                            <View style={styles.commentHeader}>
-                                <Text style={styles.commentTitle}>Contact Methods</Text>
-                                <TouchableOpacity onPress={() => setIsContactModalVisible(false)}>
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                        style={{ flex: 1, justifyContent: 'flex-end' }}
+                        pointerEvents="box-none"
+                    >
+                        <View style={[styles.modalContent, { maxHeight: '90%' }]} onStartShouldSetResponder={() => true}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Post Swap Request</Text>
+                                <TouchableOpacity onPress={() => setIsPostModalVisible(false)}>
                                     <X size={24} color="#6B7280" />
                                 </TouchableOpacity>
                             </View>
 
-                            <View style={{ padding: 20 }}>
-                                <Text style={styles.contactTip}>Click to copy the ID/Username</Text>
-                                {selectedExchange?.contacts.map((contact, idx) => (
-                                    <TouchableOpacity
-                                        key={idx}
-                                        style={styles.contactItem}
-                                        onPress={() => handleCopy(contact.value, contact.otherPlatformName || contact.platform)}
-                                    >
-                                        <View style={styles.contactIconContainer}>
-                                            <Text style={styles.contactIconText}>
-                                                {CONTACT_PLATFORMS.find(p => p.value === contact.platform)?.icon || '🔗'}
+                            <ScrollView
+                                style={styles.formContent}
+                                contentContainerStyle={{ paddingBottom: 100 }}
+                                showsVerticalScrollIndicator={false}
+                                keyboardDismissMode="interactive"
+                                keyboardShouldPersistTaps="handled"
+                            >
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>I Have (Course Code)</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Course Code"
+                                        placeholderTextColor="#9CA3AF"
+                                        value={haveCourse}
+                                        onChangeText={(text) => setHaveCourse(text.toUpperCase().replace(/[^A-Z0-9.]/g, ''))}
+                                        autoCapitalize="characters"
+                                    />
+                                    <View style={styles.rowInputs}>
+                                        <TouchableOpacity
+                                            style={[styles.input, { flex: 1, marginRight: 10, marginTop: 10, justifyContent: 'center' }]}
+                                            onPress={() => openSectionPicker('have')}
+                                        >
+                                            <Text style={{ color: haveSection ? '#111' : '#9CA3AF' }}>
+                                                {haveSection ? `Section ${haveSection}` : 'Section'}
                                             </Text>
+                                        </TouchableOpacity>
+                                        <TextInput
+                                            style={[styles.input, { flex: 2, marginTop: 10 }]}
+                                            placeholder="Teacher"
+                                            placeholderTextColor="#9CA3AF"
+                                            value={haveTeacher}
+                                            onChangeText={setHaveTeacher}
+                                        />
+                                    </View>
+                                    <TextInput
+                                        style={[styles.input, { marginTop: 10 }]}
+                                        placeholder="Class Time"
+                                        placeholderTextColor="#9CA3AF"
+                                        value={haveTime}
+                                        onChangeText={setHaveTime}
+                                    />
+                                </View>
+
+                                <View style={styles.inputGroup}>
+                                    <View style={styles.sectionHeader}>
+                                        <Text style={styles.inputLabel}>I Want (One or Multiple)</Text>
+                                        <TouchableOpacity onPress={addWantCourse} style={styles.addBtn}>
+                                            <PlusCircle size={20} color="#8B5CF6" />
+                                            <Text style={styles.addBtnText}>Add Course</Text>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {wantCourses.map((want, index) => (
+                                        <View key={index} style={[styles.wantFormItem, index > 0 && { marginTop: 20, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 20 }]}>
+                                            <View style={styles.wantFormHeader}>
+                                                <Text style={styles.wantFormTitle}>Target Course #{index + 1}</Text>
+                                                {wantCourses.length > 1 && (
+                                                    <TouchableOpacity onPress={() => removeWantCourse(index)}>
+                                                        <Trash2 size={18} color="#EF4444" />
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Course Code"
+                                                placeholderTextColor="#9CA3AF"
+                                                value={want.code}
+                                                onChangeText={(text) => updateWantCourse(index, 'code', text.toUpperCase().replace(/[^A-Z0-9.]/g, ''))}
+                                                autoCapitalize="characters"
+                                            />
+                                            <View style={styles.rowInputs}>
+                                                <TouchableOpacity
+                                                    style={[styles.input, { flex: 1, marginRight: 10, marginTop: 10, justifyContent: 'center' }]}
+                                                    onPress={() => openSectionPicker('want', index)}
+                                                >
+                                                    <Text style={{ color: want.section ? '#111' : '#9CA3AF' }}>
+                                                        {want.section ? `Section ${want.section}` : 'Section'}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                                <TextInput
+                                                    style={[styles.input, { flex: 2, marginTop: 10 }]}
+                                                    placeholder="Teacher"
+                                                    placeholderTextColor="#9CA3AF"
+                                                    value={want.teacher}
+                                                    onChangeText={(text) => updateWantCourse(index, 'teacher', text)}
+                                                />
+                                            </View>
+                                            <TextInput
+                                                style={[styles.input, { marginTop: 10 }]}
+                                                placeholder="Class Time"
+                                                placeholderTextColor="#9CA3AF"
+                                                value={want.time}
+                                                onChangeText={(text) => updateWantCourse(index, 'time', text)}
+                                            />
                                         </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.contactPlatformName}>
-                                                {contact.otherPlatformName || contact.platform}
+                                    ))}
+                                </View>
+
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Contact Methods (Select one or more)</Text>
+                                    <View style={styles.chipContainer}>
+                                        {CONTACT_PLATFORMS.map(platform => (
+                                            <TouchableOpacity
+                                                key={platform.value}
+                                                style={[
+                                                    styles.chip,
+                                                    selectedMethods.includes(platform.value) && styles.chipActive
+                                                ]}
+                                                onPress={() => toggleMethod(platform.value)}
+                                            >
+                                                <Text style={styles.chipIcon}>{platform.icon}</Text>
+                                                <Text style={[
+                                                    styles.chipText,
+                                                    selectedMethods.includes(platform.value) && styles.chipTextActive
+                                                ]}>
+                                                    {platform.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                {selectedMethods.map(method => (
+                                    <View key={method} style={styles.dynamicInputContainer}>
+                                        <View style={styles.dynamicHeader}>
+                                            <Text style={styles.dynamicLabel}>
+                                                {method === 'Other' ? 'Custom Platform' : `${method} ID`}
                                             </Text>
-                                            <Text style={styles.contactValueText}>{contact.value}</Text>
+                                            <TouchableOpacity onPress={() => toggleMethod(method)}>
+                                                <X size={14} color="#EF4444" />
+                                            </TouchableOpacity>
                                         </View>
-                                        <View style={styles.copyBadge}>
-                                            <Text style={styles.copyBadgeText}>Copy</Text>
-                                        </View>
-                                    </TouchableOpacity>
+
+                                        {method === 'Other' && (
+                                            <TextInput
+                                                style={[styles.input, { marginBottom: 10 }]}
+                                                placeholder="Platform Name (e.g. Line, Kakao)"
+                                                value={otherPlatformName}
+                                                onChangeText={setOtherPlatformName}
+                                            />
+                                        )}
+
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder={method === 'Email' ? 'example@email.com' : `Enter your ${method === 'Other' ? 'ID/Info' : method}`}
+                                            value={contactValues[method] || ''}
+                                            onChangeText={(text) => setContactValues(prev => ({ ...prev, [method]: text }))}
+                                            keyboardType={method === 'Email' ? 'email-address' : 'default'}
+                                        />
+                                    </View>
                                 ))}
+
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Reason (Optional)</Text>
+                                    <TextInput
+                                        style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                                        placeholder="Reason"
+                                        placeholderTextColor="#9CA3AF"
+                                        multiline
+                                        value={reason}
+                                        onChangeText={setReason}
+                                    />
+                                </View>
+
+                                <TouchableOpacity
+                                    style={[styles.submitButton, submitting && { opacity: 0.7 }]}
+                                    onPress={handlePostExchange}
+                                    disabled={submitting}
+                                >
+                                    {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Publish Request</Text>}
+                                </TouchableOpacity>
+                                <View style={{ height: 40 }} />
+                            </ScrollView>
+
+                            {/* Inline Section Picker Overlay */}
+                            {isSectionPickerVisible && (
+                                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000 }]}>
+                                    <Pressable style={{ flex: 1 }} onPress={() => setIsSectionPickerVisible(false)} />
+                                    <View style={styles.pickerContent}>
+                                        <View style={styles.pickerHeader}>
+                                            <Text style={styles.pickerTitle}>Select Section</Text>
+                                            <TouchableOpacity onPress={() => setIsSectionPickerVisible(false)}>
+                                                <X size={24} color="#6B7280" />
+                                            </TouchableOpacity>
+                                        </View>
+                                        <View style={styles.pickerGrid}>
+                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
+                                                const currentSelection = (pickerTarget?.type === 'have' ? haveSection : wantCourses[pickerTarget?.index || 0]?.section || '');
+                                                const isSelected = currentSelection.split(', ').includes(num.toString());
+
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={num}
+                                                        style={[styles.pickerItem, isSelected && styles.pickerItemActive]}
+                                                        onPress={() => handleSelectSection(num.toString())}
+                                                    >
+                                                        <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextActive]}>{num}</Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                        <TouchableOpacity
+                                            style={styles.pickerConfirmBtn}
+                                            onPress={() => setIsSectionPickerVisible(false)}
+                                        >
+                                            <Text style={styles.pickerConfirmText}>Confirm</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+                    </KeyboardAvoidingView>
+                </View>
+            </Modal>
+
+            {/* Comment Modal */}
+            <Modal visible={isCommentModalVisible} animationType="fade" transparent={true}>
+                <View style={{ flex: 1 }}>
+                    <Pressable
+                        style={[styles.modalOverlay, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
+                        onPress={() => setIsCommentModalVisible(false)}
+                    />
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        style={{ flex: 1, justifyContent: 'flex-end' }}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                        pointerEvents="box-none"
+                    >
+                        <View style={styles.commentContent} onStartShouldSetResponder={() => true}>
+                            <View style={styles.commentHeader}>
+                                <Text style={styles.commentTitle}>Comments</Text>
+                                <TouchableOpacity onPress={() => setIsCommentModalVisible(false)}>
+                                    <X size={24} color="#6B7280" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {loadingComments ? (
+                                <ActivityIndicator style={{ padding: 40 }} />
+                            ) : (
+                                <FlatList
+                                    data={comments}
+                                    keyExtractor={(item) => item.id}
+                                    renderItem={({ item }) => (
+                                        <View style={styles.commentRow}>
+                                            {renderAvatar(item.authorAvatar, styles.commentAvatar)}
+                                            <View style={styles.commentInfo}>
+                                                <Text style={styles.commentAuthor}>{item.authorName}</Text>
+                                                <Text style={styles.commentText}>{item.content}</Text>
+                                                <Text style={styles.commentTime}>{new Date(item.createdAt).toLocaleTimeString()}</Text>
+                                            </View>
+                                        </View>
+                                    )}
+                                    contentContainerStyle={{ padding: 20 }}
+                                    ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#9CA3AF', margin: 40 }}>No comments yet.</Text>}
+                                />
+                            )}
+
+                            <View style={styles.commentInputRow}>
+                                <TextInput
+                                    style={styles.commentInput}
+                                    placeholder="Write a comment..."
+                                    value={newComment}
+                                    onChangeText={setNewComment}
+                                    multiline={false}
+                                />
+                                <TouchableOpacity style={styles.sendButton} onPress={handleSendComment}>
+                                    <Send size={20} color="#fff" />
+                                </TouchableOpacity>
                             </View>
                         </View>
+                    </KeyboardAvoidingView>
+                </View>
+            </Modal>
+
+            <Modal visible={isContactModalVisible} animationType="fade" transparent={true}>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Pressable
+                        style={[styles.modalOverlay, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
+                        onPress={() => setIsContactModalVisible(false)}
+                    />
+                    <View style={[styles.commentContent, { height: 'auto', maxHeight: '60%', width: '85%', borderRadius: 24 }]}>
+                        <View style={styles.commentHeader}>
+                            <Text style={styles.commentTitle}>Contact Methods</Text>
+                            <TouchableOpacity onPress={() => setIsContactModalVisible(false)}>
+                                <X size={24} color="#6B7280" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={{ padding: 20 }}>
+                            <Text style={styles.contactTip}>Click to copy the ID/Username</Text>
+                            {selectedExchange?.contacts.map((contact, idx) => (
+                                <TouchableOpacity
+                                    key={idx}
+                                    style={styles.contactItem}
+                                    onPress={() => handleCopy(contact.value, contact.otherPlatformName || contact.platform)}
+                                >
+                                    <View style={styles.contactIconContainer}>
+                                        <Text style={styles.contactIconText}>
+                                            {CONTACT_PLATFORMS.find(p => p.value === contact.platform)?.icon || '🔗'}
+                                        </Text>
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.contactPlatformName}>
+                                            {contact.otherPlatformName || contact.platform}
+                                        </Text>
+                                        <Text style={styles.contactValueText}>{contact.value}</Text>
+                                    </View>
+                                    <View style={styles.copyBadge}>
+                                        <Text style={styles.copyBadgeText}>Copy</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
-                </Modal>
-            </View>
+                </View>
+            </Modal>
+        </View>
     );
 }
 

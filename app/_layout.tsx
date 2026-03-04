@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import 'react-native-url-polyfill/auto';
@@ -57,7 +57,7 @@ export default function RootLayout() {
           const currentSegments = segmentsRef.current;
           const inAuthGroup = currentSegments[0] === '(auth)';
           const currentSegment = currentSegments.length > 1 ? (currentSegments as string[])[1] : currentSegments[0] || '';
-          
+
           // Check if forgot-password exists anywhere in segments (more robust check)
           const isForgotPasswordPage = currentSegments.includes('forgot-password');
 
@@ -106,7 +106,7 @@ export default function RootLayout() {
 
   return (
     <>
-      <Slot
+      <Stack
         screenOptions={{
           animation: 'slide_from_right',
           animationDuration: 400,

@@ -1,10 +1,11 @@
 import { formatDistanceToNow } from 'date-fns';
 import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
 import { Heart, MessageCircle } from 'lucide-react-native';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    Image,
+    Image as RNImage,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -112,7 +113,9 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                             <Image
                                 source={{ uri: coverImage }}
                                 style={styles.coverImage}
-                                resizeMode="cover"
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                recyclingKey={coverImage}
                             />
                             {post.category && post.category !== 'All' && (
                                 <View
@@ -188,7 +191,7 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                         <View style={styles.authorRow}>
                             <View style={styles.avatarSmall}>
                                 {!post.isAnonymous && isValidUrl(post.authorAvatar) ? (
-                                    <Image
+                                    <RNImage
                                         source={{ uri: post.authorAvatar! }}
                                         style={styles.avatarImage}
                                     />

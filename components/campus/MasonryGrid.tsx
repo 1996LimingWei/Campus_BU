@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 interface MasonryGridProps<T> {
     data: T[];
     renderItem: (item: T, index: number) => React.ReactNode;
+    keyExtractor?: (item: T, index: number) => string;
     columnGap?: number;
     columnPadding?: number;
 }
@@ -16,6 +17,7 @@ interface MasonryGridProps<T> {
 function MasonryGrid<T>({
     data,
     renderItem,
+    keyExtractor,
     columnGap = 8,
     columnPadding = 12,
 }: MasonryGridProps<T>) {
@@ -30,6 +32,9 @@ function MasonryGrid<T>({
         }
     });
 
+    const getKey = (item: T, index: number) =>
+        keyExtractor ? keyExtractor(item, index) : String(index);
+
     return (
         <View
             style={[
@@ -43,7 +48,7 @@ function MasonryGrid<T>({
             {/* Left Column */}
             <View style={[styles.column, { marginRight: columnGap / 2 }]}>
                 {leftItems.map(({ item, index }) => (
-                    <React.Fragment key={index}>
+                    <React.Fragment key={getKey(item, index)}>
                         {renderItem(item, index)}
                     </React.Fragment>
                 ))}
@@ -52,7 +57,7 @@ function MasonryGrid<T>({
             {/* Right Column — offset slightly for the XHS stagger effect */}
             <View style={[styles.column, styles.rightColumn, { marginLeft: columnGap / 2 }]}>
                 {rightItems.map(({ item, index }) => (
-                    <React.Fragment key={index}>
+                    <React.Fragment key={getKey(item, index)}>
                         {renderItem(item, index)}
                     </React.Fragment>
                 ))}

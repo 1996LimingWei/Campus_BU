@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
     ChevronLeft,
@@ -8,9 +9,10 @@ import {
     Send,
     Trash2,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
     Dimensions,
     FlatList,
     Image,
@@ -75,8 +77,16 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function PostDetailScreen() {
-    const { id } = useLocalSearchParams();
+    const { id, coverImage: coverImageParam, isTextOnly: isTextOnlyParam } = useLocalSearchParams<{
+        id: string;
+        coverImage?: string;
+        isTextOnly?: string;
+    }>();
     const router = useRouter();
+
+    // ── Zoom entrance animation ────────────────────────────────────────────────
+    const animScale = useRef(new Animated.Value(0.93)).current;
+    const animOpacity = useRef(new Animated.Value(0)).current;
 
     const [post, setPost] = useState<Post | null>(null);
     const [comments, setComments] = useState<any[]>([]);
@@ -94,6 +104,24 @@ export default function PostDetailScreen() {
         message: '',
         type: 'success',
     });
+
+    // Fire zoom animation immediately on mount
+    useEffect(() => {
+        Animated.parallel([
+            Animated.spring(animScale, {
+                toValue: 1,
+                useNativeDriver: true,
+                damping: 22,
+                stiffness: 200,
+                mass: 0.8,
+            }),
+            Animated.timing(animOpacity, {
+                toValue: 1,
+                duration: 180,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, []);
 
     const loadData = async () => {
         if (!id) return;
@@ -198,16 +226,9 @@ export default function PostDetailScreen() {
     };
 
     // ── Loading / not found states ────────────────────────────────────────────
-    if (loading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <StatusBar barStyle="dark-content" />
-                <ActivityIndicator size="large" color="#1E3A8A" />
-            </View>
-        );
-    }
+    // No full-page spinner — we show the page immediately with a skeleton
 
-    if (!post) {
+    if (!loading && !post) {
         return (
             <View style={styles.loadingContainer}>
                 <Text style={{ color: '#6B7280', fontSize: 16 }}>帖子不存在</Text>
@@ -219,10 +240,15 @@ export default function PostDetailScreen() {
     }
 
     // ── Prepare image list ────────────────────────────────────────────────────
-    const images = (post.images?.length ? post.images : post.imageUrl ? [post.imageUrl] : [])
-        .filter(isValidUrl);
-    const isTextOnly = images.length === 0;
-    const palette = isTextOnly ? getPalette(post.id) : null;
+    // While loading, use the param-passed cover for instant display
+    const resolvedImages = post
+        ? (post.images?.length ? post.images : post.imageUrl ? [post.imageUrl] : []).filter(isValidUrl)
+        : [];
+    const coverFromParam = coverImageParam && isValidUrl(coverImageParam) ? coverImageParam : null;
+    const images = resolvedImages.length > 0 ? resolvedImages : coverFromParam ? [coverFromParam] : [];
+    const paramIsTextOnly = isTextOnlyParam === '1';
+    const isTextOnly = post ? images.length === 0 : paramIsTextOnly;
+    const palette = isTextOnly ? getPalette(id as string) : null;
 
     // ── Main render ───────────────────────────────────────────────────────────
     return (
@@ -231,228 +257,274 @@ export default function PostDetailScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
             <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
-            {/* ── Top header bar ── */}
-            <View style={styles.topBar}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <ChevronLeft size={24} color="#1E3A8A" />
-                </TouchableOpacity>
-                <Text style={styles.topBarTitle}>HKCampus</Text>
-                {currentUser?.uid === post.authorId ? (
-                    <TouchableOpacity style={styles.backBtn} onPress={triggerDeletePost}>
-                        <MoreHorizontal size={22} color="#1E3A8A" />
-                    </TouchableOpacity>
-                ) : (
-                    <View style={{ width: 40 }} />
-                )}
-            </View>
-
-            <ScrollView
-                style={styles.scroll}
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
+            <Animated.View
+                style={[
+                    styles.animatedWrapper,
+                    { opacity: animOpacity, transform: [{ scale: animScale }] },
+                ]}
             >
-                {/* ══ COVER AREA ══════════════════════════════════════════════ */}
-                {isTextOnly ? (
-                    /* Text-only cover */
-                    <View style={[styles.textCover, { backgroundColor: palette!.bg }]}>
-                        <View style={[styles.blob, styles.blobTR, { backgroundColor: palette!.accent + '55' }]} />
-                        <View style={[styles.blob, styles.blobBL, { backgroundColor: palette!.accent + '33' }]} />
-                        <Text style={[styles.textCoverContent, { color: palette!.text }]} numberOfLines={12}>
-                            {post.content}
-                        </Text>
-                    </View>
-                ) : images.length === 1 ? (
-                    /* Single image — tall square */
-                    <View style={styles.singleImageWrapper}>
-                        <Image
-                            source={{ uri: images[0] }}
-                            style={styles.singleImage}
-                            resizeMode="cover"
-                        />
-                    </View>
-                ) : (
-                    /* Multi-image carousel */
-                    <View>
-                        <FlatList
-                            data={images}
-                            horizontal
-                            pagingEnabled
-                            showsHorizontalScrollIndicator={false}
-                            keyExtractor={(_, i) => String(i)}
-                            onMomentumScrollEnd={e => {
-                                setImgIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W));
-                            }}
-                            renderItem={({ item }) => (
-                                <View style={styles.singleImageWrapper}>
-                                    <Image source={{ uri: item }} style={styles.singleImage} resizeMode="cover" />
+
+                {/* ── Top header bar ── */}
+                <View style={styles.topBar}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                        <ChevronLeft size={24} color="#1E3A8A" />
+                    </TouchableOpacity>
+                    <Text style={styles.topBarTitle}>HKCampus</Text>
+                    {post && currentUser?.uid === post.authorId ? (
+                        <TouchableOpacity style={styles.backBtn} onPress={triggerDeletePost}>
+                            <MoreHorizontal size={22} color="#1E3A8A" />
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={{ width: 40 }} />
+                    )}
+                </View>
+
+                <ScrollView
+                    style={styles.scroll}
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* ══ COVER AREA ══════════════════════════════════════════════ */}
+                    {isTextOnly ? (
+                        /* Text-only cover — use param palette while loading */
+                        <View style={[styles.textCover, { backgroundColor: palette?.bg ?? '#1E3A8A' }]}>
+                            <View style={[styles.blob, styles.blobTR, { backgroundColor: (palette?.accent ?? '#3B82F6') + '55' }]} />
+                            <View style={[styles.blob, styles.blobBL, { backgroundColor: (palette?.accent ?? '#3B82F6') + '33' }]} />
+                            {post ? (
+                                <Text style={[styles.textCoverContent, { color: palette?.text ?? '#fff' }]} numberOfLines={12}>
+                                    {post.content}
+                                </Text>
+                            ) : (
+                                // Skeleton lines while loading
+                                <View style={{ gap: 8 }}>
+                                    {[80, 65, 72, 55].map((w, i) => (
+                                        <View key={i} style={[styles.skeletonLine, { width: `${w}%` }]} />
+                                    ))}
                                 </View>
                             )}
-                        />
-                        {/* Dot indicator */}
-                        <View style={styles.dotRow}>
-                            {images.map((_, i) => (
-                                <View
-                                    key={i}
-                                    style={[styles.dot, i === imgIndex && styles.dotActive]}
-                                />
-                            ))}
                         </View>
-                    </View>
-                )}
-
-                {/* ══ AUTHOR INFO ═════════════════════════════════════════════ */}
-                <View style={styles.authorSection}>
-                    <View style={styles.authorAvatar}>
-                        {!post.isAnonymous && isValidUrl(post.authorAvatar) ? (
-                            <Image source={{ uri: post.authorAvatar }} style={styles.avatarImg} />
-                        ) : (
-                            <Text style={styles.avatarLetter}>
-                                {post.isAnonymous ? '?' : post.authorName.charAt(0).toUpperCase()}
-                            </Text>
-                        )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <View style={styles.authorNameRow}>
-                            <Text style={styles.authorName}>
-                                {post.isAnonymous ? '匿名用户' : post.authorName}
-                            </Text>
-                            <EduBadge shouldShow={!post.isAnonymous && isHKBUEmail(post.authorEmail)} />
+                    ) : images.length === 1 ? (
+                        /* Single image — renders immediately from cache */
+                        <View style={styles.singleImageWrapper}>
+                            <ExpoImage
+                                source={{ uri: images[0] }}
+                                style={styles.singleImage}
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                transition={150}
+                            />
                         </View>
-                        <Text style={styles.timeText}>
-                            {formatDistanceToNow(post.createdAt, { addSuffix: true })}
-                        </Text>
-                    </View>
-                    {/* Category pill */}
-                    {post.category && post.category !== 'All' && (
-                        <View style={[styles.catPill, { backgroundColor: categoryColors[post.category] + '22' }]}>
-                            <Text style={[styles.catPillText, { color: categoryColors[post.category] }]}>
-                                {post.category}
-                            </Text>
-                        </View>
-                    )}
-                    {/* (delete is now in the top bar) */}
-                </View>
-
-                {/* ══ CONTENT ═════════════════════════════════════════════════ */}
-                <View style={styles.contentSection}>
-                    {/* For text-only posts the cover already shows content; show full text here too */}
-                    <Text style={styles.bodyText}>{post.content}</Text>
-
-                    {/* Location tag */}
-                    {post.location?.name && (
-                        <View style={styles.locationTag}>
-                            <Text style={styles.locationTagText}>📍 {post.location.name}</Text>
-                        </View>
-                    )}
-                </View>
-
-                {/* ══ COMMENTS SECTION ════════════════════════════════════════ */}
-                <View style={styles.divider} />
-                <View style={styles.commentsSection}>
-                    <Text style={styles.commentsLabel}>
-                        {comments.length > 0 ? `共 ${comments.length} 条评论` : '暂无评论，来说点什么吧 👇'}
-                    </Text>
-
-                    {comments.map(comment => (
-                        <View key={comment.id} style={styles.commentItem}>
-                            <View style={styles.commentAvatar}>
-                                {comment.author_avatar && isValidUrl(comment.author_avatar) ? (
-                                    <Image source={{ uri: comment.author_avatar }} style={styles.avatarImg} />
-                                ) : (
-                                    <Text style={styles.avatarLetter}>
-                                        {comment.author_name?.charAt(0).toUpperCase() ?? '?'}
-                                    </Text>
+                    ) : images.length > 1 ? (
+                        /* Multi-image carousel */
+                        <View>
+                            <FlatList
+                                data={images}
+                                horizontal
+                                pagingEnabled
+                                showsHorizontalScrollIndicator={false}
+                                keyExtractor={(_, i) => String(i)}
+                                onMomentumScrollEnd={e => {
+                                    setImgIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W));
+                                }}
+                                renderItem={({ item }) => (
+                                    <View style={styles.singleImageWrapper}>
+                                        <ExpoImage
+                                            source={{ uri: item }}
+                                            style={styles.singleImage}
+                                            contentFit="cover"
+                                            cachePolicy="memory-disk"
+                                            transition={150}
+                                        />
+                                    </View>
                                 )}
+                            />
+                            {/* Dot indicator */}
+                            <View style={styles.dotRow}>
+                                {images.map((_, i) => (
+                                    <View
+                                        key={i}
+                                        style={[styles.dot, i === imgIndex && styles.dotActive]}
+                                    />
+                                ))}
                             </View>
-                            <View style={styles.commentBody}>
-                                <View style={styles.commentHeader}>
-                                    <Text style={styles.commentAuthor}>{comment.author_name}</Text>
-                                    <EduBadge shouldShow={isHKBUEmail(comment.author_email)} size="small" />
-                                    {currentUser?.uid === comment.author_id && (
-                                        <TouchableOpacity
-                                            onPress={() => triggerDeleteComment(comment.id)}
-                                            style={styles.deleteCommentBtn}
-                                        >
-                                            <Trash2 size={14} color="#EF4444" />
-                                        </TouchableOpacity>
-                                    )}
+                        </View>
+                    ) : (
+                        /* No image yet — gray placeholder that matches card bg */
+                        <View style={[styles.singleImageWrapper, { backgroundColor: '#F3F4F6' }]} />
+                    )}
+
+                    {/* ══ AUTHOR INFO ═════════════════════════════════════════════ */}
+                    <View style={styles.authorSection}>
+                        <View style={styles.authorAvatar}>
+                            {post && !post.isAnonymous && isValidUrl(post.authorAvatar) ? (
+                                <Image source={{ uri: post.authorAvatar }} style={styles.avatarImg} />
+                            ) : loading ? null : (
+                                <Text style={styles.avatarLetter}>
+                                    {post?.isAnonymous ? '?' : post?.authorName.charAt(0).toUpperCase()}
+                                </Text>
+                            )}
+                        </View>
+                        {loading ? (
+                            // Author skeleton
+                            <View style={{ flex: 1, gap: 6 }}>
+                                <View style={[styles.skeletonLine, { width: '45%', height: 14, borderRadius: 7, backgroundColor: '#E5E7EB' }]} />
+                                <View style={[styles.skeletonLine, { width: '30%', height: 11, borderRadius: 5, backgroundColor: '#F3F4F6' }]} />
+                            </View>
+                        ) : (
+                            <View style={{ flex: 1 }}>
+                                <View style={styles.authorNameRow}>
+                                    <Text style={styles.authorName}>
+                                        {post?.isAnonymous ? '匿名用户' : post?.authorName}
+                                    </Text>
+                                    <EduBadge shouldShow={!post?.isAnonymous && isHKBUEmail(post?.authorEmail)} />
                                 </View>
-                                <Text style={styles.commentText}>{comment.content}</Text>
-                                <Text style={styles.commentTime}>
-                                    {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                                <Text style={styles.timeText}>
+                                    {post?.createdAt ? formatDistanceToNow(post.createdAt, { addSuffix: true }) : ''}
                                 </Text>
                             </View>
-                        </View>
-                    ))}
+                        )}
+                        {/* Category pill */}
+                        {post && post.category && post.category !== 'All' && (
+                            <View style={[styles.catPill, { backgroundColor: categoryColors[post.category] + '22' }]}>
+                                <Text style={[styles.catPillText, { color: categoryColors[post.category] }]}>
+                                    {post.category}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
 
-                    {/* padding so content clears the bottom bar */}
-                    <View style={{ height: 100 }} />
+                    {/* ══ CONTENT ═════════════════════════════════════════════════ */}
+                    <View style={styles.contentSection}>
+                        {loading ? (
+                            // Content skeleton
+                            <View style={{ gap: 10 }}>
+                                {[100, 88, 92, 70].map((w, i) => (
+                                    <View key={i} style={[styles.skeletonLine, { width: `${w}%`, height: 16, borderRadius: 8, backgroundColor: '#F3F4F6' }]} />
+                                ))}
+                            </View>
+                        ) : (
+                            <>
+                                <Text style={styles.bodyText}>{post?.content}</Text>
+                                {post?.location?.name && (
+                                    <View style={styles.locationTag}>
+                                        <Text style={styles.locationTagText}>📍 {post.location.name}</Text>
+                                    </View>
+                                )}
+                            </>
+                        )}
+                    </View>
+
+                    {/* ══ COMMENTS SECTION ════════════════════════════════════════ */}
+                    <View style={styles.divider} />
+                    <View style={styles.commentsSection}>
+                        <Text style={styles.commentsLabel}>
+                            {loading
+                                ? ''
+                                : comments.length > 0
+                                    ? `共 ${comments.length} 条评论`
+                                    : '暂无评论，来说点什么吧 👇'}
+                        </Text>
+
+                        {!loading && comments.map(comment => (
+                            <View key={comment.id} style={styles.commentItem}>
+                                <View style={styles.commentAvatar}>
+                                    {comment.author_avatar && isValidUrl(comment.author_avatar) ? (
+                                        <Image source={{ uri: comment.author_avatar }} style={styles.avatarImg} />
+                                    ) : (
+                                        <Text style={styles.avatarLetter}>
+                                            {comment.author_name?.charAt(0).toUpperCase() ?? '?'}
+                                        </Text>
+                                    )}
+                                </View>
+                                <View style={styles.commentBody}>
+                                    <View style={styles.commentHeader}>
+                                        <Text style={styles.commentAuthor}>{comment.author_name}</Text>
+                                        <EduBadge shouldShow={isHKBUEmail(comment.author_email)} size="small" />
+                                        {currentUser?.uid === comment.author_id && (
+                                            <TouchableOpacity
+                                                onPress={() => triggerDeleteComment(comment.id)}
+                                                style={styles.deleteCommentBtn}
+                                            >
+                                                <Trash2 size={14} color="#EF4444" />
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                    <Text style={styles.commentText}>{comment.content}</Text>
+                                    <Text style={styles.commentTime}>
+                                        {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                                    </Text>
+                                </View>
+                            </View>
+                        ))}
+
+                        {/* padding so content clears the bottom bar */}
+                        <View style={{ height: 100 }} />
+                    </View>
+                </ScrollView>
+
+                {/* ══ BOTTOM ACTION BAR ═══════════════════════════════════════════ */}
+                <View style={styles.bottomBar}>
+                    {/* Comment input */}
+                    <View style={styles.inputPill}>
+                        <TextInput
+                            style={styles.textInput}
+                            placeholder="说点什么..."
+                            placeholderTextColor="#9CA3AF"
+                            value={commentText}
+                            onChangeText={setCommentText}
+                            multiline
+                        />
+                        {commentText.trim().length > 0 && (
+                            <TouchableOpacity
+                                style={styles.sendBtn}
+                                onPress={handleSendComment}
+                                disabled={submitting}
+                            >
+                                {submitting ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Send size={16} color="#fff" />
+                                )}
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {/* Like */}
+                    <TouchableOpacity style={styles.actionBtn} onPress={handleLike} disabled={loading || !post}>
+                        <Heart
+                            size={24}
+                            color={post?.isLiked ? '#EF4444' : '#6B7280'}
+                            fill={post?.isLiked ? '#EF4444' : 'transparent'}
+                        />
+                        <Text style={[styles.actionCount, post?.isLiked && { color: '#EF4444' }]}>
+                            {post?.likes ?? 0}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Comment count */}
+                    <TouchableOpacity style={styles.actionBtn}>
+                        <MessageCircle size={24} color="#6B7280" />
+                        <Text style={styles.actionCount}>{post?.comments ?? 0}</Text>
+                    </TouchableOpacity>
                 </View>
-            </ScrollView>
 
-            {/* ══ BOTTOM ACTION BAR ═══════════════════════════════════════════ */}
-            <View style={styles.bottomBar}>
-                {/* Comment input */}
-                <View style={styles.inputPill}>
-                    <TextInput
-                        style={styles.textInput}
-                        placeholder="说点什么..."
-                        placeholderTextColor="#9CA3AF"
-                        value={commentText}
-                        onChangeText={setCommentText}
-                        multiline
-                    />
-                    {commentText.trim().length > 0 && (
-                        <TouchableOpacity
-                            style={styles.sendBtn}
-                            onPress={handleSendComment}
-                            disabled={submitting}
-                        >
-                            {submitting ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <Send size={16} color="#fff" />
-                            )}
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-                {/* Like */}
-                <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
-                    <Heart
-                        size={24}
-                        color={post.isLiked ? '#EF4444' : '#6B7280'}
-                        fill={post.isLiked ? '#EF4444' : 'transparent'}
-                    />
-                    <Text style={[styles.actionCount, post.isLiked && { color: '#EF4444' }]}>
-                        {post.likes}
-                    </Text>
-                </TouchableOpacity>
-
-                {/* Comment count */}
-                <TouchableOpacity style={styles.actionBtn}>
-                    <MessageCircle size={24} color="#6B7280" />
-                    <Text style={styles.actionCount}>{post.comments}</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* ── Modals ── */}
-            <ActionModal
-                visible={deleteModalVisible}
-                title={deleteType === 'post' ? '删除帖子' : '删除评论'}
-                message={`确定删除这条${deleteType === 'post' ? '帖子' : '评论'}吗？此操作不可撤销。`}
-                onConfirm={confirmDelete}
-                onCancel={() => setDeleteModalVisible(false)}
-                confirmText="删除"
-            />
-            <Toast
-                visible={toast.visible}
-                message={toast.message}
-                type={toast.type}
-                onHide={() => setToast(prev => ({ ...prev, visible: false }))}
-            />
+                {/* ── Modals ── */}
+                <ActionModal
+                    visible={deleteModalVisible}
+                    title={deleteType === 'post' ? '删除帖子' : '删除评论'}
+                    message={`确定删除这条${deleteType === 'post' ? '帖子' : '评论'}吗？此操作不可撤销。`}
+                    onConfirm={confirmDelete}
+                    onCancel={() => setDeleteModalVisible(false)}
+                    confirmText="删除"
+                />
+                <Toast
+                    visible={toast.visible}
+                    message={toast.message}
+                    type={toast.type}
+                    onHide={() => setToast(prev => ({ ...prev, visible: false }))}
+                />
+            </Animated.View>
         </KeyboardAvoidingView>
     );
 }
@@ -463,6 +535,14 @@ const styles = StyleSheet.create({
     root: {
         flex: 1,
         backgroundColor: '#fff',
+    },
+    animatedWrapper: {
+        flex: 1,
+    },
+    skeletonLine: {
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        borderRadius: 10,
+        height: 18,
     },
     loadingContainer: {
         flex: 1,

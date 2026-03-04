@@ -5,7 +5,6 @@ import React, { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    BackHandler,
     Dimensions,
     Image,
     ScrollView,
@@ -30,9 +29,13 @@ export default function BuildingDetail() {
     const [building, setBuilding] = useState<CampusLocation | undefined>(CAMPUS_BUILDINGS.find(b => b.id === id));
     const [loading, setLoading] = useState(true);
 
-    const goBackToClassroom = () => {
-        router.replace('/(tabs)/classroom' as any);
-    };
+    const handleBackToClassroom = React.useCallback(() => {
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(tabs)/classroom' as any);
+        }
+    }, [router]);
 
     React.useEffect(() => {
         const fetchBuilding = async () => {
@@ -51,37 +54,6 @@ export default function BuildingDetail() {
         };
         fetchBuilding();
     }, [id]);
-
-    const handleBackToClassroom = React.useCallback(() => {
-        try {
-            (router as any).navigate('/classroom');
-        } catch {
-            router.push('/classroom' as any);
-        }
-    }, [router]);
-
-    React.useEffect(() => {
-        const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
-            const actionType = e?.data?.action?.type;
-            if (actionType !== 'GO_BACK' && actionType !== 'POP' && actionType !== 'POP_TO_TOP') {
-                return;
-            }
-
-            e.preventDefault();
-            handleBackToClassroom();
-        });
-
-        return unsubscribe;
-    }, [navigation, handleBackToClassroom]);
-
-    React.useEffect(() => {
-        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-            handleBackToClassroom();
-            return true;
-        });
-
-        return () => subscription.remove();
-    }, [handleBackToClassroom]);
 
     if (loading) {
         return (

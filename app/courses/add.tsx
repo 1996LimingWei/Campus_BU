@@ -53,8 +53,8 @@ export default function AddCourseScreen() {
                     credits: parseInt(credits)
                 },
                 {
-                    userId: user.id,
-                    name: user.display_name || user.email,
+                    userId: user.uid,
+                    name: user.displayName || user.email,
                     email: user.email
                 }
             );
@@ -72,7 +72,7 @@ export default function AddCourseScreen() {
                 Alert.alert(
                     'Submitted for Review',
                     'Your course submission has been received and will be reviewed by our team. You will be notified once it is approved.',
-                    [{ text: 'OK', onPress: () => router.replace('/(tabs)/course') }]
+                    [{ text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(tabs)/course') }]
                 );
             }
         } catch (err) {
@@ -87,7 +87,7 @@ export default function AddCourseScreen() {
         <View style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>Add New Course</Text>
-                <TouchableOpacity onPress={() => router.replace('/(tabs)/course')} style={styles.closeButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/course')} style={styles.closeButton}>
                     <X size={24} color="#374151" />
                 </TouchableOpacity>
             </View>
@@ -185,8 +185,8 @@ export default function AddCourseScreen() {
                 </ScrollView>
 
                 <View style={styles.footer}>
-                    <TouchableOpacity 
-                        style={[styles.submitButton, loading && styles.submitButtonDisabled]} 
+                    <TouchableOpacity
+                        style={[styles.submitButton, loading && styles.submitButtonDisabled]}
                         onPress={handleSubmit}
                         disabled={loading}
                     >

@@ -136,5 +136,37 @@ export const FAQService = {
         });
 
         return found;
+    },
+
+    /**
+     * Search the Supabase knowledge base (RAG chunks)
+     * Uses ILIKE for fast keyword matching on the 73 ingested chunks.
+     */
+    async searchKnowledgeBase(query: string) {
+        const { supabase } = await import('./supabase');
+
+        // Split query into keywords for better matching
+        const words = query.split(/\s+/).filter(w => w.length > 1);
+
+        let dbQuery = supabase
+            .from('agent_knowledge_base')
+            .select('content, metadata');
+
+        if (words.length > 0) {
+            // Match any word in content using OR for broader search
+            const orQuery = words.map(word => `content.ilike.%${word}%`).join(',');
+            dbQuery = dbQuery.or(orQuery);
+        } else {
+            dbQuery = dbQuery.ilike('content', `%${query}%`);
+        }
+
+        const { data: dbData, error } = await dbQuery.limit(5);
+
+        if (error) {
+            console.error('[FAQService] Supabase search error:', error);
+            return [];
+        }
+
+        return dbData || [];
     }
 };
