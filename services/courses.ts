@@ -220,11 +220,13 @@ export const getCourseById = async (id: string): Promise<Course | null> => {
 };
 
 export const getReviews = async (courseId: string): Promise<Review[]> => {
+    const resolvedCourseId = await resolveCourseIdForReviewQueries(courseId);
+
     // Query Supabase for all courses (including local_ ones)
     const { data, error } = await supabase
         .from('course_reviews')
         .select('*, author:users!author_id(email, display_name, avatar_url)')
-        .eq('course_id', courseId)
+        .eq('course_id', resolvedCourseId)
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -253,16 +255,44 @@ export const getReviews = async (courseId: string): Promise<Review[]> => {
 };
 
 export const hasUserReviewed = async (courseId: string, userId: string): Promise<boolean> => {
+    const resolvedCourseId = await resolveCourseIdForReviewQueries(courseId);
+
     // Check in database for all courses (including local_ ones)
 
     const { count, error } = await supabase
         .from('course_reviews')
         .select('*', { count: 'exact', head: true })
-        .eq('course_id', courseId)
+        .eq('course_id', resolvedCourseId)
         .eq('author_id', userId)
         .not('rating', 'is', null);
 
     return !error && (count || 0) > 0;
+};
+
+const resolveCourseIdForReviewQueries = async (courseId: string): Promise<string> => {
+    // Normal DB IDs and demo IDs can be queried directly.
+    if (!courseId || !courseId.startsWith('local_')) {
+        return courseId;
+    }
+
+    const localCourses = await getLocalCourses();
+    const matchedCourse = localCourses.find(c => c.id === courseId);
+    if (!matchedCourse) {
+        return courseId;
+    }
+
+    const normalizedCode = (matchedCourse.code || courseId.replace(/^local_/, ''))
+        .toUpperCase()
+        .replace(/\s+/g, '');
+
+    const { data: existingByCode } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('code', normalizedCode)
+        .maybeSingle();
+
+    // If this local course maps to an existing DB course, query reviews using that canonical ID.
+    return existingByCode?.id || courseId;
 };
 
 const ensureCourseExistsForReview = async (courseId?: string): Promise<{ resolvedCourseId?: string; error: any }> => {

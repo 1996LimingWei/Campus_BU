@@ -12,7 +12,6 @@ import {
     View,
 } from 'react-native';
 import Animated, {
-    FadeInDown,
     useAnimatedStyle,
     useSharedValue,
     withSpring,
@@ -26,7 +25,6 @@ interface MasonryPostCardProps {
     onPress: () => void;
     onLike: () => void;
     currentUserId?: string;
-    index?: number;
 }
 
 const categoryColors: Record<string, string> = {
@@ -43,19 +41,21 @@ const categoryKeyMap: Record<string, string> = {
     'Lost & Found': 'lost_found'
 };
 
+/** Palette of warm/cool gradient pairs for text-cover cards */
 const TEXT_CARD_PALETTES: Array<{ bg: string; accent: string; text: string }> = [
-    { bg: '#1E3A8A', accent: '#3B82F6', text: '#fff' },
-    { bg: '#7C3AED', accent: '#A78BFA', text: '#fff' },
-    { bg: '#0F766E', accent: '#2DD4BF', text: '#fff' },
-    { bg: '#B45309', accent: '#FBBF24', text: '#fff' },
-    { bg: '#BE185D', accent: '#F472B6', text: '#fff' },
-    { bg: '#166534', accent: '#4ADE80', text: '#fff' },
-    { bg: '#1D4ED8', accent: '#93C5FD', text: '#fff' },
-    { bg: '#9D174D', accent: '#F9A8D4', text: '#fff' },
-    { bg: '#374151', accent: '#9CA3AF', text: '#fff' },
-    { bg: '#92400E', accent: '#FDE68A', text: '#fff' },
+    { bg: '#1E3A8A', accent: '#3B82F6', text: '#fff' },   // deep blue
+    { bg: '#7C3AED', accent: '#A78BFA', text: '#fff' },   // violet
+    { bg: '#0F766E', accent: '#2DD4BF', text: '#fff' },   // teal
+    { bg: '#B45309', accent: '#FBBF24', text: '#fff' },   // amber
+    { bg: '#BE185D', accent: '#F472B6', text: '#fff' },   // pink
+    { bg: '#166534', accent: '#4ADE80', text: '#fff' },   // green
+    { bg: '#1D4ED8', accent: '#93C5FD', text: '#fff' },   // sky blue
+    { bg: '#9D174D', accent: '#F9A8D4', text: '#fff' },   // rose
+    { bg: '#374151', accent: '#9CA3AF', text: '#fff' },   // slate
+    { bg: '#92400E', accent: '#FDE68A', text: '#fff' },   // warm brown
 ];
 
+/** Deterministic palette picker from post id */
 function getPalette(id: string) {
     let hash = 0;
     for (let i = 0; i < id.length; i++) {
@@ -68,11 +68,16 @@ const isValidUrl = (url?: string) =>
     !!url && (url.startsWith('http://') || url.startsWith('https://'));
 
 export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
-    ({ post, onPress, onLike, currentUserId, index }) => {
+    ({ post, onPress, onLike, currentUserId }) => {
         const { t } = useTranslation();
         const pressed = useSharedValue(1);
 
-        const images = post.images?.length ? post.images : post.imageUrl ? [post.imageUrl] : [];
+        // Resolved image list
+        const images = post.images?.length
+            ? post.images
+            : post.imageUrl
+                ? [post.imageUrl]
+                : [];
         const coverImage = images.find(img => isValidUrl(img));
         const isTextOnly = !coverImage;
 
@@ -93,103 +98,137 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
         }));
 
         return (
-            <Animated.View
-                entering={FadeInDown.delay((index ?? 0) * 60).springify().damping(12)}
-                style={styles.cardWrapper}
-            >
-                <Animated.View style={animatedStyle}>
-                    <TouchableOpacity
-                        style={styles.card}
-                        onPress={onPress}
-                        onPressIn={onPressIn}
-                        onPressOut={onPressOut}
-                        activeOpacity={1}
-                    >
-                        {coverImage ? (
-                            <View style={styles.imageWrapper}>
-                                <Image
-                                    source={{ uri: coverImage }}
-                                    style={styles.coverImage}
-                                    contentFit="cover"
-                                    cachePolicy="memory-disk"
-                                    recyclingKey={coverImage}
-                                />
-                                {post.category && post.category !== 'All' && (
-                                    <View
-                                        style={[
-                                            styles.categoryBadge,
-                                            { backgroundColor: categoryColors[post.category] || '#6B7280' },
-                                        ]}
-                                    >
-                                        <Text style={styles.categoryBadgeText}>
-                                            {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                        ) : (
-                            <View style={[styles.textCover, { backgroundColor: palette!.bg }]}>
-                                <View style={[styles.blob, styles.blobTopRight, { backgroundColor: palette!.accent + '55' }]} />
-                                <View style={[styles.blob, styles.blobBottomLeft, { backgroundColor: palette!.accent + '33' }]} />
-                                {post.category && post.category !== 'All' && (
-                                    <View style={styles.textCoverCategory}>
-                                        <Text style={styles.textCoverCategoryText}>
-                                            {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
-                                        </Text>
-                                    </View>
-                                )}
-                                <Text style={[styles.textCoverContent, { color: palette!.text }]} numberOfLines={7}>
-                                    {post.content}
-                                </Text>
-                                <View style={styles.textCoverFade} />
-                            </View>
+            <Animated.View style={[styles.cardWrapper, animatedStyle]}>
+                <TouchableOpacity
+                    style={styles.card}
+                    onPress={onPress}
+                    onPressIn={onPressIn}
+                    onPressOut={onPressOut}
+                    activeOpacity={1}
+                >
+                    {/* ── Cover area ── */}
+                    {coverImage ? (
+                        /* Real image cover */
+                        <View style={styles.imageWrapper}>
+                            <Image
+                                source={{ uri: coverImage }}
+                                style={styles.coverImage}
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                recyclingKey={coverImage}
+                            />
+                            {post.category && post.category !== 'All' && (
+                                <View
+                                    style={[
+                                        styles.categoryBadge,
+                                        { backgroundColor: categoryColors[post.category] || '#6B7280' },
+                                    ]}
+                                >
+                                    <Text style={styles.categoryBadgeText}>
+                                        {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    ) : (
+                        /* Text-cover card (XHS style) */
+                        <View style={[styles.textCover, { backgroundColor: palette!.bg }]}>
+                            {/* Decorative accent blobs */}
+                            <View
+                                style={[
+                                    styles.blob,
+                                    styles.blobTopRight,
+                                    { backgroundColor: palette!.accent + '55' },
+                                ]}
+                            />
+                            <View
+                                style={[
+                                    styles.blob,
+                                    styles.blobBottomLeft,
+                                    { backgroundColor: palette!.accent + '33' },
+                                ]}
+                            />
+
+                            {/* Category pill */}
+                            {post.category && post.category !== 'All' && (
+                                <View style={styles.textCoverCategory}>
+                                    <Text style={styles.textCoverCategoryText}>
+                                        {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* Main text */}
+                            <Text
+                                style={[styles.textCoverContent, { color: palette!.text }]}
+                                numberOfLines={7}
+                            >
+                                {post.content}
+                            </Text>
+
+                            {/* Fade-out hint at bottom */}
+                            <View style={styles.textCoverFade} />
+                        </View>
+                    )}
+
+                    {/* ── Card body: content preview + author + counts ── */}
+                    <View style={styles.body}>
+                        {/* Text-card: single-line title from content */}
+                        {isTextOnly && (
+                            <Text style={styles.textTitle} numberOfLines={1}>
+                                {post.content}
+                            </Text>
                         )}
 
-                        <View style={styles.body}>
-                            {isTextOnly && (
-                                <Text style={styles.textTitle} numberOfLines={1}>
-                                    {post.content}
-                                </Text>
-                            )}
-                            {!isTextOnly && !!post.content && (
-                                <Text style={styles.contentPreview} numberOfLines={1}>
-                                    {post.content}
-                                </Text>
-                            )}
-                            <View style={styles.authorRow}>
-                                <View style={styles.avatarSmall}>
-                                    {!post.isAnonymous && isValidUrl(post.authorAvatar) ? (
-                                        <RNImage source={{ uri: post.authorAvatar! }} style={styles.avatarImage} />
-                                    ) : (
-                                        <Text style={styles.avatarLetter}>
-                                            {post.isAnonymous ? '?' : post.authorName.charAt(0).toUpperCase()}
-                                        </Text>
-                                    )}
-                                </View>
-                                <Text style={styles.authorName} numberOfLines={1}>
-                                    {post.isAnonymous ? t('teachers.anonymous_student') : post.authorName}
-                                </Text>
-                                <EduBadge shouldShow={!post.isAnonymous && isHKBUEmail(post.authorEmail)} size="small" />
-                            </View>
-                            <View style={styles.countRow}>
-                                <View style={styles.countItem}>
-                                    <MessageCircle size={12} color="#9CA3AF" />
-                                    <Text style={styles.countText}>{post.comments}</Text>
-                                </View>
-                                <TouchableOpacity style={styles.countItem} onPress={onLike}>
-                                    <Heart
-                                        size={12}
-                                        color={post.isLiked ? '#EF4444' : '#9CA3AF'}
-                                        fill={post.isLiked ? '#EF4444' : 'transparent'}
+                        {/* Image card: one-line content preview above author */}
+                        {!isTextOnly && !!post.content && (
+                            <Text style={styles.contentPreview} numberOfLines={1}>
+                                {post.content}
+                            </Text>
+                        )}
+
+                        {/* Author row */}
+                        <View style={styles.authorRow}>
+                            <View style={styles.avatarSmall}>
+                                {!post.isAnonymous && isValidUrl(post.authorAvatar) ? (
+                                    <RNImage
+                                        source={{ uri: post.authorAvatar! }}
+                                        style={styles.avatarImage}
                                     />
-                                    <Text style={[styles.countText, post.isLiked && styles.likedText]}>
-                                        {post.likes}
+                                ) : (
+                                    <Text style={styles.avatarLetter}>
+                                        {post.isAnonymous ? '?' : post.authorName.charAt(0).toUpperCase()}
                                     </Text>
-                                </TouchableOpacity>
+                                )}
                             </View>
+                            <Text style={styles.authorName} numberOfLines={1}>
+                                {post.isAnonymous ? t('teachers.anonymous_student') : post.authorName}
+                            </Text>
+                            <EduBadge
+                                shouldShow={!post.isAnonymous && isHKBUEmail(post.authorEmail)}
+                                size="small"
+                            />
                         </View>
-                    </TouchableOpacity>
-                </Animated.View>
+
+                        {/* Counts */}
+                        <View style={styles.countRow}>
+                            <View style={styles.countItem}>
+                                <MessageCircle size={12} color="#9CA3AF" />
+                                <Text style={styles.countText}>{post.comments}</Text>
+                            </View>
+                            <TouchableOpacity style={styles.countItem} onPress={onLike}>
+                                <Heart
+                                    size={12}
+                                    color={post.isLiked ? '#EF4444' : '#9CA3AF'}
+                                    fill={post.isLiked ? '#EF4444' : 'transparent'}
+                                />
+                                <Text style={[styles.countText, post.isLiked && styles.likedText]}>
+                                    {post.likes}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableOpacity>
             </Animated.View>
         );
     }
@@ -209,6 +248,8 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 3,
     },
+
+    // ── Real image cover ───────────────────────────────────────────────────────
     imageWrapper: {
         width: '100%',
         aspectRatio: 3 / 4,
@@ -232,6 +273,8 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#fff',
     },
+
+    // ── Text cover (XHS style) ────────────────────────────────────────────────
     textCover: {
         width: '100%',
         aspectRatio: 3 / 4,
@@ -281,8 +324,11 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         height: 30,
+        // subtle bottom transparency — purely decorative, no gradient lib needed
         backgroundColor: 'transparent',
     },
+
+    // ── Card body ─────────────────────────────────────────────────────────────
     body: {
         padding: 10,
     },

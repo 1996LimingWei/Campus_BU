@@ -8,10 +8,19 @@ export type LLMResponse = {
     stop_reason: string;
 };
 
+function assertDeepSeekConfigured() {
+    if (!AGENT_CONFIG.DEEPSEEK_ENABLED) {
+        throw new Error(
+            'DeepSeek API key is not configured. Set EXPO_PUBLIC_DEEPSEEK_API_KEY in .env to a real key and restart Expo.'
+        );
+    }
+}
+
 /**
  * DeepSeek LLM Service
  */
 export async function callDeepSeek(messages: { role: string, content: string }[]): Promise<string> {
+    assertDeepSeekConfigured();
     try {
         const response = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
             method: 'POST',
@@ -44,6 +53,7 @@ export function callDeepSeekStream(
     messages: { role: string, content: string }[],
     onToken?: (text: string) => void
 ): Promise<string> {
+    assertDeepSeekConfigured();
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `${DEEPSEEK_BASE_URL}/chat/completions`);
