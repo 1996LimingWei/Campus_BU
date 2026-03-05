@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
@@ -9,6 +10,11 @@ import { getUserProfile, isDemoMode, onAuthChange, shouldSkipAuthRedirect } from
 import './i18n/i18n'; // Initialize i18n
 
 const DEMO_MODE_KEY = 'hkcampus_demo_mode';
+
+// Keep native splash visible until RootLayout mounts, then hide it without transition.
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // ignore when splash screen is already controlled by the runtime
+});
 
 // Helper to set demo mode
 export const setDemoMode = async (enabled: boolean) => {
@@ -30,6 +36,16 @@ export default function RootLayout() {
   useEffect(() => {
     segmentsRef.current = segments;
   }, [segments]);
+
+  useEffect(() => {
+    SplashScreen.setOptions({
+      fade: false,
+      duration: 0,
+    });
+    void SplashScreen.hideAsync().catch(() => {
+      // ignore if already hidden
+    });
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {

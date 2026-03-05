@@ -203,6 +203,7 @@
             "delete_comment_title": "刪除回复",
             "delete_post_confirm": "確定刪除這條帖子嗎？此操作不可撤銷。",
             "delete_comment_confirm": "確定刪除這條回复嗎？",
+            "delete_action": "刪除",
             "toast": {
                 "comment_success": "回复成功！",
                 "comment_error": "回复失敗",

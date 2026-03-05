@@ -204,6 +204,7 @@
             "delete_comment_title": "删除回复",
             "delete_post_confirm": "确定删除这条帖子吗？此操作不可撤销。",
             "delete_comment_confirm": "确定删除这条回复吗？",
+            "delete_action": "删除",
             "toast": {
                 "comment_success": "评论成功！",
                 "comment_error": "评论失败",

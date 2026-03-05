@@ -367,7 +367,7 @@ export default function ForumPostDetailScreen() {
                 message={deleteType === 'post' ? t('forum.detail.delete_post_confirm') : t('forum.detail.delete_comment_confirm')}
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteModal(false)}
-                confirmText={t('common.delete')}
+                confirmText={t('forum.detail.delete_action')}
                 cancelText={t('common.cancel')}
             />
             <Toast
