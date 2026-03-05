@@ -265,8 +265,71 @@ export const hasUserReviewed = async (courseId: string, userId: string): Promise
     return !error && (count || 0) > 0;
 };
 
+const ensureCourseExistsForReview = async (courseId?: string): Promise<{ resolvedCourseId?: string; error: any }> => {
+    if (!courseId) {
+        return { resolvedCourseId: undefined, error: { message: 'MISSING_COURSE_ID' } };
+    }
+
+    const { data: existingCourse, error: checkError } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('id', courseId)
+        .maybeSingle();
+
+    if (checkError) {
+        return { resolvedCourseId: undefined, error: checkError };
+    }
+
+    if (existingCourse) {
+        return { resolvedCourseId: existingCourse.id, error: null };
+    }
+
+    const localCourses = await getLocalCourses();
+    const matchedCourse = localCourses.find(c => c.id === courseId);
+
+    if (!matchedCourse) {
+        return { resolvedCourseId: undefined, error: { message: 'COURSE_NOT_FOUND', details: `Course ${courseId} is not available in local catalog.` } };
+    }
+
+    const normalizedCode = (matchedCourse.code || courseId.replace(/^local_/, '')).toUpperCase().replace(/\s+/g, '');
+    const { data: existingByCode, error: codeLookupError } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('code', normalizedCode)
+        .maybeSingle();
+
+    if (codeLookupError) {
+        return { resolvedCourseId: undefined, error: codeLookupError };
+    }
+
+    if (existingByCode?.id) {
+        return { resolvedCourseId: existingByCode.id, error: null };
+    }
+
+    const { error: createError } = await supabase.from('courses').insert({
+        id: courseId,
+        code: normalizedCode,
+        name: matchedCourse.name,
+        instructor: matchedCourse.instructor || 'TBD',
+        department: matchedCourse.department || 'General',
+        credits: matchedCourse.credits || 3
+    });
+
+    return { resolvedCourseId: courseId, error: createError };
+};
+
 export const addReview = async (reviewData: Partial<Review>): Promise<{ error: any }> => {
-    const courseId = reviewData.courseId;
+    const requestedCourseId = reviewData.courseId;
+
+    const { resolvedCourseId, error: ensureCourseError } = await ensureCourseExistsForReview(requestedCourseId);
+    if (ensureCourseError) {
+        console.error('addReview ensureCourseError:', ensureCourseError);
+        if (requestedCourseId?.startsWith('local_')) {
+            return await addLocalReview(reviewData);
+        }
+        return { error: ensureCourseError };
+    }
+    const courseId = resolvedCourseId || requestedCourseId;
 
     // Insert the review to Supabase (all courses including local_ ones)
     const { error: insertError } = await supabase

@@ -48,7 +48,16 @@ alter table public.teachers enable row level security;
 alter table public.teacher_reviews enable row level security;
 alter table public.teacher_review_likes enable row level security;
 
--- 5. 策略
+-- 5. 删除旧策略（如果存在），避免重复运行时出错
+DROP POLICY IF EXISTS "Teachers are viewable by everyone" ON public.teachers;
+DROP POLICY IF EXISTS "Teacher reviews are viewable by everyone" ON public.teacher_reviews;
+DROP POLICY IF EXISTS "Authenticated users can post reviews" ON public.teacher_reviews;
+DROP POLICY IF EXISTS "Authors can delete their own reviews" ON public.teacher_reviews;
+DROP POLICY IF EXISTS "Review likes are viewable by everyone" ON public.teacher_review_likes;
+DROP POLICY IF EXISTS "Authenticated users can like reviews" ON public.teacher_review_likes;
+DROP POLICY IF EXISTS "Users can unlike reviews" ON public.teacher_review_likes;
+
+-- 6. 创建策略
 create policy "Teachers are viewable by everyone" on public.teachers for select using (true);
 create policy "Teacher reviews are viewable by everyone" on public.teacher_reviews for select using (true);
 create policy "Authenticated users can post reviews" on public.teacher_reviews for insert with check (auth.role() = 'authenticated');
@@ -58,7 +67,7 @@ create policy "Review likes are viewable by everyone" on public.teacher_review_l
 create policy "Authenticated users can like reviews" on public.teacher_review_likes for insert with check (auth.role() = 'authenticated');
 create policy "Users can unlike reviews" on public.teacher_review_likes for delete using (auth.uid() = user_id);
 
--- 6. RPC 点赞函数
+-- 7. RPC 点赞函数
 create or replace function public.increment_teacher_review_likes(rid uuid)
 returns void as $$
 begin
