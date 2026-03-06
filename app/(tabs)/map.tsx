@@ -1148,7 +1148,12 @@ export default function MapScreen() {
 
                 <TouchableOpacity style={styles.iconButton} onPress={handleFindClassroom}>
                     <Building size={20} color="#4B0082" />
-                    <Text style={styles.iconButtonText}>{t('map.overlay.find_classroom')}</Text>
+                    <Text
+                        style={[styles.iconButtonText, styles.iconButtonTextLong]}
+                        numberOfLines={2}
+                    >
+                        {t('map.overlay.find_classroom')}
+                    </Text>
                 </TouchableOpacity>
 
                 {showBuildingMap && SHOW_BUILDING_EDIT_BUTTON && (
@@ -1169,7 +1174,12 @@ export default function MapScreen() {
 
                 <TouchableOpacity style={styles.iconButton} onPress={handleFindFood}>
                     <Utensils size={20} color="#E65100" />
-                    <Text style={styles.iconButtonText}>{t('map.overlay.order_food')}</Text>
+                    <Text
+                        style={[styles.iconButtonText, styles.iconButtonTextLong]}
+                        numberOfLines={2}
+                    >
+                        {t('map.overlay.order_food')}
+                    </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1522,6 +1532,13 @@ const styles = StyleSheet.create({
         color: '#333',
         fontWeight: '700',
         marginTop: 2,
+        textAlign: 'center',
+    },
+    iconButtonTextLong: {
+        width: '100%',
+        fontSize: 9,
+        lineHeight: 11,
+        marginTop: 3,
     },
     foodMapBadge: {
         flexDirection: 'row',
