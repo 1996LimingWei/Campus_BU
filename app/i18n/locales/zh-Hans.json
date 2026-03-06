@@ -76,7 +76,10 @@
         "no_notifications_yet": "暂无通知",
         "guest_name": "访客",
         "guest_major": "校园游客",
-        "login_signup": "登录 / 注册"
+        "login_signup": "登录 / 注册",
+        "innovation_lab": "创新实验室 (Experimental)",
+        "agent_title": "校园生活 Agent",
+        "agent_desc": "智能办公助手：查位子、点外卖、懂你心"
     },
     "notifications": {
         "title_comment": "新评论",

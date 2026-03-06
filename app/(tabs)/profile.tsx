@@ -279,13 +279,99 @@ export default function ProfileScreen() {
         } catch (e) {
             // Not a JSON string, fallback to original content
         }
-        return notification.content;
+
+        // Backward compatibility: localize legacy hard-coded English content
+        const raw = (notification.content || '').trim();
+        const lower = raw.toLowerCase();
+
+        const postCommentMatch = raw.match(/^(.*?)\s+commented on your post\.?$/i);
+        if (postCommentMatch) {
+            return t('notifications.post_comment', { name: postCommentMatch[1] }) as string;
+        }
+
+        const postReplyMatch = raw.match(/^(.*?)\s+replied to your comment\.?$/i);
+        if (postReplyMatch) {
+            return t('notifications.post_reply', { name: postReplyMatch[1] }) as string;
+        }
+
+        if (lower.includes('liked your post')) {
+            const contentMatch = raw.match(/liked your post:\s*["“](.+?)(?:\.\.\.)?["”]/i);
+            return t('notifications.post_like', { content: contentMatch?.[1] || 'post' }) as string;
+        }
+
+        const exchangeCommentMatch = raw.match(/^(.*?)\s+commented on your\s+(.*?)\s+exchange\.?$/i);
+        if (exchangeCommentMatch) {
+            return t('notifications.exchange_comment', {
+                name: exchangeCommentMatch[1],
+                course: exchangeCommentMatch[2],
+            }) as string;
+        }
+
+        const exchangeLikeMatch = raw.match(/liked your\s+(.*?)\s+exchange request/i);
+        if (exchangeLikeMatch) {
+            return t('notifications.exchange_like', { course: exchangeLikeMatch[1] }) as string;
+        }
+
+        const teamingCommentMatch = raw.match(/^(.*?)\s+commented on your\s+(.*?)\s+teaming request\.?$/i);
+        if (teamingCommentMatch) {
+            return t('notifications.teaming_comment', {
+                name: teamingCommentMatch[1],
+                course: teamingCommentMatch[2],
+            }) as string;
+        }
+
+        const teamingLikeMatch = raw.match(/liked your\s+(.*?)\s+teaming request/i);
+        if (teamingLikeMatch) {
+            return t('notifications.teaming_like', { course: teamingLikeMatch[1] }) as string;
+        }
+
+        const reviewLikeMatch = raw.match(/liked your review for\s+(.*?)!?$/i);
+        if (reviewLikeMatch) {
+            return t('notifications.review_like', { course: reviewLikeMatch[1] }) as string;
+        }
+
+        return raw;
     };
 
     const renderNotificationTitle = (notification: Notification): string => {
         if (notification.title.startsWith('notifications.')) {
             return t(notification.title) as string;
         }
+
+        // Backward compatibility: localize legacy plain-text titles (e.g. "New Comment")
+        const normalizedTitle = (notification.title || '').toLowerCase().trim();
+        if (
+            normalizedTitle.includes('reply') ||
+            normalizedTitle.includes('回复') ||
+            normalizedTitle.includes('回覆')
+        ) {
+            return t('notifications.title_reply') as string;
+        }
+        if (
+            normalizedTitle.includes('comment') ||
+            normalizedTitle.includes('评论') ||
+            normalizedTitle.includes('評論')
+        ) {
+            return t('notifications.title_comment') as string;
+        }
+        if (
+            normalizedTitle.includes('like') ||
+            normalizedTitle.includes('点赞') ||
+            normalizedTitle.includes('點贊') ||
+            normalizedTitle.includes('赞') ||
+            normalizedTitle.includes('讚')
+        ) {
+            return t('notifications.title_like') as string;
+        }
+
+        // Type-based fallback for old rows with non-localized titles
+        if (notification.type === 'comment') {
+            return t('notifications.title_comment') as string;
+        }
+        if (notification.type === 'like') {
+            return t('notifications.title_like') as string;
+        }
+
         return notification.title;
     };
 
@@ -335,7 +421,7 @@ export default function ProfileScreen() {
             <View style={styles.innovationSection}>
                 <View style={styles.innovationHeader}>
                     <Sparkles size={24} color="#1E3A8A" />
-                    <Text style={styles.innovationTitle}>创新实验室 (Experimental)</Text>
+                    <Text style={styles.innovationTitle}>{t('profile.innovation_lab')}</Text>
                 </View>
                 <TouchableOpacity
                     style={styles.agentButton}
@@ -348,8 +434,8 @@ export default function ProfileScreen() {
                     <View style={styles.agentButtonContent}>
                         <Bot size={24} color="#fff" />
                         <View style={styles.agentButtonText}>
-                            <Text style={styles.agentButtonTitle}>校园生活 Agent</Text>
-                            <Text style={styles.agentButtonDesc}>智能办公助手：查位子、点外卖、懂你心</Text>
+                            <Text style={styles.agentButtonTitle}>{t('profile.agent_title')}</Text>
+                            <Text style={styles.agentButtonDesc}>{t('profile.agent_desc')}</Text>
                         </View>
                     </View>
                     <ChevronRight size={20} color="#fff" />

@@ -76,7 +76,10 @@
         "no_notifications_yet": "No notifications yet",
         "guest_name": "Guest",
         "guest_major": "Campus Visitor",
-        "login_signup": "Login / Sign Up"
+        "login_signup": "Login / Sign Up",
+        "innovation_lab": "Innovation Lab (Experimental)",
+        "agent_title": "Campus Life Agent",
+        "agent_desc": "Smart assistant: find seats, order food, and understand your needs"
     },
     "notifications": {
         "title_comment": "New Comment",

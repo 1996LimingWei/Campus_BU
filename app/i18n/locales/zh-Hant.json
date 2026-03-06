@@ -76,7 +76,10 @@
         "no_notifications_yet": "暫無通知",
         "guest_name": "訪客",
         "guest_major": "校園遊客",
-        "login_signup": "登錄 / 註冊"
+        "login_signup": "登錄 / 註冊",
+        "innovation_lab": "創新實驗室 (Experimental)",
+        "agent_title": "校園生活 Agent",
+        "agent_desc": "智能辦公助手：查位子、點外賣、懂你心"
     },
     "notifications": {
         "title_comment": "新評論",
