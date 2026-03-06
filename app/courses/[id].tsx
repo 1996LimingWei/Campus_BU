@@ -1,7 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Info, MessageCircle, MessageSquare, Plus, Send, Star, Tag, ThumbsUp, Trash2, UserPlus, Users, X } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Alert,
@@ -19,9 +21,11 @@ import {
     View
 } from 'react-native';
 import { EduBadge } from '../../components/common/EduBadge';
+import { TranslatableText } from '../../components/common/TranslatableText';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import storage from '../../lib/storage';
 import { getCurrentUser } from '../../services/auth';
-import { addReview, deleteReview, getCourseById, getReviews, hasUserReviewed, likeReview } from '../../services/courses';
+import { addReview, deleteReview, getCourseById, getReviewsAndHasReviewed, likeReview } from '../../services/courses';
 import { supabase } from '../../services/supabase';
 import { deleteTeamingRequest, fetchTeamingComments, fetchTeamingRequests, postTeamingComment, postTeamingRequest, toggleTeamingLike } from '../../services/teaming';
 import { ContactMethod, Course, CourseTeaming, Review, TeamingComment } from '../../types';
@@ -51,7 +55,9 @@ const MOCK_REVIEWS: Review[] = [
 ];
 
 export default function CourseDetailScreen() {
+    const { t } = useTranslation();
     const router = useRouter();
+    const { checkLogin } = useLoginPrompt();
     const { id } = useLocalSearchParams();
     const [activeTab, setActiveTab] = useState<'reviews' | 'chat' | 'teaming'>('reviews');
     const [course, setCourse] = useState<Course | null>(null);
@@ -93,6 +99,8 @@ export default function CourseDetailScreen() {
     const [teamingComments, setTeamingComments] = useState<TeamingComment[]>([]);
     const [teamingCommentLoading, setTeamingCommentLoading] = useState(false);
     const [newTeamingComment, setNewTeamingComment] = useState('');
+    const [teamingReplyTarget, setTeamingReplyTarget] = useState<TeamingComment | null>(null);
+    const teamingCommentInputRef = useRef<TextInput>(null);
 
     const roomId = `course_${id}`;
 
@@ -105,47 +113,46 @@ export default function CourseDetailScreen() {
     }, [id]);
 
     const loadData = async () => {
-        const currentUser = await getCurrentUser();
+        // ── Phase 1: get user + liked reviews from local cache (instant) ──
+        const [currentUser, likedStr] = await Promise.all([
+            getCurrentUser(),
+            storage.getItem('hkcampus_liked_reviews').catch(() => null),
+        ]);
         setUser(currentUser);
-
-        // Load liked reviews from local storage (for all course types)
-        try {
-            const likedStr = await storage.getItem('hkcampus_liked_reviews');
-        } catch (e) {
-            console.error('Error loading liked reviews:', e);
+        if (likedStr) {
+            try { setLikedReviewIds(JSON.parse(likedStr)); } catch { }
         }
 
-        const courseData = await getCourseById(id as string);
-        if (courseData) {
-            setCourse(courseData);
-        } else {
-            console.warn('Course not found for ID:', id);
-        }
-
-        // Load existing messages
-        const { data } = await supabase
-            .from('messages')
-            .select('*, users(display_name, avatar_url, email)')
-            .eq('course_id', id as string)
-            .order('created_at', { ascending: true });
-
-        if (data) setMessages(data);
-
-        // Always attempt to load reviews for non-demo courses.
-        // Course IDs in this project are not guaranteed to be UUIDs.
+        // ── Phase 2: fetch course + chat messages in parallel ──
         const isMockId = id === '1';
+        const [courseData, messagesResult] = await Promise.all([
+            getCourseById(id as string),
+            supabase
+                .from('messages')
+                .select('*, users(display_name, avatar_url, email)')
+                .eq('course_id', id as string)
+                .order('created_at', { ascending: true }),
+        ]);
+
+        if (courseData) setCourse(courseData);
+        else console.warn('Course not found for ID:', id);
+
+        if (messagesResult.data) setMessages(messagesResult.data);
+
+        // ── Phase 3: reviews + hasReviewed in one round-trip ──
         if (isMockId) {
             setReviews(MOCK_REVIEWS);
         } else {
-            const reviewsData = await getReviews(id as string, courseData?.code);
-            setReviews(reviewsData);
-
-            if (currentUser) {
-                const reviewed = await hasUserReviewed(id as string, currentUser.uid, courseData?.code);
-                setHasReviewed(reviewed);
-            }
+            const { reviews, hasReviewed } = await getReviewsAndHasReviewed(
+                id as string,
+                currentUser?.uid ?? null,
+                courseData?.code,
+            );
+            setReviews(reviews);
+            setHasReviewed(hasReviewed);
         }
 
+        // Teaming can load in background (not blocking the main view)
         loadTeaming();
     };
 
@@ -155,6 +162,23 @@ export default function CourseDetailScreen() {
         setTeamingRequests(data);
         setTeamingLoading(false);
     };
+
+    const organizedTeamingComments = React.useMemo(() => {
+        const rootComments = teamingComments.filter(c => !c.parentCommentId);
+        const replyMap: Record<string, TeamingComment[]> = {};
+
+        teamingComments.forEach(c => {
+            if (c.parentCommentId) {
+                if (!replyMap[c.parentCommentId]) replyMap[c.parentCommentId] = [];
+                replyMap[c.parentCommentId].push(c);
+            }
+        });
+
+        return rootComments.map(root => ({
+            ...root,
+            replies: replyMap[root.id] || []
+        }));
+    }, [teamingComments]);
 
     const setupRealtime = () => {
         const channel = supabase
@@ -187,7 +211,8 @@ export default function CourseDetailScreen() {
     };
 
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || !user) return;
+        if (!checkLogin(user)) return;
+        if (!newMessage.trim()) return;
 
         const { error } = await supabase
             .from('messages')
@@ -219,10 +244,7 @@ export default function CourseDetailScreen() {
     };
 
     const handleAddReview = async () => {
-        if (!user) {
-            Alert.alert('Error', 'You must be logged in to post a review');
-            return;
-        }
+        if (!checkLogin(user)) return;
 
         if (!hasReviewed && rating === 0) {
             Alert.alert('Error', 'Please provide a star rating for your first evaluation of this course.');
@@ -259,7 +281,7 @@ export default function CourseDetailScreen() {
             Alert.alert('Error', `Failed to post review: ${error.message || 'Unknown error'}`);
             console.error('Add review UI error:', error);
         } else {
-            // Optimistic update for reviews
+            // Optimistic update — show review immediately without waiting for a full reload
             const newReviewObj: Review = {
                 id: `temp_${Date.now()}`,
                 courseId: id as string,
@@ -275,21 +297,24 @@ export default function CourseDetailScreen() {
                 semester: '2025 Spring'
             };
             setReviews(prev => [newReviewObj, ...prev]);
+            if (rating > 0) setHasReviewed(true);
 
             setModalVisible(false);
             setRating(0);
             setDifficulty(0);
             setReviewContent('');
-            loadData(); // Still reload to get official data/stats
             Alert.alert('Success', 'Evaluation posted successfully!');
+
+            // Silent background refresh to replace temp entry with real DB row
+            getReviewsAndHasReviewed(id as string, user.uid, course?.code).then(({ reviews, hasReviewed }) => {
+                setReviews(reviews);
+                setHasReviewed(hasReviewed);
+            }).catch(() => { });
         }
     };
 
     const handleLike = async (reviewId: string) => {
-        if (!user) {
-            Alert.alert('Error', 'You must be logged in to like a review');
-            return;
-        }
+        if (!checkLogin(user)) return;
 
         const isCurrentlyLiked = likedReviewIds.includes(reviewId);
 
@@ -343,7 +368,12 @@ export default function CourseDetailScreen() {
     };
 
     const handleDeleteTeaming = (teaming: CourseTeaming) => {
-        if (!user || teaming.userId !== user.uid) return;
+        if (!user) {
+            // This should technically never happen for a guest seeing their own post
+            // but for safety:
+            if (!checkLogin(user)) return;
+        }
+        if (teaming.userId !== user.uid) return;
 
         Alert.alert('Delete Teaming Post', 'Are you sure you want to delete this teaming post?', [
             { text: 'Cancel', style: 'cancel' },
@@ -365,10 +395,7 @@ export default function CourseDetailScreen() {
     };
 
     const handlePostTeaming = async () => {
-        if (!user) {
-            Alert.alert('Error', 'Please login first');
-            return;
-        }
+        if (!checkLogin(user)) return;
         if (!teamingSection || selectedTeamingMethods.length === 0) {
             Alert.alert('Missing Info', 'Section and at least one contact method are required.');
             return;
@@ -427,10 +454,7 @@ export default function CourseDetailScreen() {
     };
 
     const handleLikeTeaming = async (teamingId: string) => {
-        if (!user) {
-            Alert.alert('Error', 'Please login first');
-            return;
-        }
+        if (!checkLogin(user)) return;
 
         const isLiked = likedTeamingIds.includes(teamingId);
         setLikedTeamingIds(prev =>
@@ -468,11 +492,19 @@ export default function CourseDetailScreen() {
     };
 
     const handleSendTeamingComment = async () => {
-        if (!user || !selectedTeamingForComments || !newTeamingComment.trim()) return;
+        if (!checkLogin(user)) return;
+        if (!selectedTeamingForComments || !newTeamingComment.trim()) return;
 
-        const { success, error } = await postTeamingComment(selectedTeamingForComments.id, user, newTeamingComment.trim());
+        const { success, error } = await postTeamingComment(
+            selectedTeamingForComments.id,
+            user,
+            newTeamingComment.trim(),
+            teamingReplyTarget?.parentCommentId || teamingReplyTarget?.id,
+            teamingReplyTarget?.authorName
+        );
         if (success) {
             setNewTeamingComment('');
+            setTeamingReplyTarget(null);
             const comments = await fetchTeamingComments(selectedTeamingForComments.id);
             setTeamingComments(comments);
 
@@ -494,8 +526,16 @@ export default function CourseDetailScreen() {
         return b.createdAt.getTime() - a.createdAt.getTime();
     });
 
+    // Helper: rating → left-bar color
+    const ratingBarColor = (rating?: number) => {
+        if (!rating) return '#D1D5DB';
+        if (rating >= 4) return '#10B981';
+        if (rating === 3) return '#3B82F6';
+        return '#F59E0B';
+    };
+
     const renderReviewItem = ({ item }: { item: Review }) => (
-        <View style={styles.reviewCard}>
+        <View style={[styles.reviewCard, { borderLeftColor: ratingBarColor(item.rating) }]}>
             <View style={styles.reviewHeader}>
                 <View style={styles.authorInfo}>
                     <View style={styles.avatarContainer}>
@@ -513,12 +553,19 @@ export default function CourseDetailScreen() {
                         <Text style={styles.semester}>{item.semester}</Text>
                     </View>
                 </View>
+                {/* ⑦ 5-star visual */}
                 <View style={styles.reviewRating}>
                     {item.rating ? (
-                        <>
-                            <Star size={14} color="#F59E0B" fill="#F59E0B" />
-                            <Text style={styles.ratingValue}>{item.rating}.0</Text>
-                        </>
+                        <View style={{ flexDirection: 'row', gap: 2 }}>
+                            {[1, 2, 3, 4, 5].map(s => (
+                                <Star
+                                    key={s}
+                                    size={13}
+                                    color="#F59E0B"
+                                    fill={s <= item.rating! ? '#F59E0B' : 'transparent'}
+                                />
+                            ))}
+                        </View>
                     ) : (
                         <Text style={[styles.ratingValue, { color: '#6B7280' }]}>Update</Text>
                     )}
@@ -536,7 +583,7 @@ export default function CourseDetailScreen() {
                 </View>
             </View>
 
-            <Text style={styles.reviewContent}>{item.content}</Text>
+            <TranslatableText style={styles.reviewContent} text={item.content} />
 
             <View style={styles.reviewFooter}>
                 <Text style={styles.date}>{item.createdAt.toLocaleDateString()}</Text>
@@ -596,14 +643,14 @@ export default function CourseDetailScreen() {
             {item.selfIntro && (
                 <View style={styles.teamingDetailBox}>
                     <Text style={styles.detailTitle}>About Me:</Text>
-                    <Text style={styles.detailBody}>{item.selfIntro}</Text>
+                    <TranslatableText style={styles.detailBody} text={item.selfIntro} />
                 </View>
             )}
 
             {item.targetTeammate && (
                 <View style={[styles.teamingDetailBox, { backgroundColor: '#F0FDF4' }]}>
                     <Text style={[styles.detailTitle, { color: '#166534' }]}>Looking for:</Text>
-                    <Text style={[styles.detailBody, { color: '#166534' }]}>{item.targetTeammate}</Text>
+                    <TranslatableText style={[styles.detailBody, { color: '#166534' }]} text={item.targetTeammate} />
                 </View>
             )}
 
@@ -640,7 +687,11 @@ export default function CourseDetailScreen() {
 
                     <TouchableOpacity
                         style={styles.contactIconBtn}
-                        onPress={() => setSelectedTeamingContact(item)}
+                        onPress={() => {
+                            if (checkLogin(user)) {
+                                setSelectedTeamingContact(item);
+                            }
+                        }}
                     >
                         <Send size={14} color="#fff" />
                         <Text style={styles.contactIconBtnText}>Contact</Text>
@@ -671,14 +722,20 @@ export default function CourseDetailScreen() {
 
             <View style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.scrollContent}>
-                    {/* Course Info Card */}
+                    {/* ⑨ Course Info Card with gradient header */}
                     <View style={styles.courseInfoCard}>
-                        <View style={styles.codeBadge}>
-                            <Text style={styles.codeText}>{course.code}</Text>
-                        </View>
-                        <Text style={styles.courseName}>{course.name}</Text>
-                        {/* <Text style={styles.instructor}>Instructor: {course.instructor}</Text> */}
-                        <View style={styles.statsRow}>
+                        <LinearGradient
+                            colors={['#1E3A8A', '#3B82F6']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.courseInfoGradient}
+                        >
+                            <View style={styles.codeBadgeWhite}>
+                                <Text style={styles.codeTextWhite}>{course.code}</Text>
+                            </View>
+                            <Text style={styles.courseNameWhite}>{course.name}</Text>
+                        </LinearGradient>
+                        <View style={styles.statsRowPadded}>
                             <View style={styles.statItem}>
                                 <Star size={20} color="#F59E0B" fill="#F59E0B" />
                                 <Text style={styles.statValue}>{course.rating}</Text>
@@ -1198,35 +1255,76 @@ export default function CourseDetailScreen() {
                                 <ActivityIndicator style={{ padding: 40 }} color="#4B0082" />
                             ) : (
                                 <FlatList
-                                    data={teamingComments}
+                                    data={organizedTeamingComments}
                                     keyExtractor={(item) => item.id}
                                     renderItem={({ item }) => (
-                                        <View style={{
-                                            flexDirection: 'row',
-                                            padding: 16,
-                                            borderBottomWidth: 1,
-                                            borderBottomColor: '#F3F4F6'
-                                        }}>
-                                            {isImageUrl(item.authorAvatar) ? (
-                                                <Image
-                                                    source={{ uri: item.authorAvatar }}
-                                                    style={{ width: 36, height: 36, borderRadius: 18, marginRight: 12 }}
-                                                />
-                                            ) : (
-                                                <Text style={{ fontSize: 24, marginRight: 12 }}>{item.authorAvatar || '👤'}</Text>
-                                            )}
-                                            <View style={{ flex: 1 }}>
-                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                    <View style={styles.commentAuthorRow}>
-                                                        <Text style={styles.commentAuthorName}>{item.authorName}</Text>
-                                                        <EduBadge shouldShow={isHKBUEmail(item.authorEmail)} size="small" />
+                                        <View style={styles.teamingCommentContainer}>
+                                            <View style={styles.teamingCommentRow}>
+                                                {isImageUrl(item.authorAvatar) ? (
+                                                    <Image
+                                                        source={{ uri: item.authorAvatar }}
+                                                        style={styles.teamingCommentAvatar}
+                                                    />
+                                                ) : (
+                                                    <Text style={styles.teamingCommentAvatarEmoji}>{item.authorAvatar || '👤'}</Text>
+                                                )}
+                                                <View style={styles.teamingCommentInfo}>
+                                                    <View style={styles.teamingCommentHeader}>
+                                                        <View style={styles.commentAuthorRow}>
+                                                            <Text style={styles.commentAuthorName}>{item.authorName}</Text>
+                                                            <EduBadge shouldShow={isHKBUEmail(item.authorEmail)} size="small" />
+                                                        </View>
+                                                        <TouchableOpacity onPress={() => {
+                                                            setTeamingReplyTarget(item);
+                                                            setTimeout(() => teamingCommentInputRef.current?.focus(), 100);
+                                                        }}>
+                                                            <Text style={styles.teamingReplyBtn}>{t('forum.row.replies')}</Text>
+                                                        </TouchableOpacity>
                                                     </View>
-                                                    <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
-                                                        {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    <TranslatableText style={styles.teamingCommentText} text={item.content} />
+                                                    <Text style={styles.teamingCommentTime}>
+                                                        {new Date(item.createdAt).toLocaleString()}
                                                     </Text>
                                                 </View>
-                                                <Text style={{ color: '#374151', fontSize: 14, lineHeight: 20 }}>{item.content}</Text>
                                             </View>
+
+                                            {/* Replies */}
+                                            {item.replies && item.replies.length > 0 && (
+                                                <View style={styles.teamingNestedReplies}>
+                                                    {item.replies.map((reply: TeamingComment) => (
+                                                        <View key={reply.id} style={styles.teamingCommentRowSmall}>
+                                                            {isImageUrl(reply.authorAvatar) ? (
+                                                                <Image
+                                                                    source={{ uri: reply.authorAvatar }}
+                                                                    style={styles.teamingCommentAvatarSmall}
+                                                                />
+                                                            ) : (
+                                                                <Text style={styles.teamingCommentAvatarEmojiSmall}>{reply.authorAvatar || '👤'}</Text>
+                                                            )}
+                                                            <View style={styles.teamingCommentInfoSmall}>
+                                                                <View style={styles.teamingCommentHeader}>
+                                                                    <View style={styles.commentAuthorRow}>
+                                                                        <Text style={styles.commentAuthorName}>{reply.authorName}</Text>
+                                                                        {reply.replyToName && (
+                                                                            <Text style={styles.replyIndicator}> ▶ {reply.replyToName}</Text>
+                                                                        )}
+                                                                    </View>
+                                                                    <TouchableOpacity onPress={() => {
+                                                                        setTeamingReplyTarget(reply);
+                                                                        setTimeout(() => teamingCommentInputRef.current?.focus(), 100);
+                                                                    }}>
+                                                                        <Text style={styles.teamingReplyBtnSmall}>{t('forum.row.replies')}</Text>
+                                                                    </TouchableOpacity>
+                                                                </View>
+                                                                <TranslatableText style={styles.teamingCommentTextSmall} text={reply.content} />
+                                                                <Text style={styles.teamingCommentTimeSmall}>
+                                                                    {new Date(reply.createdAt).toLocaleString()}
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            )}
                                         </View>
                                     )}
                                     contentContainerStyle={{ paddingBottom: 20 }}
@@ -1239,6 +1337,16 @@ export default function CourseDetailScreen() {
                                 />
                             )}
 
+                            {teamingReplyTarget && (
+                                <View style={styles.teamingReplyBar}>
+                                    <Text style={styles.teamingReplyBarText} numberOfLines={1}>
+                                        {t('forum.detail.replying_to', { name: teamingReplyTarget.authorName })}: {teamingReplyTarget.content}
+                                    </Text>
+                                    <TouchableOpacity onPress={() => setTeamingReplyTarget(null)}>
+                                        <X size={16} color="#4B0082" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                             <View style={{
                                 flexDirection: 'row',
                                 padding: 16,
@@ -1249,6 +1357,7 @@ export default function CourseDetailScreen() {
                                 paddingBottom: Platform.OS === 'ios' ? 32 : 16
                             }}>
                                 <TextInput
+                                    ref={teamingCommentInputRef}
                                     style={{
                                         flex: 1,
                                         backgroundColor: '#F3F4F6',
@@ -1258,7 +1367,8 @@ export default function CourseDetailScreen() {
                                         marginRight: 12,
                                         maxHeight: 100
                                     }}
-                                    placeholder="Add a comment..."
+                                    placeholder={teamingReplyTarget ? t('forum.detail.replying_to', { name: teamingReplyTarget.authorName }) : "Add a comment..."}
+                                    placeholderTextColor="#9CA3AF"
                                     value={newTeamingComment}
                                     onChangeText={setNewTeamingComment}
                                     multiline
@@ -1316,14 +1426,38 @@ const styles = StyleSheet.create({
         margin: 20,
         marginTop: 10,
         borderRadius: 20,
-        padding: 24,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 5,
+        overflow: 'hidden',
+        shadowColor: '#1E3A8A',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 14,
+        elevation: 7,
     },
+    // ⑨ Gradient header inside card
+    courseInfoGradient: {
+        paddingHorizontal: 24,
+        paddingTop: 24,
+        paddingBottom: 20,
+        alignItems: 'center',
+    },
+    codeBadgeWhite: {
+        backgroundColor: 'rgba(255,255,255,0.22)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 10,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
+    },
+    codeTextWhite: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
+    courseNameWhite: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#fff',
+        textAlign: 'center',
+        lineHeight: 26,
+    },
+    // Keep old codeBadge for backward-compat (unused but safe)
     codeBadge: {
         backgroundColor: '#F3E8FF',
         paddingHorizontal: 12,
@@ -1340,6 +1474,14 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     instructor: { fontSize: 14, color: '#6B7280', marginBottom: 24 },
+    statsRowPadded: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        justifyContent: 'space-around',
+        paddingVertical: 16,
+        paddingHorizontal: 8,
+    },
     statsRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1401,16 +1543,18 @@ const styles = StyleSheet.create({
     },
     writeButtonText: { color: '#fff', fontSize: 12, fontWeight: '600', marginLeft: 4 },
     reviewCard: {
-        backgroundColor: '#fff',
+        backgroundColor: '#FAFBFF',
         marginHorizontal: 20,
         marginBottom: 16,
         borderRadius: 16,
         padding: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
+        // ⑧ Left rating color bar
+        borderLeftWidth: 4,
+        shadowColor: '#1E3A8A',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        elevation: 3,
     },
     reviewHeader: {
         flexDirection: 'row',
@@ -1769,5 +1913,84 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#4B0082',
         lineHeight: 18,
+    },
+    teamingCommentContainer: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+        paddingVertical: 12,
+    },
+    teamingCommentRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+    },
+    teamingCommentRowSmall: {
+        flexDirection: 'row',
+        marginBottom: 12,
+    },
+    teamingCommentAvatar: {
+        width: 36, height: 36, borderRadius: 18, marginRight: 12
+    },
+    teamingCommentAvatarEmoji: {
+        fontSize: 24, marginRight: 12
+    },
+    teamingCommentAvatarSmall: {
+        width: 28, height: 28, borderRadius: 14, marginRight: 10
+    },
+    teamingCommentAvatarEmojiSmall: {
+        fontSize: 20, marginRight: 10
+    },
+    teamingCommentInfo: {
+        flex: 1,
+    },
+    teamingCommentInfoSmall: {
+        flex: 1,
+        backgroundColor: '#F9FAFB',
+        padding: 10,
+        borderRadius: 14,
+    },
+    teamingCommentHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    teamingCommentText: {
+        color: '#374151', fontSize: 14, lineHeight: 20
+    },
+    teamingCommentTextSmall: {
+        color: '#4B5563', fontSize: 13, lineHeight: 18
+    },
+    teamingCommentTime: {
+        fontSize: 11, color: '#9CA3AF', marginTop: 4
+    },
+    teamingCommentTimeSmall: {
+        fontSize: 10, color: '#9CA3AF', marginTop: 2
+    },
+    teamingReplyBtn: {
+        fontSize: 12, color: '#4B0082', fontWeight: '700'
+    },
+    teamingReplyBtnSmall: {
+        fontSize: 11, color: '#4B0082', fontWeight: '700'
+    },
+    teamingNestedReplies: {
+        marginLeft: 64,
+        marginTop: 12,
+        paddingHorizontal: 0,
+    },
+    teamingReplyBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#F3E8FF',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#E9D5FF',
+    },
+    teamingReplyBarText: {
+        fontSize: 12, color: '#4B0082', flex: 1, marginRight: 10
+    },
+    replyIndicator: {
+        fontSize: 12, color: '#9CA3AF', marginLeft: 4
     },
 });

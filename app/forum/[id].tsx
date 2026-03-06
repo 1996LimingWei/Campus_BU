@@ -1,11 +1,13 @@
 import { formatDistanceToNow } from 'date-fns';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, MessageCircle, MoreHorizontal, Send, ThumbsUp, Trash2, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
+    DeviceEventEmitter,
     Dimensions,
+    FlatList,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -22,6 +24,8 @@ import {
 import { ActionModal } from '../../components/campus/ActionModal';
 import { Toast, ToastType } from '../../components/campus/Toast';
 import { EduBadge } from '../../components/common/EduBadge';
+import { TranslatableText } from '../../components/common/TranslatableText';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { getCurrentUser } from '../../services/auth';
 import {
     addForumComment,
@@ -70,13 +74,16 @@ export default function ForumPostDetailScreen() {
     const { id } = useLocalSearchParams();
     const { t } = useTranslation();
     const router = useRouter();
+    const { checkLogin } = useLoginPrompt();
 
     const [post, setPost] = useState<ForumPost | null>(null);
     const [comments, setComments] = useState<ForumComment[]>([]);
     const [loading, setLoading] = useState(true);
     const [commentText, setCommentText] = useState('');
     const [submitting, setSubmitting] = useState(false);
-    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [user, setUser] = useState<any>(null);
+    const flatListRef = useRef<FlatList>(null);
+    const inputRef = useRef<TextInput>(null);
     const [deleteModal, setDeleteModal] = useState(false);
     const [deleteType, setDeleteType] = useState<'post' | 'comment'>('post');
     const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
@@ -84,15 +91,16 @@ export default function ForumPostDetailScreen() {
     const [toast, setToast] = useState<{ visible: boolean; message: string; type: ToastType }>({
         visible: false, message: '', type: 'success',
     });
+    const [replyTarget, setReplyTarget] = useState<ForumComment | null>(null);
 
     useEffect(() => {
         const load = async () => {
             if (!id) return;
             try {
-                const user = await getCurrentUser();
-                setCurrentUser(user);
+                const currentUser = await getCurrentUser();
+                setUser(currentUser);
                 const [p, c] = await Promise.all([
-                    fetchForumPostById(id as string, user?.uid),
+                    fetchForumPostById(id as string, currentUser?.uid),
                     fetchForumComments(id as string),
                 ]);
                 if (p) setPost(p);
@@ -106,34 +114,87 @@ export default function ForumPostDetailScreen() {
         load();
     }, [id]);
 
+    const organizedComments = React.useMemo(() => {
+        const rootComments = comments.filter(c => !c.parentCommentId);
+        const replyMap: Record<string, ForumComment[]> = {};
+
+        comments.forEach(c => {
+            if (c.parentCommentId) {
+                if (!replyMap[c.parentCommentId]) replyMap[c.parentCommentId] = [];
+                replyMap[c.parentCommentId].push(c);
+            }
+        });
+
+        return rootComments.map(root => ({
+            ...root,
+            replies: replyMap[root.id] || []
+        }));
+    }, [comments]);
+
     const handleUpvote = async () => {
-        if (!post || !currentUser) return;
-        const result = await toggleForumUpvote(post.id, currentUser.uid);
+        if (!checkLogin(user)) return;
+        if (!post) return;
+
+        const wasUpvoted = post.isUpvoted;
+        const previousUpvotes = post.upvoteCount;
+
+        // Optimistic update
         setPost(prev => prev ? {
             ...prev,
-            isUpvoted: result.upvoted,
-            upvoteCount: result.upvoted ? prev.upvoteCount + 1 : Math.max(0, prev.upvoteCount - 1),
+            isUpvoted: !wasUpvoted,
+            upvoteCount: wasUpvoted ? previousUpvotes - 1 : previousUpvotes + 1,
         } : null);
+
+        try {
+            await toggleForumUpvote(post.id, user.uid);
+            // Global sync
+            DeviceEventEmitter.emit('forum_post_updated', {
+                id: post.id,
+                updates: { isUpvoted: !wasUpvoted, upvoteCount: wasUpvoted ? previousUpvotes - 1 : previousUpvotes + 1 }
+            });
+        } catch (error) {
+            console.error('Error upvoting post:', error);
+            // Rollback on error
+            setPost(prev => prev ? {
+                ...prev,
+                isUpvoted: wasUpvoted,
+                upvoteCount: previousUpvotes,
+            } : null);
+        }
     };
 
     const handleSendComment = async () => {
-        if (!commentText.trim() || !post || !currentUser) return;
+        if (!checkLogin(user)) return;
+        if (!commentText.trim() || !post) return;
         try {
             setSubmitting(true);
             const c = await addForumComment({
                 postId: post.id,
-                authorId: currentUser.uid,
-                authorName: currentUser.displayName || t('common.anonymous'),
-                authorEmail: (currentUser as any).email,
-                authorAvatar: currentUser.avatarUrl || undefined,
+                authorId: user.uid,
+                authorName: user.displayName || t('common.anonymous'),
+                authorEmail: (user as any).email,
+                authorAvatar: user.avatarUrl || undefined,
                 content: commentText.trim(),
+                parentCommentId: replyTarget?.parentCommentId || replyTarget?.id || undefined,
+                replyToName: replyTarget?.authorName || undefined,
             });
             setComments(prev => [...prev, c]);
-            setPost(prev => prev ? { ...prev, replyCount: prev.replyCount + 1 } : null);
+            setPost(prev => {
+                const updated = prev ? { ...prev, replyCount: prev.replyCount + 1 } : null;
+                if (updated) {
+                    DeviceEventEmitter.emit('forum_post_updated', {
+                        id: post.id,
+                        updates: { replyCount: updated.replyCount }
+                    });
+                }
+                return updated;
+            });
             setCommentText('');
+            setReplyTarget(null);
             Keyboard.dismiss();
             setToast({ visible: true, message: t('forum.detail.toast.comment_success'), type: 'success' });
-        } catch {
+        } catch (e) {
+            console.error('Error adding comment:', e);
             setToast({ visible: true, message: t('forum.detail.toast.comment_error'), type: 'error' });
         } finally {
             setSubmitting(false);
@@ -146,6 +207,8 @@ export default function ForumPostDetailScreen() {
                 await deleteForumPost(post.id);
                 setDeleteModal(false);
                 setToast({ visible: true, message: t('common.deleted'), type: 'success' });
+                // Global sync for deletion
+                DeviceEventEmitter.emit('forum_post_updated', { id: post.id, deleted: true });
                 setTimeout(() => router.back(), 1000);
             } catch {
                 setDeleteModal(false);
@@ -201,7 +264,7 @@ export default function ForumPostDetailScreen() {
                     <ChevronLeft size={24} color="#1E3A8A" />
                 </TouchableOpacity>
                 <Text style={styles.topBarLogo}>HKCampus</Text>
-                {currentUser?.uid === post.authorId ? (
+                {user?.uid === post.authorId ? (
                     <TouchableOpacity style={styles.iconBtn} onPress={() => { setDeleteType('post'); setDeleteModal(true); }}>
                         <MoreHorizontal size={22} color="#1E3A8A" />
                     </TouchableOpacity>
@@ -227,7 +290,7 @@ export default function ForumPostDetailScreen() {
                 </View>
 
                 {/* Title */}
-                <Text style={styles.title}>{post.title}</Text>
+                <TranslatableText style={styles.title} text={post.title} />
 
                 {/* Author row */}
                 <View style={styles.authorRow}>
@@ -244,7 +307,7 @@ export default function ForumPostDetailScreen() {
 
                 {/* Content */}
                 {!!post.content && (
-                    <Text style={styles.bodyText}>{post.content}</Text>
+                    <TranslatableText style={styles.bodyText} text={post.content} />
                 )}
 
                 {/* Images – original aspect ratio */}
@@ -293,72 +356,147 @@ export default function ForumPostDetailScreen() {
                         : t('forum.detail.empty_comments')}
                 </Text>
 
-                {comments.map(c => (
-                    <View key={c.id} style={styles.commentItem}>
-                        <View style={styles.commentAvatar}>
-                            {isValidUrl(c.authorAvatar) ? (
-                                <Image source={{ uri: c.authorAvatar! }} style={styles.avatarImg} />
-                            ) : (
-                                <Text style={styles.avatarLetter}>{c.authorName.charAt(0).toUpperCase()}</Text>
-                            )}
-                        </View>
-                        <View style={styles.commentBody}>
-                            <View style={styles.commentHeader}>
-                                <Text style={styles.commentAuthor}>{c.authorName}</Text>
-                                <EduBadge shouldShow={isHKBUEmail(c.authorEmail)} size="small" />
-                                {currentUser?.uid === c.authorId && (
-                                    <TouchableOpacity
-                                        style={{ marginLeft: 'auto' }}
-                                        onPress={() => { setSelectedCommentId(c.id); setDeleteType('comment'); setDeleteModal(true); }}
-                                    >
-                                        <Trash2 size={14} color="#EF4444" />
-                                    </TouchableOpacity>
+                {organizedComments.map(c => (
+                    <View key={c.id} style={styles.commentContainer}>
+                        <View style={styles.commentItem}>
+                            <View style={styles.commentAvatar}>
+                                {isValidUrl(c.authorAvatar) ? (
+                                    <Image source={{ uri: c.authorAvatar! }} style={styles.avatarImg} />
+                                ) : (
+                                    <Text style={styles.avatarLetter}>{c.authorName.charAt(0).toUpperCase()}</Text>
                                 )}
                             </View>
-                            <Text style={styles.commentText}>{c.content}</Text>
-                            <Text style={styles.commentTime}>
-                                {formatDistanceToNow(c.createdAt, { addSuffix: true })}
-                            </Text>
+                            <View style={styles.commentBody}>
+                                <View style={styles.commentHeader}>
+                                    <Text style={styles.commentAuthor}>{c.authorName}</Text>
+                                    <EduBadge shouldShow={isHKBUEmail(c.authorEmail)} size="small" />
+                                    {user?.uid === c.authorId && (
+                                        <TouchableOpacity
+                                            style={{ marginLeft: 'auto' }}
+                                            onPress={() => { setSelectedCommentId(c.id); setDeleteType('comment'); setDeleteModal(true); }}
+                                        >
+                                            <Trash2 size={14} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                                <TranslatableText style={styles.commentText} text={c.content} />
+                                <View style={styles.commentFooter}>
+                                    <Text style={styles.commentTime}>
+                                        {formatDistanceToNow(c.createdAt, { addSuffix: true })}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.replyBtn}
+                                        onPress={() => {
+                                            setReplyTarget(c);
+                                            setTimeout(() => inputRef.current?.focus(), 100);
+                                        }}
+                                    >
+                                        <Text style={styles.replyBtnText}>{t('forum.row.replies')}</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
                         </View>
+
+                        {/* Nested Replies */}
+                        {c.replies && c.replies.length > 0 && (
+                            <View style={styles.repliesList}>
+                                {c.replies.map((reply: ForumComment) => (
+                                    <View key={reply.id} style={styles.replyItem}>
+                                        <View style={styles.commentAvatarSmall}>
+                                            {isValidUrl(reply.authorAvatar) ? (
+                                                <Image source={{ uri: reply.authorAvatar! }} style={styles.avatarImg} />
+                                            ) : (
+                                                <Text style={styles.avatarLetterSmall}>{reply.authorName.charAt(0).toUpperCase()}</Text>
+                                            )}
+                                        </View>
+                                        <View style={styles.commentBody}>
+                                            <View style={styles.commentHeader}>
+                                                <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
+                                                {reply.replyToName && (
+                                                    <Text style={styles.replyToText}> ▶ {reply.replyToName}</Text>
+                                                )}
+                                                <EduBadge shouldShow={isHKBUEmail(reply.authorEmail)} size="small" />
+                                                {user?.uid === reply.authorId && (
+                                                    <TouchableOpacity
+                                                        style={{ marginLeft: 'auto' }}
+                                                        onPress={() => { setSelectedCommentId(reply.id); setDeleteType('comment'); setDeleteModal(true); }}
+                                                    >
+                                                        <Trash2 size={12} color="#EF4444" />
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+                                            <TranslatableText style={styles.commentTextSmall} text={reply.content} />
+                                            <View style={styles.commentFooter}>
+                                                <Text style={styles.commentTimeSmall}>
+                                                    {formatDistanceToNow(reply.createdAt, { addSuffix: true })}
+                                                </Text>
+                                                <TouchableOpacity
+                                                    style={styles.replyBtn}
+                                                    onPress={() => {
+                                                        setReplyTarget(reply);
+                                                        setTimeout(() => inputRef.current?.focus(), 100);
+                                                    }}
+                                                >
+                                                    <Text style={styles.replyBtnTextSmall}>{t('forum.row.replies')}</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
                     </View>
                 ))}
                 <View style={{ height: 100 }} />
             </ScrollView>
 
             {/* Bottom bar */}
-            <View style={styles.bottomBar}>
-                <View style={styles.inputPill}>
-                    <TextInput
-                        style={styles.textInput}
-                        placeholder={t('forum.detail.comment_placeholder')}
-                        placeholderTextColor="#9CA3AF"
-                        value={commentText}
-                        onChangeText={setCommentText}
-                        multiline
-                    />
-                    {commentText.trim().length > 0 && (
-                        <TouchableOpacity style={styles.sendBtn} onPress={handleSendComment} disabled={submitting}>
-                            {submitting
-                                ? <ActivityIndicator size="small" color="#fff" />
-                                : <Send size={16} color="#fff" />
-                            }
+            <View style={styles.bottomBarContainer}>
+                {replyTarget && (
+                    <View style={styles.replyTargetBar}>
+                        <Text style={styles.replyTargetText} numberOfLines={1}>
+                            {t('forum.detail.replying_to', { name: replyTarget.authorName })}: {replyTarget.content}
+                        </Text>
+                        <TouchableOpacity onPress={() => setReplyTarget(null)}>
+                            <Text style={styles.cancelReplyText}>{t('forum.detail.cancel_reply')}</Text>
                         </TouchableOpacity>
-                    )}
+                    </View>
+                )}
+                <View style={styles.bottomBar}>
+                    <View style={styles.inputPill}>
+                        <TextInput
+                            ref={inputRef}
+                            style={styles.textInput}
+                            placeholder={replyTarget ? t('forum.detail.replying_to', { name: replyTarget.authorName }) : t('forum.detail.comment_placeholder')}
+                            placeholderTextColor="#9CA3AF"
+                            value={commentText}
+                            onChangeText={setCommentText}
+                            multiline
+                        />
+                        {commentText.trim().length > 0 && (
+                            <TouchableOpacity style={styles.sendBtn} onPress={handleSendComment} disabled={submitting}>
+                                {submitting
+                                    ? <ActivityIndicator size="small" color="#fff" />
+                                    : <Send size={16} color="#fff" />
+                                }
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    <TouchableOpacity style={styles.actionBtn} onPress={handleUpvote}>
+                        <ThumbsUp
+                            size={22}
+                            color={post.isUpvoted ? '#1E3A8A' : '#6B7280'}
+                            fill={post.isUpvoted ? '#1E3A8A' : 'transparent'}
+                        />
+                        <Text style={[styles.actionCount, post.isUpvoted && { color: '#1E3A8A' }]}>
+                            {post.upvoteCount}
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionBtn}>
+                        <MessageCircle size={22} color="#6B7280" />
+                        <Text style={styles.actionCount}>{post.replyCount}</Text>
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleUpvote}>
-                    <ThumbsUp
-                        size={22}
-                        color={post.isUpvoted ? '#1E3A8A' : '#6B7280'}
-                        fill={post.isUpvoted ? '#1E3A8A' : 'transparent'}
-                    />
-                    <Text style={[styles.actionCount, post.isUpvoted && { color: '#1E3A8A' }]}>
-                        {post.upvoteCount}
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn}>
-                    <MessageCircle size={22} color="#6B7280" />
-                    <Text style={styles.actionCount}>{post.replyCount}</Text>
-                </TouchableOpacity>
             </View>
 
             <ActionModal
@@ -459,6 +597,8 @@ const styles = StyleSheet.create({
     divider: { height: 8, backgroundColor: '#F4F6FB', marginHorizontal: -16, marginBottom: 16 },
     commentsLabel: { fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 16 },
 
+    commentContainer: { marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F0F2F8', paddingBottom: 16 },
+
     commentItem: { flexDirection: 'row', marginBottom: 20, gap: 10 },
     commentAvatar: {
         width: 34, height: 34, borderRadius: 17,
@@ -469,8 +609,44 @@ const styles = StyleSheet.create({
     commentHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
     commentAuthor: { fontSize: 13, fontWeight: '700', color: '#111827' },
     commentText: { fontSize: 14, lineHeight: 20, color: '#374151' },
-    commentTime: { fontSize: 11, color: '#9CA3AF', marginTop: 4 },
+    commentTime: { fontSize: 11, color: '#9CA3AF' },
+    commentFooter: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
+    replyBtn: { paddingVertical: 4, paddingHorizontal: 0 },
+    replyBtnText: { fontSize: 12, fontWeight: '600', color: '#1E3A8A' },
 
+    // Nested Replies
+    repliesList: { marginLeft: 44, marginTop: 12, gap: 12 },
+    replyItem: { flexDirection: 'row', gap: 8 },
+    commentAvatarSmall: {
+        width: 24, height: 24, borderRadius: 12,
+        backgroundColor: '#1E3A8A',
+        alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0,
+    },
+    avatarLetterSmall: { color: '#fff', fontSize: 10, fontWeight: '700' },
+    commentAuthorSmall: { fontSize: 12, fontWeight: '700', color: '#374151' },
+    replyToText: { fontSize: 12, color: '#6B7280' },
+    commentTextSmall: { fontSize: 13, lineHeight: 18, color: '#4B5563', marginTop: 2 },
+    commentTimeSmall: { fontSize: 10, color: '#9CA3AF' },
+    replyBtnTextSmall: { fontSize: 11, fontWeight: '600', color: '#1E3A8A' },
+
+    // Bottom Bar
+    bottomBarContainer: {
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#F0F2F8',
+    },
+    replyTargetBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    replyTargetText: { flex: 1, fontSize: 12, color: '#64748B' },
+    cancelReplyText: { fontSize: 12, color: '#1E3A8A', fontWeight: '600', marginLeft: 8 },
     bottomBar: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -478,9 +654,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingTop: 12,
         paddingBottom: Platform.OS === 'ios' ? 34 : 14,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#F0F2F8',
     },
     inputPill: {
         flex: 1,

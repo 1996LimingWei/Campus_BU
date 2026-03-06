@@ -72,8 +72,24 @@
         "help_copied": "已复制到剪贴板",
         "sign_out": "退出登录",
         "sign_out_confirm": "确定要退出登录吗？",
-        "mark_all_read": "全部标为已读",
-        "no_notifications_yet": "暂无通知"
+        "mark_all_read": "全部标记为已读",
+        "no_notifications_yet": "暂无通知",
+        "guest_name": "访客",
+        "guest_major": "校园游客",
+        "login_signup": "登录 / 注册"
+    },
+    "notifications": {
+        "title_comment": "新评论",
+        "title_reply": "新回复",
+        "title_like": "获赞",
+        "post_comment": "{{name}} 评论了您的贴子。",
+        "post_reply": "{{name}} 回复了您的评论。",
+        "post_like": "有人点赞了您的贴子: \"{{content}}...\"",
+        "exchange_comment": "{{name}} 评论了你的 {{course}} 换课申请。",
+        "exchange_like": "有人赞了你的 {{course}} 换课申请！",
+        "teaming_comment": "{{name}} 评论了你的 {{course}} 组队需求。",
+        "teaming_like": "有人赞了你的 {{course}} 组队需求！",
+        "review_like": "有人赞了你对 {{course}} 的课程评价！"
     },
     "map": {
         "title": "校园地图",
@@ -200,6 +216,8 @@
             "recommend": "推荐",
             "replies_count": "{{count}} 条回复",
             "empty_comments": "暂无回复，来说点什么吧 👇",
+            "replying_to": "回复 @{{name}}",
+            "cancel_reply": "取消",
             "delete_post_title": "删除帖子",
             "delete_comment_title": "删除回复",
             "delete_post_confirm": "确定删除这条帖子吗？此操作不可撤销。",
@@ -225,6 +243,35 @@
         "all_buildings": "全部建筑",
         "results": "搜索结果",
         "swap_courses": "换课"
+    },
+    "exchange": {
+        "title": "换课",
+        "post_swap_request": "发布换课请求",
+        "i_have": "我有的课程 (课程代码)",
+        "i_want": "我想要的课程 (可选多门)",
+        "course_code": "课程代码",
+        "section": "班级组",
+        "teacher": "老师",
+        "class_time": "上课时间",
+        "add_course": "添加课程",
+        "target_course": "目标课程 #{{index}}",
+        "contact_methods": "联系方式 (至少填一项)",
+        "custom_platform": "自定义平台",
+        "platform_name": "平台名称 (如 Line, Kakao)",
+        "enter_id": "输入你的 {{method}}",
+        "enter_info": "输入你的 ID/信息",
+        "reason": "换课原因 (选填)",
+        "reason_placeholder": "输入原因...",
+        "publish_request": "发布请求",
+        "select_section": "选择班课",
+        "confirm": "确认",
+        "note": "备注:",
+        "search_placeholder": "输入课程代码...",
+        "have_label": "我有 (HAVE)",
+        "want_label": "求换 (WANT)",
+        "sec_label": "班课",
+        "contact_btn": "联系",
+        "empty_list": "未找到换课请求。"
     },
     "auth": {
         "login_title": "登录",
@@ -278,7 +325,10 @@
         "forgot_password_subtitle": "验证邮箱以设置新密码",
         "reset_password_btn": "重置密码",
         "reset_success_msg": "密码重置成功",
-        "password_same_as_old": "新密码不能与旧密码相同，请设置一个新的密码"
+        "password_same_as_old": "新密码不能与旧密码相同，请设置一个新的密码",
+        "guest_login": "先随便看看",
+        "guest_prompt_title": "需要登录",
+        "guest_prompt_msg": "登录后即可参与点赞、评论和发帖。现在去登录吗？"
     },
     "setup": {
         "title": "你是谁？",

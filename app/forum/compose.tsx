@@ -52,7 +52,7 @@ export default function ForumComposeScreen() {
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsMultipleSelection: true,
             selectionLimit: 9 - images.length,
-            quality: 0.8,
+            quality: 0.5,
         });
         if (!result.canceled) {
             setImages(prev => [...prev, ...result.assets.map(a => a.uri)].slice(0, 9));
@@ -71,11 +71,9 @@ export default function ForumComposeScreen() {
             const user = await getCurrentUser();
             if (!user) { showToast(t('forum.compose.error_login')); return; }
 
-            const uploadedUrls: string[] = [];
-            for (const uri of images) {
-                const url = await uploadForumImage(uri);
-                uploadedUrls.push(url);
-            }
+            const uploadedUrls = await Promise.all(
+                images.map(uri => uploadForumImage(uri))
+            );
 
             await createForumPost({
                 authorId: user.uid,

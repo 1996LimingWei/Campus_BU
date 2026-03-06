@@ -220,6 +220,13 @@ export default function LoginScreen() {
                         </TouchableOpacity>
                     </View>
 
+                    <TouchableOpacity
+                        style={styles.guestButton}
+                        onPress={() => router.replace('/(tabs)/campus')}
+                    >
+                        <Text style={styles.guestButtonText}>{t('auth.guest_login')}</Text>
+                    </TouchableOpacity>
+
                     {/* Developer Shortcut to Setup Screen */}
                     {__DEV__ && (
                         <TouchableOpacity
@@ -501,5 +508,16 @@ const styles = StyleSheet.create({
     pickerItemTextActive: {
         color: '#1E3A8A',
         fontWeight: 'bold',
+    },
+    guestButton: {
+        marginTop: 24,
+        padding: 12,
+        alignItems: 'center',
+    },
+    guestButtonText: {
+        color: '#64748B',
+        fontSize: 15,
+        fontWeight: '600',
+        textDecorationLine: 'underline',
     },
 });

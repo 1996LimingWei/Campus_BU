@@ -1,4 +1,4 @@
-import { Post, PostCategory, PostType } from '../types';
+import { Post, PostCategory, PostComment, PostType } from '../types';
 import { getBlockedUserIds } from './moderation';
 import { supabase } from './supabase';
 
@@ -190,7 +190,7 @@ export const createPost = async (postData: {
         console.error('Supabase error in createPost:', error);
         throw error;
     }
-    
+
     // Map to post, but include the email from the input data
     const post = mapSupabaseToPost(data);
     if (!post.isAnonymous) {
@@ -284,8 +284,11 @@ export const togglePostLike = async (postId: string, userId: string) => {
                 await createNotification({
                     user_id: postData.author_id,
                     type: 'like',
-                    title: 'New Like',
-                    content: `Someone liked your post: "${postData.content.substring(0, 20)}..."`,
+                    title: 'notifications.title_like',
+                    content: JSON.stringify({
+                        key: 'notifications.post_like',
+                        params: { content: postData.content.substring(0, 20) }
+                    }),
                     related_id: postId,
                 });
             }
@@ -301,7 +304,7 @@ export const togglePostLike = async (postId: string, userId: string) => {
 /**
  * Fetch comments for a post
  */
-export const fetchPostComments = async (postId: string) => {
+export const fetchPostComments = async (postId: string): Promise<PostComment[]> => {
     const { data, error } = await supabase
         .from(COMMENTS_TABLE)
         .select('*, author:users!author_id(*)')
@@ -309,7 +312,18 @@ export const fetchPostComments = async (postId: string) => {
         .order('created_at', { ascending: true });
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map(row => ({
+        id: row.id,
+        postId: row.post_id,
+        authorId: row.author_id,
+        authorName: row.author ? (row.author.display_name || row.author.displayName) : row.author_name,
+        authorEmail: row.author_email,
+        authorAvatar: row.author_avatar,
+        content: row.content,
+        parentCommentId: row.parent_comment_id,
+        replyToName: row.reply_to_name,
+        createdAt: new Date(row.created_at),
+    }));
 };
 
 /**
@@ -322,7 +336,9 @@ export const addPostComment = async (commentData: {
     authorEmail?: string;
     authorAvatar?: string;
     content: string;
-}) => {
+    parentCommentId?: string;
+    replyToName?: string;
+}): Promise<PostComment> => {
     const { data, error } = await supabase
         .from(COMMENTS_TABLE)
         .insert([{
@@ -332,6 +348,8 @@ export const addPostComment = async (commentData: {
             author_email: commentData.authorEmail,
             author_avatar: commentData.authorAvatar,
             content: commentData.content,
+            parent_comment_id: commentData.parentCommentId,
+            reply_to_name: commentData.replyToName,
         }])
         .select()
         .single();
@@ -342,16 +360,34 @@ export const addPostComment = async (commentData: {
     const { data: post } = await supabase.from(POSTS_TABLE).select('author_id, content').eq('id', commentData.postId).single();
     if (post && post.author_id !== commentData.authorId) {
         const { createNotification } = await import('./notifications');
+
+        // If it's a reply, use a different notification key
+        const isReply = !!commentData.parentCommentId;
+
         await createNotification({
             user_id: post.author_id,
             type: 'comment',
-            title: 'New Comment',
-            content: `${commentData.authorName} commented on your post.`,
+            title: isReply ? 'notifications.title_reply' : 'notifications.title_comment',
+            content: JSON.stringify({
+                key: isReply ? 'notifications.post_reply' : 'notifications.post_comment',
+                params: { name: commentData.authorName }
+            }),
             related_id: commentData.postId,
         });
     }
 
-    return data;
+    return {
+        id: data.id,
+        postId: data.post_id,
+        authorId: data.author_id,
+        authorName: data.author_name,
+        authorEmail: data.author_email,
+        authorAvatar: data.author_avatar,
+        content: data.content,
+        parentCommentId: data.parent_comment_id,
+        replyToName: data.reply_to_name,
+        createdAt: new Date(data.created_at),
+    };
 };
 
 /**

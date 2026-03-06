@@ -33,6 +33,19 @@ export const SOCIAL_TAGS = [
 export type PostType = 'event' | 'review' | 'guide' | 'lost_found';
 export type PostCategory = 'All' | 'Events' | 'Reviews' | 'Guides' | 'Lost & Found';
 
+export interface PostComment {
+    id: string;
+    postId: string;
+    authorId: string;
+    authorName: string;
+    authorEmail?: string;
+    authorAvatar?: string;
+    content: string;
+    parentCommentId?: string;
+    replyToName?: string;
+    createdAt: Date;
+}
+
 export interface Post {
     id: string;
     authorId: string;
@@ -58,12 +71,6 @@ export interface Post {
     likes: number;
     isLiked?: boolean;
     comments: number;
-    replies?: Array<{
-        id: string;
-        authorName: string;
-        content: string;
-        createdAt: Date;
-    }>;
     isAnonymous: boolean;
 }
 
@@ -96,6 +103,8 @@ export interface ForumComment {
     authorEmail?: string;
     authorAvatar?: string;
     content: string;
+    parentCommentId?: string;
+    replyToName?: string;
     createdAt: Date;
 }
 
@@ -201,6 +210,8 @@ export interface ExchangeComment {
     authorName: string;
     authorAvatar: string;
     content: string;
+    parentCommentId?: string;
+    replyToName?: string;
     createdAt: Date;
 }
 
@@ -232,6 +243,8 @@ export interface TeamingComment {
     authorEmail?: string;
     authorAvatar: string;
     content: string;
+    parentCommentId?: string;
+    replyToName?: string;
     createdAt: Date;
 }
 

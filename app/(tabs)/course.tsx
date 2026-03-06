@@ -4,6 +4,7 @@ import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     FlatList,
+    InteractionManager,
     RefreshControl,
     StyleSheet,
     Text,
@@ -12,6 +13,7 @@ import {
     View
 } from 'react-native';
 import { Skeleton } from '../../components/common/Skeleton';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { getCurrentUser } from '../../services/auth';
 import { enrichCoursesWithReviewStats, getLocalCourses } from '../../services/courses';
 import {
@@ -46,6 +48,7 @@ export default function CoursesScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [allowRemoteFavorites, setAllowRemoteFavorites] = useState(false);
+    const { checkLogin } = useLoginPrompt();
 
     const CourseSkeleton = () => (
         <View style={styles.skeletonCard}>
@@ -157,8 +160,11 @@ export default function CoursesScreen() {
 
     useFocusEffect(
         useCallback(() => {
-            fetchCourses(true); // Silent update on focus
-            loadFavorites();
+            const task = InteractionManager.runAfterInteractions(() => {
+                fetchCourses(true); // Silent update on focus
+                loadFavorites();
+            });
+            return () => task.cancel();
         }, [])
     );
 
@@ -177,6 +183,7 @@ export default function CoursesScreen() {
     };
 
     const toggleFavorite = async (courseId: string) => {
+        if (!checkLogin(currentUserId)) return;
         const isFavorite = favoriteCourseIds.includes(courseId);
         const nextFavorites = isFavorite
             ? favoriteCourseIds.filter(id => id !== courseId)
@@ -204,11 +211,14 @@ export default function CoursesScreen() {
     const favoriteCourses = courses.filter(course => favoriteCourseIds.includes(course.id));
 
     const handleCoursePress = (courseId: string) => {
+        if (!checkLogin(currentUserId)) return;
         router.push(`/courses/${courseId}` as any);
     };
 
     const handleAddCourse = () => {
-        router.push('/courses/add');
+        if (checkLogin(currentUserId)) {
+            router.push('/courses/add');
+        }
     };
 
     const renderCourseItem = ({ item }: { item: Course }) => (
@@ -315,14 +325,28 @@ export default function CoursesScreen() {
                         tintColor="#1E3A8A"
                     />
                 }
+                initialNumToRender={8}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                removeClippedSubviews={true}
                 ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <BookOpen size={48} color="#D1D5DB" />
-                        <Text style={styles.emptyText}>{t('courses.no_courses_found')}</Text>
-                        <TouchableOpacity style={styles.addCourseButton} onPress={handleAddCourse}>
-                            <Text style={styles.addCourseText}>{t('courses.add_new_course')}</Text>
-                        </TouchableOpacity>
-                    </View>
+                    loading ? (
+                        <View style={{ paddingTop: 10 }}>
+                            <CourseSkeleton />
+                            <CourseSkeleton />
+                            <CourseSkeleton />
+                            <CourseSkeleton />
+                            <CourseSkeleton />
+                        </View>
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <BookOpen size={48} color="#D1D5DB" />
+                            <Text style={styles.emptyText}>{t('courses.no_courses_found')}</Text>
+                            <TouchableOpacity style={styles.addCourseButton} onPress={handleAddCourse}>
+                                <Text style={styles.addCourseText}>{t('courses.add_new_course')}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )
                 }
             />
 

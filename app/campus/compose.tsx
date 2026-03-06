@@ -62,7 +62,7 @@ export default function ComposeScreen() {
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
             aspect: [4, 3],
-            quality: 0.8,
+            quality: 0.5,
             selectionLimit: 3 - images.length,
         });
 
@@ -90,11 +90,9 @@ export default function ComposeScreen() {
                 return;
             }
 
-            const uploadedUrls: string[] = [];
-            for (const imgUri of images) {
-                const url = await uploadPostImage(imgUri);
-                uploadedUrls.push(url);
-            }
+            const uploadedUrls = await Promise.all(
+                images.map(imgUri => uploadPostImage(imgUri))
+            );
 
             await createPost({
                 authorId: user.uid,

@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import 'react-native-url-polyfill/auto';
 import { StartupAnimation } from '../components/common/StartupAnimation';
+import { LoginPromptProvider } from '../context/LoginPromptContext';
+import { NotificationProvider } from '../context/NotificationContext';
 import '../global.css';
 import { getUserProfile, isDemoMode, onAuthChange, shouldSkipAuthRedirect } from '../services/auth';
 import './i18n/i18n'; // Initialize i18n
@@ -75,11 +77,16 @@ export default function RootLayout() {
           const currentSegment = currentSegments.length > 1 ? (currentSegments as string[])[1] : currentSegments[0] || '';
 
           // Check if forgot-password exists anywhere in segments (more robust check)
-          const isForgotPasswordPage = currentSegments.includes('forgot-password');
+          const isForgotPasswordPage = (currentSegments as string[]).includes('forgot-password');
 
           if (!user) {
-            // Don't redirect to login if on forgot-password page (user just signed out after password check)
-            if (!inAuthGroup && !isForgotPasswordPage) {
+            // Guest mode logic:
+            // Allow access to (tabs), campus/*, forum/*, courses/* etc.
+            // Only redirect to login if they are NOT in the auth group AND NOT on a public page
+            const publicGroups = ['(tabs)', 'campus', 'forum', 'courses', 'map', 'classroom'];
+            const isPublicPage = publicGroups.includes(currentSegments[0]);
+
+            if (!inAuthGroup && !isPublicPage && !isForgotPasswordPage) {
               router.replace('/(auth)/login');
             }
           } else {
@@ -87,14 +94,13 @@ export default function RootLayout() {
 
             if (!profile) {
               // Only redirect to setup if we're not currently in verify or forgot-password flow
-              // and we're sure the profile really doesn't exist
               if (currentSegment !== 'setup' &&
                 currentSegment !== 'verify' &&
                 !isForgotPasswordPage) {
                 router.replace('/(auth)/setup');
               }
             } else if (inAuthGroup) {
-              // Don't auto-redirect if user is on forgot-password page (password reset flow)
+              // Don't auto-redirect if user is on forgot-password page
               if (currentSegment !== 'setup' && !isForgotPasswordPage) {
                 router.replace('/(tabs)/campus');
               }
@@ -122,14 +128,18 @@ export default function RootLayout() {
 
   return (
     <>
-      <Stack
-        screenOptions={{
-          animation: 'slide_from_right',
-          animationDuration: 400,
-          headerShown: false,
-        }}
-      />
-      <StatusBar style="auto" />
+      <LoginPromptProvider>
+        <NotificationProvider>
+          <Stack
+            screenOptions={{
+              animation: 'slide_from_right',
+              animationDuration: 400,
+              headerShown: false,
+            }}
+          />
+          <StatusBar style="auto" />
+        </NotificationProvider>
+      </LoginPromptProvider>
     </>
   );
 }

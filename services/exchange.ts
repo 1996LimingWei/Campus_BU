@@ -89,7 +89,13 @@ export const fetchExchangeComments = async (exchangeId: string): Promise<Exchang
 /**
  * Post a comment to an exchange request.
  */
-export const postExchangeComment = async (exchangeId: string, author: { id: string, name: string, avatar: string }, content: string) => {
+export const postExchangeComment = async (
+    exchangeId: string,
+    author: { id: string, name: string, avatar: string },
+    content: string,
+    parentCommentId?: string,
+    replyToName?: string
+) => {
     try {
         const { data, error } = await supabase
             .from(EXCHANGE_COMMENTS_TABLE)
@@ -99,6 +105,8 @@ export const postExchangeComment = async (exchangeId: string, author: { id: stri
                 author_name: author.name,
                 author_avatar: author.avatar,
                 content,
+                parent_comment_id: parentCommentId,
+                reply_to_name: replyToName,
             })
             .select()
             .single();
@@ -120,8 +128,11 @@ export const postExchangeComment = async (exchangeId: string, author: { id: stri
             await createNotification({
                 user_id: exchange.user_id,
                 type: 'comment',
-                title: 'New Comment',
-                content: `${author.name} commented on your ${exchange.have_course} exchange.`,
+                title: 'notifications.title_comment',
+                content: JSON.stringify({
+                    key: 'notifications.exchange_comment',
+                    params: { name: author.name, course: exchange.have_course }
+                }),
                 related_id: exchangeId,
             });
         }
@@ -175,8 +186,11 @@ export const toggleExchangeLike = async (exchangeId: string, userId: string) => 
             await createNotification({
                 user_id: exchangeData.user_id,
                 type: 'like',
-                title: 'New Like',
-                content: `Someone liked your ${exchangeData.have_course} exchange request!`,
+                title: 'notifications.title_like',
+                content: JSON.stringify({
+                    key: 'notifications.exchange_like',
+                    params: { course: exchangeData.have_course }
+                }),
                 related_id: exchangeId,
             });
         }
@@ -185,6 +199,30 @@ export const toggleExchangeLike = async (exchangeId: string, userId: string) => 
     } catch (e) {
         console.error('Error toggling like:', e);
         return { success: false };
+    }
+};
+
+/**
+ * Delete a course exchange request.
+ * Only the owner can delete their own request.
+ */
+export const deleteExchange = async (exchangeId: string, userId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase
+            .from(EXCHANGES_TABLE)
+            .delete()
+            // Important: match both ID and user_id to ensure only the author can delete
+            .match({ id: exchangeId, user_id: userId });
+
+        if (error) {
+            console.error('Error deleting exchange:', error);
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
+    } catch (e) {
+        console.error('Exception deleting exchange:', e);
+        return { success: false, error: 'Failed to delete exchange request' };
     }
 };
 
@@ -220,6 +258,8 @@ const mapSupabaseToComment = (data: any): ExchangeComment => {
         authorName: author ? (author.display_name || author.displayName) : data.author_name,
         authorAvatar: author ? author.avatar_url : data.author_avatar,
         content: data.content,
+        parentCommentId: data.parent_comment_id,
+        replyToName: data.reply_to_name,
         createdAt: new Date(data.created_at),
     };
 };

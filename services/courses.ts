@@ -338,8 +338,6 @@ export const getReviews = async (courseId: string, courseCode?: string): Promise
 export const hasUserReviewed = async (courseId: string, userId: string, courseCode?: string): Promise<boolean> => {
     const candidateCourseIds = await buildReviewCourseIdCandidates(courseId, courseCode);
 
-    // Check in database for all courses (including local_ ones)
-
     const { count, error } = await supabase
         .from('course_reviews')
         .select('*', { count: 'exact', head: true })
@@ -349,6 +347,58 @@ export const hasUserReviewed = async (courseId: string, userId: string, courseCo
 
     return !error && (count || 0) > 0;
 };
+
+/**
+ * Optimized: builds candidate IDs ONCE and fires both queries in parallel.
+ * Use this instead of calling getReviews + hasUserReviewed separately to halve DB round-trips.
+ */
+export const getReviewsAndHasReviewed = async (
+    courseId: string,
+    userId: string | null,
+    courseCode?: string
+): Promise<{ reviews: Review[]; hasReviewed: boolean }> => {
+    const candidateCourseIds = await buildReviewCourseIdCandidates(courseId, courseCode);
+
+    const [reviewsResult, hasReviewedResult] = await Promise.all([
+        supabase
+            .from('course_reviews')
+            .select('*, author:users!author_id(email, display_name, avatar_url)')
+            .in('course_id', candidateCourseIds)
+            .order('created_at', { ascending: false }),
+        userId
+            ? supabase
+                .from('course_reviews')
+                .select('*', { count: 'exact', head: true })
+                .in('course_id', candidateCourseIds)
+                .eq('author_id', userId)
+                .not('rating', 'is', null)
+            : Promise.resolve({ count: 0, error: null })
+    ]);
+
+    const reviews: Review[] = (reviewsResult.data || []).map(r => {
+        const author = r.author;
+        return {
+            id: r.id,
+            courseId: r.course_id,
+            authorId: r.author_id,
+            authorName: r.author_name || author?.display_name || 'Anonymous',
+            authorEmail: author?.email,
+            authorAvatar: r.author_avatar || author?.avatar_url || '👤',
+            rating: r.rating,
+            difficulty: r.difficulty || 3,
+            content: r.content || '',
+            tags: [],
+            likes: r.likes || 0,
+            createdAt: new Date(r.created_at),
+            semester: r.semester || 'Current'
+        };
+    });
+
+    const hasReviewed = !hasReviewedResult.error && (hasReviewedResult.count || 0) > 0;
+    return { reviews, hasReviewed };
+};
+
+
 
 const resolveCourseIdForReviewQueries = async (courseId: string): Promise<string> => {
     // Normal DB IDs and demo IDs can be queried directly.
@@ -446,7 +496,7 @@ const buildReviewCourseIdCandidates = async (courseId: string, seedCourseCode?: 
                 .select('id, code')
                 .eq('code', normalizedInput)
                 .maybeSingle();
-            
+
             if (byCourseCode) {
                 candidates.add(byCourseCode.id);
                 normalizedCode = normalizeCourseCode(byCourseCode.code);
@@ -456,7 +506,7 @@ const buildReviewCourseIdCandidates = async (courseId: string, seedCourseCode?: 
         if (normalizedCode) {
             candidates.add(normalizedCode);
             candidates.add(`local_${normalizedCode}`);
-            
+
             // Also search by code to ensure we get the DB ID
             const { data: byCode } = await supabase
                 .from('courses')
@@ -545,7 +595,7 @@ export const addReview = async (reviewData: Partial<Review>): Promise<{ error: a
     const requestedCourseId = reviewData.courseId;
 
     const { resolvedCourseId, error: ensureCourseError } = await ensureCourseExistsForReview(requestedCourseId);
-    
+
     if (ensureCourseError) {
         console.error('addReview ensureCourseError:', ensureCourseError);
         if (requestedCourseId?.startsWith('local_')) {
@@ -665,6 +715,27 @@ export const likeReview = async (reviewId: string, courseId: string, isUnlike: b
     // 2. Database Review
     const rpcName = isUnlike ? 'decrement_review_likes' : 'increment_review_likes';
     const { error } = await supabase.rpc(rpcName, { review_id: reviewId });
+
+    if (!error && !isUnlike) {
+        // Trigger notification
+        const { data: review } = await supabase.from('course_reviews').select('author_id, course_id').eq('id', reviewId).single();
+        const { getCurrentUser } = await import('./auth');
+        const user = await getCurrentUser();
+        if (review && user && review.author_id !== user.uid) {
+            const course = await getCourseById(review.course_id);
+            const { createNotification } = await import('./notifications');
+            await createNotification({
+                user_id: review.author_id,
+                type: 'like',
+                title: 'notifications.title_like',
+                content: JSON.stringify({
+                    key: 'notifications.review_like',
+                    params: { course: course?.code || 'course' }
+                }),
+                related_id: reviewId,
+            });
+        }
+    }
 
     // Fallback if RPC not setup
     if (error) {
@@ -904,10 +975,10 @@ export const cancelCourseSubmission = async (submissionId: string): Promise<{ er
  * This function can be used to fix inconsistent review_count values
  * that might have occurred due to reviews being stored with different course_id formats
  */
-export const refreshAllCourseStats = async (): Promise<{ 
-    processed: number; 
-    updated: number; 
-    errors: string[]; 
+export const refreshAllCourseStats = async (): Promise<{
+    processed: number;
+    updated: number;
+    errors: string[];
 }> => {
     const errors: string[] = [];
     let processed = 0;

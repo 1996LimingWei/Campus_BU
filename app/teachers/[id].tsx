@@ -32,6 +32,7 @@ import {
 import { Teacher, TeacherReview } from '../../types';
 import { isHKBUEmail } from '../../utils/userUtils';
 import { EduBadge } from '../../components/common/EduBadge';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 
 // 根据姓名生成首字母
 const getInitials = (name: string): string => {
@@ -70,6 +71,8 @@ export default function TeacherDetailScreen() {
     const [comment, setComment] = useState('');
     const [tags, setTags] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const { checkLogin } = useLoginPrompt();
 
     useEffect(() => {
         loadData();
@@ -79,6 +82,9 @@ export default function TeacherDetailScreen() {
         if (!id) return;
         try {
             setLoading(true);
+            const user = await getCurrentUser();
+            setCurrentUserId(user?.uid || null);
+
             const teacherData = await getTeacherById(id as string);
             setTeacher(teacherData);
 
@@ -214,7 +220,14 @@ export default function TeacherDetailScreen() {
                     <View style={styles.reviewsList}>
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>Student Reviews</Text>
-                            <TouchableOpacity style={styles.rateBtn} onPress={() => setModalVisible(true)}>
+                            <TouchableOpacity 
+                                style={styles.rateBtn} 
+                                onPress={() => {
+                                    if (checkLogin(currentUserId)) {
+                                        setModalVisible(true);
+                                    }
+                                }}
+                            >
                                 <Plus size={16} color="#fff" />
                                 <Text style={styles.rateBtnText}>{t('teachers.rate')}</Text>
                             </TouchableOpacity>

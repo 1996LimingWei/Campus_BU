@@ -5,8 +5,10 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Bell, Bot, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { EduBadge } from '../../components/common/EduBadge';
+import { useNotifications } from '../../context/NotificationContext';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import storage from '../../lib/storage';
 import { createUserProfile, getCurrentUser, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
 import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
@@ -42,7 +44,9 @@ export default function ProfileScreen() {
     const [userId, setUserId] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState('');
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const { checkLogin } = useLoginPrompt();
 
+    const { unreadCount: globalUnreadCount, refreshCount: refreshGlobalCount } = useNotifications();
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     const loadData = async () => {
@@ -73,7 +77,10 @@ export default function ProfileScreen() {
 
     useFocusEffect(
         useCallback(() => {
-            loadData();
+            const task = InteractionManager.runAfterInteractions(() => {
+                loadData();
+            });
+            return () => task.cancel();
         }, [])
     );
 
@@ -115,6 +122,7 @@ export default function ProfileScreen() {
                 setNotifications(prev => prev.map(n =>
                     n.id === notification.id ? { ...n, is_read: true } : n
                 ));
+                await refreshGlobalCount();
             } catch (error) {
                 console.error('Error marking notification read:', error);
             }
@@ -147,6 +155,7 @@ export default function ProfileScreen() {
         try {
             await markAllAsRead(userId);
             setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+            await refreshGlobalCount();
         } catch (error) {
             console.error('Error marking all read:', error);
         }
@@ -181,6 +190,7 @@ export default function ProfileScreen() {
     };
 
     const toggleTag = async (tag: string) => {
+        if (!checkLogin(userId)) return;
         let newTags = [...selectedTags];
         if (selectedTags.includes(tag)) {
             newTags = selectedTags.filter(t => t !== tag);
@@ -214,10 +224,7 @@ export default function ProfileScreen() {
     };
 
     const handleAvatarPress = async () => {
-        if (!userId) {
-            Alert.alert(t('common.error', 'Error'), t('profile.login_required', 'Please log in first'));
-            return;
-        }
+        if (!checkLogin(userId)) return;
 
         // Request permission
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -245,6 +252,7 @@ export default function ProfileScreen() {
         setUploadingAvatar(true);
 
         try {
+            if (!userId) return;
             const newAvatarUrl = await uploadAndUpdateAvatar(userId, imageUri);
 
             // Update local profile state
@@ -260,6 +268,25 @@ export default function ProfileScreen() {
         } finally {
             setUploadingAvatar(false);
         }
+    };
+
+    const renderNotificationContent = (notification: Notification): string => {
+        try {
+            const data = JSON.parse(notification.content);
+            if (data && data.key) {
+                return t(data.key, data.params) as string;
+            }
+        } catch (e) {
+            // Not a JSON string, fallback to original content
+        }
+        return notification.content;
+    };
+
+    const renderNotificationTitle = (notification: Notification): string => {
+        if (notification.title.startsWith('notifications.')) {
+            return t(notification.title) as string;
+        }
+        return notification.title;
     };
 
     return (
@@ -278,7 +305,7 @@ export default function ProfileScreen() {
                         ) : isValidAvatarUrl(profile?.avatarUrl) ? (
                             <Image source={{ uri: profile!.avatarUrl }} style={styles.avatarImage} />
                         ) : (
-                            <Text style={styles.avatarText}>{profile?.displayName?.charAt(0) || '你'}</Text>
+                            <Text style={styles.avatarText}>{profile?.displayName?.charAt(0) || t('profile.guest_name').charAt(0)}</Text>
                         )}
                     </View>
                     <View style={styles.avatarCameraIcon}>
@@ -287,13 +314,20 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
                 <View style={styles.profileInfo}>
                     <View style={styles.profileNameRow}>
-                        <Text style={styles.profileName}>{profile?.displayName || (loadingProfile ? '...' : 'Demo Student')}</Text>
+                        <Text style={styles.profileName}>{profile?.displayName || (loadingProfile ? '...' : t('profile.guest_name'))}</Text>
                         <EduBadge shouldShow={isHKBUEmail(userEmail)} size="medium" />
                     </View>
-                    <Text style={styles.profileMajor}>{profile?.major || (loadingProfile ? '...' : 'HKBU Student')}</Text>
+                    <Text style={styles.profileMajor}>{profile?.major || (loadingProfile ? '...' : t('profile.guest_major'))}</Text>
                 </View>
-                <TouchableOpacity style={styles.editButton} onPress={() => router.push('/(auth)/setup')}>
-                    <Edit3 size={20} color="#1E3A8A" />
+                <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => {
+                        if (checkLogin(userId)) {
+                            router.push('/(auth)/setup');
+                        }
+                    }}
+                >
+                    <Edit3 size={20} color={userId ? "#1E3A8A" : "#9CA3AF"} />
                 </TouchableOpacity>
             </View>
 
@@ -305,7 +339,11 @@ export default function ProfileScreen() {
                 </View>
                 <TouchableOpacity
                     style={styles.agentButton}
-                    onPress={() => router.push('/agent/chat')}
+                    onPress={() => {
+                        if (checkLogin(userId)) {
+                            router.push('/agent/chat');
+                        }
+                    }}
                 >
                     <View style={styles.agentButtonContent}>
                         <Bot size={24} color="#fff" />
@@ -330,13 +368,19 @@ export default function ProfileScreen() {
                             </View>
                         )}
                     </View>
-                    <TouchableOpacity onPress={() => setShowNotifications(true)}>
+                    <TouchableOpacity onPress={() => {
+                        if (checkLogin(userId)) setShowNotifications(true);
+                    }}>
                         <Text style={styles.seeAllText}>{t('profile.see_all')}</Text>
                     </TouchableOpacity>
                 </View>
 
                 {loadingNotifications ? (
                     <ActivityIndicator color="#1E3A8A" />
+                ) : !userId ? (
+                    <TouchableOpacity onPress={() => checkLogin(userId)}>
+                        <Text style={styles.emptyText}>{t('profile.login_view_notifications', 'Login to view notifications')}</Text>
+                    </TouchableOpacity>
                 ) : notifications.length === 0 ? (
                     <Text style={styles.emptyText}>{t('profile.no_notifications')}</Text>
                 ) : (
@@ -356,8 +400,12 @@ export default function ProfileScreen() {
                                             <Sparkles size={14} color="#8B5CF6" />}
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.notifPreviewTitle} numberOfLines={1}>{notif.title}</Text>
-                                    <Text style={styles.notifPreviewContent} numberOfLines={1}>{notif.content}</Text>
+                                    <Text style={styles.notifPreviewTitle} numberOfLines={1}>
+                                        {renderNotificationTitle(notif)}
+                                    </Text>
+                                    <Text style={styles.notifPreviewContent} numberOfLines={1}>
+                                        {renderNotificationContent(notif)}
+                                    </Text>
                                 </View>
                             </TouchableOpacity>
                         ))}
@@ -433,11 +481,21 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* Sign Out */}
-            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-                <LogOut size={20} color="#EF4444" />
-                <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
-            </TouchableOpacity>
+            {/* Sign Out / Sign In */}
+            {userId ? (
+                <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+                    <LogOut size={20} color="#EF4444" />
+                    <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
+                </TouchableOpacity>
+            ) : (
+                <TouchableOpacity
+                    style={[styles.signOutButton, { borderColor: '#1E3A8A' }]}
+                    onPress={() => router.replace('/(auth)/login')}
+                >
+                    <ChevronRight size={20} color="#1E3A8A" />
+                    <Text style={[styles.signOutText, { color: '#1E3A8A' }]}>{t('profile.login_signup')}</Text>
+                </TouchableOpacity>
+            )}
 
             <View style={{ height: 100 }} />
 
@@ -479,12 +537,16 @@ export default function ProfileScreen() {
                                 </View>
                                 <View style={styles.notifContent}>
                                     <View style={styles.headerRow}>
-                                        <Text style={styles.notifTitle} numberOfLines={1}>{item.title}</Text>
+                                        <Text style={styles.notifTitle} numberOfLines={1}>
+                                            {renderNotificationTitle(item)}
+                                        </Text>
                                         <Text style={styles.notifTime}>
                                             {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
                                         </Text>
                                     </View>
-                                    <Text style={styles.notifPreview} numberOfLines={2}>{item.content}</Text>
+                                    <Text style={styles.notifPreview} numberOfLines={2}>
+                                        {renderNotificationContent(item)}
+                                    </Text>
                                 </View>
                                 {!item.is_read && <View style={styles.dot} />}
                             </TouchableOpacity>

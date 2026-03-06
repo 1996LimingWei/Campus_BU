@@ -73,7 +73,23 @@
         "sign_out": "Sign Out",
         "sign_out_confirm": "Are you sure you want to sign out?",
         "mark_all_read": "Mark all as read",
-        "no_notifications_yet": "No notifications yet"
+        "no_notifications_yet": "No notifications yet",
+        "guest_name": "Guest",
+        "guest_major": "Campus Visitor",
+        "login_signup": "Login / Sign Up"
+    },
+    "notifications": {
+        "title_comment": "New Comment",
+        "title_reply": "New Reply",
+        "title_like": "New Like",
+        "post_comment": "{{name}} commented on your post.",
+        "post_reply": "{{name}} replied to your comment.",
+        "post_like": "Someone liked your post: \"{{content}}...\"",
+        "exchange_comment": "{{name}} commented on your {{course}} exchange.",
+        "exchange_like": "Someone liked your {{course}} exchange request!",
+        "teaming_comment": "{{name}} commented on your {{course}} teaming request.",
+        "teaming_like": "Someone liked your {{course}} teaming request!",
+        "review_like": "Someone liked your review for {{course}}!"
     },
     "map": {
         "title": "Map",
@@ -198,7 +214,9 @@
             "image_preview": "Image Preview",
             "recommend": "Recommend",
             "replies_count": "{{count}} Replies",
-            "empty_comments": "No comments yet, say something 👇",
+            "empty_comments": "No comments yet, say something! 👇",
+            "replying_to": "Replying to {{name}}",
+            "cancel_reply": "Cancel",
             "delete_post_title": "Delete Post",
             "delete_comment_title": "Delete Comment",
             "delete_post_confirm": "Are you sure you want to delete this post? This action cannot be undone.",
@@ -224,6 +242,35 @@
         "all_buildings": "All Buildings",
         "results": "Results",
         "swap_courses": "Swap"
+    },
+    "exchange": {
+        "title": "Swap",
+        "post_swap_request": "Post Swap Request",
+        "i_have": "I Have (Course Code)",
+        "i_want": "I Want (One or Multiple)",
+        "course_code": "Course Code",
+        "section": "Section",
+        "teacher": "Teacher",
+        "class_time": "Class Time",
+        "add_course": "Add Course",
+        "target_course": "Target Course #{{index}}",
+        "contact_methods": "Contact Methods (Select one or more)",
+        "custom_platform": "Custom Platform",
+        "platform_name": "Platform Name (e.g. Line, Kakao)",
+        "enter_id": "Enter your {{method}}",
+        "enter_info": "Enter your ID/Info",
+        "reason": "Reason (Optional)",
+        "reason_placeholder": "Reason...",
+        "publish_request": "Publish Request",
+        "select_section": "Select Section",
+        "confirm": "Confirm",
+        "note": "Note:",
+        "search_placeholder": "Search course code...",
+        "have_label": "HAVE",
+        "want_label": "WANT",
+        "sec_label": "Sec",
+        "contact_btn": "Contact",
+        "empty_list": "No swap requests found."
     },
     "auth": {
         "login_title": "Login",
@@ -278,7 +325,10 @@
         "forgot_password_subtitle": "Verify email to set a new password",
         "reset_password_btn": "Reset Password",
         "reset_success_msg": "Password reset successful",
-        "password_same_as_old": "New password cannot be the same as the old password. Please set a different password"
+        "password_same_as_old": "New password cannot be the same as the old password. Please set a different password",
+        "guest_login": "Just looking around",
+        "guest_prompt_title": "Login Required",
+        "guest_prompt_msg": "Login to interact, comment and post. Would you like to login now?"
     },
     "setup": {
         "title": "Who are you?",

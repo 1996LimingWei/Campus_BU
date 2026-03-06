@@ -10,9 +10,11 @@ import {
     Trash2,
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Animated,
+    DeviceEventEmitter,
     Dimensions,
     FlatList,
     Image,
@@ -30,6 +32,8 @@ import {
 import { ActionModal } from '../../components/campus/ActionModal';
 import { Toast, ToastType } from '../../components/campus/Toast';
 import { EduBadge } from '../../components/common/EduBadge';
+import { TranslatableText } from '../../components/common/TranslatableText';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { getCurrentUser } from '../../services/auth';
 import {
     addPostComment,
@@ -39,7 +43,7 @@ import {
     fetchPostComments,
     togglePostLike,
 } from '../../services/campus';
-import { Post } from '../../types';
+import { Post, PostComment } from '../../types';
 import { isHKBUEmail } from '../../utils/userUtils';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -83,6 +87,8 @@ export default function PostDetailScreen() {
         isTextOnly?: string;
     }>();
     const router = useRouter();
+    const { t } = useTranslation();
+    const { checkLogin } = useLoginPrompt();
 
     // ── Zoom entrance animation ────────────────────────────────────────────────
     const animScale = useRef(new Animated.Value(0.93)).current;
@@ -104,6 +110,8 @@ export default function PostDetailScreen() {
         message: '',
         type: 'success',
     });
+    const [replyTarget, setReplyTarget] = useState<PostComment | null>(null);
+    const commentInputRef = useRef<TextInput>(null);
 
     // Fire zoom animation immediately on mount
     useEffect(() => {
@@ -142,26 +150,61 @@ export default function PostDetailScreen() {
         }
     };
 
+    const organizedComments = React.useMemo(() => {
+        const rootComments = comments.filter(c => !c.parentCommentId);
+        const replyMap: Record<string, PostComment[]> = {};
+
+        comments.forEach(c => {
+            if (c.parentCommentId) {
+                if (!replyMap[c.parentCommentId]) replyMap[c.parentCommentId] = [];
+                replyMap[c.parentCommentId].push(c);
+            }
+        });
+
+        return rootComments.map(root => ({
+            ...root,
+            replies: replyMap[root.id] || []
+        }));
+    }, [comments]);
+
     useEffect(() => {
         loadData();
     }, [id]);
 
     const handleLike = async () => {
-        if (!post || !currentUser) return;
+        if (!checkLogin(currentUser)) return;
+        if (!post) return;
+        const wasLiked = post.isLiked;
+        const previousLikes = post.likes;
+
+        // Optimistic update
+        setPost(prev =>
+            prev
+                ? { ...prev, isLiked: !wasLiked, likes: wasLiked ? previousLikes - 1 : previousLikes + 1 }
+                : null
+        );
+
         try {
             await togglePostLike(post.id, currentUser.uid);
-            setPost(prev =>
-                prev
-                    ? { ...prev, isLiked: !prev.isLiked, likes: prev.isLiked ? prev.likes - 1 : prev.likes + 1 }
-                    : null
-            );
+            // Global sync
+            DeviceEventEmitter.emit('campus_post_updated', {
+                id: post.id,
+                updates: { isLiked: !wasLiked, likes: wasLiked ? previousLikes - 1 : previousLikes + 1 }
+            });
         } catch (error) {
             console.error('Error liking post:', error);
+            // Rollback on error
+            setPost(prev =>
+                prev
+                    ? { ...prev, isLiked: wasLiked, likes: previousLikes }
+                    : null
+            );
         }
     };
 
     const handleSendComment = async () => {
-        if (!commentText.trim() || !post || !currentUser) return;
+        if (!checkLogin(currentUser)) return;
+        if (!commentText.trim() || !post) return;
         try {
             setSubmitting(true);
             const newComment = await addPostComment({
@@ -171,11 +214,23 @@ export default function PostDetailScreen() {
                 authorEmail: (currentUser as any).email,
                 authorAvatar: currentUser.avatarUrl || undefined,
                 content: commentText.trim(),
+                parentCommentId: replyTarget?.parentCommentId || replyTarget?.id || undefined,
+                replyToName: replyTarget?.authorName || undefined,
             });
             if (newComment) {
                 setComments(prev => [...prev, newComment]);
-                setPost(prev => prev ? { ...prev, comments: prev.comments + 1 } : null);
+                setPost(prev => {
+                    const updated = prev ? { ...prev, comments: prev.comments + 1 } : null;
+                    if (updated) {
+                        DeviceEventEmitter.emit('campus_post_updated', {
+                            id: post.id,
+                            updates: { comments: updated.comments }
+                        });
+                    }
+                    return updated;
+                });
                 setCommentText('');
+                setReplyTarget(null);
                 Keyboard.dismiss();
                 setToast({ visible: true, message: '评论成功！', type: 'success' });
             }
@@ -204,6 +259,8 @@ export default function PostDetailScreen() {
                 await deletePost(post.id);
                 setDeleteModalVisible(false);
                 setToast({ visible: true, message: '已删除', type: 'success' });
+                // Global sync for deletion
+                DeviceEventEmitter.emit('campus_post_updated', { id: post.id, deleted: true });
                 setTimeout(() => router.back(), 1000);
             } catch {
                 setToast({ visible: true, message: '删除失败', type: 'error' });
@@ -405,7 +462,7 @@ export default function PostDetailScreen() {
                             </View>
                         ) : (
                             <>
-                                <Text style={styles.bodyText}>{post?.content}</Text>
+                                <TranslatableText style={styles.bodyText} text={post?.content ?? ''} />
                                 {post?.location?.name && (
                                     <View style={styles.locationTag}>
                                         <Text style={styles.locationTagText}>📍 {post.location.name}</Text>
@@ -421,40 +478,108 @@ export default function PostDetailScreen() {
                         <Text style={styles.commentsLabel}>
                             {loading
                                 ? ''
-                                : comments.length > 0
+                                : organizedComments.length > 0
                                     ? `共 ${comments.length} 条评论`
                                     : '暂无评论，来说点什么吧 👇'}
                         </Text>
 
-                        {!loading && comments.map(comment => (
-                            <View key={comment.id} style={styles.commentItem}>
-                                <View style={styles.commentAvatar}>
-                                    {comment.author_avatar && isValidUrl(comment.author_avatar) ? (
-                                        <Image source={{ uri: comment.author_avatar }} style={styles.avatarImg} />
-                                    ) : (
-                                        <Text style={styles.avatarLetter}>
-                                            {comment.author_name?.charAt(0).toUpperCase() ?? '?'}
-                                        </Text>
-                                    )}
-                                </View>
-                                <View style={styles.commentBody}>
-                                    <View style={styles.commentHeader}>
-                                        <Text style={styles.commentAuthor}>{comment.author_name}</Text>
-                                        <EduBadge shouldShow={isHKBUEmail(comment.author_email)} size="small" />
-                                        {currentUser?.uid === comment.author_id && (
-                                            <TouchableOpacity
-                                                onPress={() => triggerDeleteComment(comment.id)}
-                                                style={styles.deleteCommentBtn}
-                                            >
-                                                <Trash2 size={14} color="#EF4444" />
-                                            </TouchableOpacity>
+                        {!loading && organizedComments.map(comment => (
+                            <View key={comment.id} style={styles.commentContainer}>
+                                <View style={styles.commentItem}>
+                                    <View style={styles.commentAvatar}>
+                                        {comment.authorAvatar && isValidUrl(comment.authorAvatar) ? (
+                                            <Image source={{ uri: comment.authorAvatar }} style={styles.avatarImg} />
+                                        ) : (
+                                            <Text style={styles.avatarLetter}>
+                                                {comment.authorName?.charAt(0).toUpperCase() ?? '?'}
+                                            </Text>
                                         )}
                                     </View>
-                                    <Text style={styles.commentText}>{comment.content}</Text>
-                                    <Text style={styles.commentTime}>
-                                        {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
-                                    </Text>
+                                    <View style={styles.commentBody}>
+                                        <View style={styles.commentHeader}>
+                                            <Text style={styles.commentAuthor}>{comment.authorName}</Text>
+                                            <EduBadge shouldShow={isHKBUEmail(comment.authorEmail)} size="small" />
+                                            <View style={{ flex: 1 }} />
+                                            {currentUser?.uid === comment.authorId && (
+                                                <TouchableOpacity
+                                                    onPress={() => triggerDeleteComment(comment.id)}
+                                                    style={styles.commentActionBtn}
+                                                >
+                                                    <Trash2 size={14} color="#EF4444" />
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                        <TranslatableText style={styles.commentText} text={comment.content} />
+                                        <View style={styles.commentFooter}>
+                                            <Text style={styles.commentTime}>
+                                                {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+                                            </Text>
+                                            <TouchableOpacity
+                                                style={styles.replyBtn}
+                                                onPress={() => {
+                                                    setReplyTarget(comment);
+                                                    setTimeout(() => commentInputRef.current?.focus(), 100);
+                                                }}
+                                            >
+                                                <Text style={styles.replyBtnText}>回复</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
                                 </View>
+
+                                {/* Nested Replies */}
+                                {comment.replies && comment.replies.length > 0 && (
+                                    <View style={styles.repliesList}>
+                                        {comment.replies.map((reply: PostComment) => (
+                                            <View key={reply.id} style={styles.replyItem}>
+                                                <View style={styles.commentAvatarSmall}>
+                                                    {reply.authorAvatar && isValidUrl(reply.authorAvatar) ? (
+                                                        <Image source={{ uri: reply.authorAvatar }} style={styles.avatarImg} />
+                                                    ) : (
+                                                        <Text style={styles.avatarLetterSmall}>
+                                                            {reply.authorName?.charAt(0).toUpperCase() ?? '?'}
+                                                        </Text>
+                                                    )}
+                                                </View>
+                                                <View style={styles.commentBody}>
+                                                    <View style={styles.commentHeader}>
+                                                        <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
+                                                        {reply.replyToName && (
+                                                            <Text style={styles.replyToText}>
+                                                                {' '}▶ {reply.replyToName}
+                                                            </Text>
+                                                        )}
+                                                        <EduBadge shouldShow={isHKBUEmail(reply.authorEmail)} size="small" />
+                                                        <View style={{ flex: 1 }} />
+                                                        {currentUser?.uid === reply.authorId && (
+                                                            <TouchableOpacity
+                                                                onPress={() => triggerDeleteComment(reply.id)}
+                                                                style={styles.commentActionBtn}
+                                                            >
+                                                                <Trash2 size={12} color="#EF4444" />
+                                                            </TouchableOpacity>
+                                                        )}
+                                                    </View>
+                                                    <TranslatableText style={styles.commentTextSmall} text={reply.content} />
+                                                    <View style={styles.commentFooter}>
+                                                        <Text style={styles.commentTimeSmall}>
+                                                            {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
+                                                        </Text>
+                                                        <TouchableOpacity
+                                                            style={styles.replyBtn}
+                                                            onPress={() => {
+                                                                setReplyTarget(reply);
+                                                                setTimeout(() => commentInputRef.current?.focus(), 100);
+                                                            }}
+                                                        >
+                                                            <Text style={styles.replyBtnTextSmall}>回复</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
                             </View>
                         ))}
 
@@ -464,49 +589,63 @@ export default function PostDetailScreen() {
                 </ScrollView>
 
                 {/* ══ BOTTOM ACTION BAR ═══════════════════════════════════════════ */}
-                <View style={styles.bottomBar}>
-                    {/* Comment input */}
-                    <View style={styles.inputPill}>
-                        <TextInput
-                            style={styles.textInput}
-                            placeholder="说点什么..."
-                            placeholderTextColor="#9CA3AF"
-                            value={commentText}
-                            onChangeText={setCommentText}
-                            multiline
-                        />
-                        {commentText.trim().length > 0 && (
-                            <TouchableOpacity
-                                style={styles.sendBtn}
-                                onPress={handleSendComment}
-                                disabled={submitting}
-                            >
-                                {submitting ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <Send size={16} color="#fff" />
-                                )}
+                <View style={styles.bottomBarContainer}>
+                    {replyTarget && (
+                        <View style={styles.replyTargetBar}>
+                            <Text style={styles.replyTargetText} numberOfLines={1}>
+                                回复 @{replyTarget.authorName}: {replyTarget.content}
+                            </Text>
+                            <TouchableOpacity onPress={() => setReplyTarget(null)}>
+                                <Text style={styles.cancelReplyText}>取消</Text>
                             </TouchableOpacity>
-                        )}
+                        </View>
+                    )}
+                    <View style={styles.bottomBar}>
+                        {/* Comment input */}
+                        <View style={styles.inputPill}>
+                            <TextInput
+                                ref={commentInputRef}
+                                style={styles.textInput}
+                                placeholder={replyTarget ? `回复 @${replyTarget.authorName}...` : "说点什么..."}
+                                placeholderTextColor="#9CA3AF"
+                                value={commentText}
+                                onChangeText={setCommentText}
+                                multiline
+                                autoFocus={!!replyTarget}
+                            />
+                            {commentText.trim().length > 0 && (
+                                <TouchableOpacity
+                                    style={styles.sendBtn}
+                                    onPress={handleSendComment}
+                                    disabled={submitting}
+                                >
+                                    {submitting ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <Send size={16} color="#fff" />
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {/* Like */}
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleLike} disabled={loading || !post}>
+                            <Heart
+                                size={24}
+                                color={post?.isLiked ? '#EF4444' : '#6B7280'}
+                                fill={post?.isLiked ? '#EF4444' : 'transparent'}
+                            />
+                            <Text style={[styles.actionCount, post?.isLiked && { color: '#EF4444' }]}>
+                                {post?.likes ?? 0}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Comment count */}
+                        <TouchableOpacity style={styles.actionBtn}>
+                            <MessageCircle size={24} color="#6B7280" />
+                            <Text style={styles.actionCount}>{post?.comments ?? 0}</Text>
+                        </TouchableOpacity>
                     </View>
-
-                    {/* Like */}
-                    <TouchableOpacity style={styles.actionBtn} onPress={handleLike} disabled={loading || !post}>
-                        <Heart
-                            size={24}
-                            color={post?.isLiked ? '#EF4444' : '#6B7280'}
-                            fill={post?.isLiked ? '#EF4444' : 'transparent'}
-                        />
-                        <Text style={[styles.actionCount, post?.isLiked && { color: '#EF4444' }]}>
-                            {post?.likes ?? 0}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* Comment count */}
-                    <TouchableOpacity style={styles.actionBtn}>
-                        <MessageCircle size={24} color="#6B7280" />
-                        <Text style={styles.actionCount}>{post?.comments ?? 0}</Text>
-                    </TouchableOpacity>
                 </View>
 
                 {/* ── Modals ── */}
@@ -737,6 +876,9 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         marginBottom: 16,
     },
+    commentContainer: {
+        marginBottom: 20,
+    },
     commentItem: {
         flexDirection: 'row',
         marginBottom: 20,
@@ -766,6 +908,9 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#111827',
     },
+    commentActionBtn: {
+        padding: 4,
+    },
     deleteCommentBtn: {
         marginLeft: 'auto',
         padding: 4,
@@ -778,10 +923,98 @@ const styles = StyleSheet.create({
     commentTime: {
         fontSize: 11,
         color: '#9CA3AF',
-        marginTop: 4,
+    },
+    commentFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
+        gap: 12,
+    },
+    replyBtn: {
+        paddingVertical: 2,
+    },
+    replyBtnText: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontWeight: '600',
+    },
+    repliesList: {
+        marginLeft: 44,
+        marginTop: 12,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        padding: 8,
+    },
+    replyItem: {
+        flexDirection: 'row',
+        marginBottom: 12,
+        gap: 8,
+    },
+    commentAvatarSmall: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#1E3A8A',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        flexShrink: 0,
+    },
+    avatarLetterSmall: {
+        fontSize: 10,
+        color: '#fff',
+        fontWeight: '700',
+    },
+    commentAuthorSmall: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#374151',
+    },
+    replyToText: {
+        fontSize: 12,
+        color: '#6B7280',
+    },
+    commentTextSmall: {
+        fontSize: 13,
+        lineHeight: 18,
+        color: '#4B5563',
+        marginTop: 2,
+    },
+    commentTimeSmall: {
+        fontSize: 10,
+        color: '#9CA3AF',
+    },
+    replyBtnTextSmall: {
+        fontSize: 11,
+        color: '#6B7280',
+        fontWeight: '600',
     },
 
     // ── Bottom bar ────────────────────────────────────────────────────────────
+    bottomBarContainer: {
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#F0F2F8',
+    },
+    replyTargetBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: '#F9FAFB',
+        justifyContent: 'space-between',
+    },
+    replyTargetText: {
+        fontSize: 12,
+        color: '#6B7280',
+        flex: 1,
+        marginRight: 12,
+    },
+    cancelReplyText: {
+        fontSize: 12,
+        color: '#1E3A8A',
+        fontWeight: '600',
+    },
     bottomBar: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -789,9 +1022,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingTop: 12,
         paddingBottom: Platform.OS === 'ios' ? 34 : 14,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#F0F2F8',
     },
     inputPill: {
         flex: 1,

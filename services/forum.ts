@@ -134,6 +134,8 @@ export const addForumComment = async (data: {
     authorEmail?: string;
     authorAvatar?: string;
     content: string;
+    parentCommentId?: string;
+    replyToName?: string;
 }): Promise<ForumComment> => {
     const { data: row, error } = await supabase
         .from(FORUM_COMMENTS)
@@ -144,6 +146,8 @@ export const addForumComment = async (data: {
             author_email: data.authorEmail,
             author_avatar: data.authorAvatar,
             content: data.content,
+            parent_comment_id: data.parentCommentId,
+            reply_to_name: data.replyToName,
         }])
         .select()
         .single();
@@ -173,6 +177,8 @@ export const addForumComment = async (data: {
         authorEmail: row.author_email,
         authorAvatar: row.author_avatar,
         content: row.content,
+        parentCommentId: row.parent_comment_id,
+        replyToName: row.reply_to_name,
         createdAt: new Date(row.created_at),
     };
 };
@@ -195,6 +201,8 @@ export const fetchForumComments = async (postId: string): Promise<ForumComment[]
         authorEmail: row.author_email,
         authorAvatar: row.author_avatar,
         content: row.content,
+        parentCommentId: row.parent_comment_id,
+        replyToName: row.reply_to_name,
         createdAt: new Date(row.created_at),
     }));
 };

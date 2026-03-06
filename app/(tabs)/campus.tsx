@@ -1,10 +1,12 @@
 import { Image as ExpoImageLib } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Check, X as CloseIcon, Globe, Plus, Search } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Animated,
+  DeviceEventEmitter,
   Dimensions,
   FlatList,
   Modal,
@@ -25,6 +27,7 @@ import { Toast, ToastType } from '../../components/campus/Toast';
 import { EULAModal } from '../../components/common/EULAModal';
 import { Skeleton } from '../../components/common/Skeleton';
 import { ForumPostRow } from '../../components/forum/ForumPostRow';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import storage from '../../lib/storage';
 import { getCurrentUser } from '../../services/auth';
 import { deletePost, fetchPosts, subscribeToPosts, togglePostLike } from '../../services/campus';
@@ -37,6 +40,7 @@ type MainTab = 'discover' | 'forum';
 export default function CampusScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const { checkLogin } = useLoginPrompt();
 
   const CATEGORIES: { id: PostCategory; label: string }[] = [
     { id: 'All', label: t('campus.categories.all') },
@@ -109,6 +113,28 @@ export default function CampusScreen() {
   const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
   const [forumLoading, setForumLoading] = useState(false);
   const [forumRefreshing, setForumRefreshing] = useState(false);
+
+  // ── Sync status across views ──────────────────────────────────────
+  useEffect(() => {
+    const campusSub = DeviceEventEmitter.addListener('campus_post_updated', (data) => {
+      if (data.deleted) {
+        setPosts(prev => prev.filter(p => p.id !== data.id));
+      } else {
+        setPosts(prev => prev.map(p => p.id === data.id ? { ...p, ...data.updates } : p));
+      }
+    });
+    const forumSub = DeviceEventEmitter.addListener('forum_post_updated', (data) => {
+      if (data.deleted) {
+        setForumPosts(prev => prev.filter(p => p.id !== data.id));
+      } else {
+        setForumPosts(prev => prev.map(p => p.id === data.id ? { ...p, ...data.updates } : p));
+      }
+    });
+    return () => {
+      campusSub.remove();
+      forumSub.remove();
+    };
+  }, []);
 
   const loadForumPosts = async (isRefresh = false) => {
     try {
@@ -221,30 +247,45 @@ export default function CampusScreen() {
   );
 
   const handleCompose = useCallback(() => {
+    if (!checkLogin(currentUser)) return;
     if (mainTab === 'forum') {
       router.push('/forum/compose');
     } else {
       router.push('/campus/compose');
     }
-  }, [router, mainTab]);
+  }, [router, mainTab, currentUser, checkLogin]);
 
   const handleLike = useCallback(
     async (postId: string) => {
+      if (!checkLogin(currentUser)) return;
+      const post = posts.find(p => p.id === postId);
+      if (!post) return;
+
+      const wasLiked = post.isLiked;
+      // Optimistic update
+      setPosts(prev =>
+        prev.map(p =>
+          p.id === postId
+            ? { ...p, isLiked: !wasLiked, likes: wasLiked ? p.likes - 1 : p.likes + 1 }
+            : p
+        )
+      );
+
       try {
-        if (!currentUser) return;
         await togglePostLike(postId, currentUser.uid);
+      } catch (error) {
+        console.error('Error liking post:', error);
+        // Rollback on error
         setPosts(prev =>
           prev.map(p =>
             p.id === postId
-              ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+              ? { ...p, isLiked: wasLiked, likes: wasLiked ? p.likes : Math.max(0, p.likes) }
               : p
           )
         );
-      } catch (error) {
-        console.error('Error liking post:', error);
       }
     },
-    [currentUser]
+    [currentUser, posts]
   );
 
   const handleDeletePost = useCallback((postId: string) => {
@@ -429,21 +470,31 @@ export default function CampusScreen() {
                 <Text style={styles.emptySubtext}>{t('campus.empty.be_first')}</Text>
               </View>
             ) : (
-              <MasonryGrid
-                data={sortedPosts}
-                columnGap={8}
-                columnPadding={12}
-                keyExtractor={(post: Post) => post.id}
-                renderItem={(post: Post, index: number) => (
-                  <MasonryPostCard
-                    key={post.id}
-                    post={post}
-                    onPress={() => handlePostPress(post.id)}
-                    onLike={() => handleLike(post.id)}
-                    currentUserId={currentUser?.uid}
-                  />
+              <View>
+                <MasonryGrid
+                  data={currentUser ? sortedPosts : sortedPosts.slice(0, 4)}
+                  columnGap={8}
+                  columnPadding={12}
+                  keyExtractor={(post: Post) => post.id}
+                  renderItem={(post: Post, index: number) => (
+                    <MasonryPostCard
+                      key={post.id}
+                      post={post}
+                      onPress={() => handlePostPress(post.id)}
+                      onLike={() => handleLike(post.id)}
+                      currentUserId={currentUser?.uid}
+                    />
+                  )}
+                />
+                {!currentUser && sortedPosts.length > 4 && (
+                  <View style={styles.guestFooter}>
+                    <Text style={styles.guestFooterText}>{t('campus.guest_more_posts', 'Log in to discover more updates')}</Text>
+                    <TouchableOpacity style={styles.guestFooterButton} onPress={() => checkLogin(currentUser)}>
+                      <Text style={styles.guestFooterButtonText}>{t('auth.login_title', 'Log In / Sign Up')}</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
-              />
+              </View>
             )}
           </ScrollView>
         </View>
@@ -532,8 +583,15 @@ export default function CampusScreen() {
       </Animated.ScrollView>
 
       {/* ── FAB ── */}
-      <TouchableOpacity testID="new-post-fab" style={styles.fab} onPress={handleCompose}>
-        <Plus size={28} color="#fff" />
+      <TouchableOpacity testID="new-post-fab" style={styles.fab} onPress={handleCompose} activeOpacity={0.85}>
+        <LinearGradient
+          colors={['#3B82F6', '#1E3A8A']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabGradient}
+        >
+          <Plus size={28} color="#fff" />
+        </LinearGradient>
       </TouchableOpacity>
 
       {/* ── Modals ── */}
@@ -750,8 +808,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 12,
-    paddingBottom: 120,
+    paddingBottom: 100,
+  },
+  guestFooter: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  guestFooterText: {
+    fontSize: 15,
+    color: '#6B7280',
+    marginBottom: 16,
+  },
+  guestFooterButton: {
+    backgroundColor: '#1E3A8A',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 24,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  guestFooterButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 
   // ── Skeletons ────────────────────────────────────────────────────────────
@@ -828,9 +912,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 14,
     right: 14,
-    height: 2,
-    backgroundColor: '#EF4444',
-    borderRadius: 1,
+    height: 2.5,
+    backgroundColor: '#1E3A8A',
+    borderRadius: 2,
   },
   forumSortBar: {
     flexDirection: 'row',
@@ -889,14 +973,18 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#1E3A8A',
+    overflow: 'hidden',
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  fabGradient: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 
   // ── Language modal ────────────────────────────────────────────────────────

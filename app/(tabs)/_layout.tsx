@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AnimatedTabIcon } from '../../components/common/AnimatedTabIcon';
+import { useNotifications } from '../../context/NotificationContext';
 
 export default function TabLayout() {
   const { t } = useTranslation();
@@ -13,6 +14,7 @@ export default function TabLayout() {
 
   // Custom TabBar Component to handle the sliding indicator
   const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+    const { unreadCount } = useNotifications();
     // Filter out tabs that should be hidden (href: null) OR don't have an icon
     const visibleRoutes = state.routes.filter((r: any) => {
       const { options } = descriptors[r.key];
@@ -86,6 +88,13 @@ export default function TabLayout() {
                   color: isFocused ? '#1E3A8A' : '#8E8E93',
                   focused: isFocused
                 })}
+                {route.name === 'profile' && unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
                 <Text style={[styles.tabLabel, { color: isFocused ? '#1E3A8A' : '#8E8E93' }]}>
                   {label}
                 </Text>
@@ -204,5 +213,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     marginTop: 2,
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: '25%',
+    backgroundColor: '#EF4444',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
 });

@@ -4,7 +4,6 @@ import {
     ArrowLeft,
     ArrowLeftRight,
     AtSign,
-    Clock,
     Grid,
     Heart,
     List,
@@ -14,11 +13,14 @@ import {
     Search,
     Send,
     Trash2,
-    User,
-    Users,
     X
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, {
+    useEffect,
+    useRef,
+    useState
+} from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Alert,
@@ -36,8 +38,10 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TranslatableText } from '../../components/common/TranslatableText';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { getCurrentUser } from '../../services/auth';
-import { fetchExchangeComments, fetchExchanges, postExchange, postExchangeComment, toggleExchangeLike } from '../../services/exchange';
+import { deleteExchange, fetchExchangeComments, fetchExchanges, postExchange, postExchangeComment, toggleExchangeLike } from '../../services/exchange';
 import { ContactMethod, CourseExchange, ExchangeComment, ExchangeCourseDetail } from '../../types';
 
 const CONTACT_PLATFORMS = [
@@ -52,6 +56,8 @@ const CONTACT_PLATFORMS = [
 export default function ExchangeScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { t } = useTranslation();
+    const { checkLogin } = useLoginPrompt();
     const [exchanges, setExchanges] = useState<CourseExchange[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -60,9 +66,12 @@ export default function ExchangeScreen() {
     const [isContactModalVisible, setIsContactModalVisible] = useState(false);
     const [viewMode, setViewMode] = useState<'card' | 'compact'>('card');
     const [selectedExchange, setSelectedExchange] = useState<CourseExchange | null>(null);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [comments, setComments] = useState<ExchangeComment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [loadingComments, setLoadingComments] = useState(false);
+    const [replyTarget, setReplyTarget] = useState<ExchangeComment | null>(null);
+    const commentInputRef = useRef<TextInput>(null);
 
     // Post Form State
     const [haveCourse, setHaveCourse] = useState('');
@@ -111,8 +120,28 @@ export default function ExchangeScreen() {
     };
 
     useEffect(() => {
+        getCurrentUser().then(user => {
+            if (user) setCurrentUserId(user.uid);
+        });
         loadExchanges();
     }, []);
+
+    const organizedComments = React.useMemo(() => {
+        const rootComments = comments.filter(c => !c.parentCommentId);
+        const replyMap: Record<string, ExchangeComment[]> = {};
+
+        comments.forEach(c => {
+            if (c.parentCommentId) {
+                if (!replyMap[c.parentCommentId]) replyMap[c.parentCommentId] = [];
+                replyMap[c.parentCommentId].push(c);
+            }
+        });
+
+        return rootComments.map(root => ({
+            ...root,
+            replies: replyMap[root.id] || []
+        }));
+    }, [comments]);
 
     const loadExchanges = async () => {
         setLoading(true);
@@ -130,6 +159,7 @@ export default function ExchangeScreen() {
     };
 
     const handlePostExchange = async () => {
+        if (!checkLogin(currentUserId)) return;
         const validWants = wantCourses.filter(w => w.code.trim() !== '');
 
         if (!haveCourse || validWants.length === 0 || selectedMethods.length === 0) {
@@ -193,11 +223,9 @@ export default function ExchangeScreen() {
     };
 
     const handleToggleLike = async (exchangeId: string) => {
+        if (!checkLogin(currentUserId)) return;
         const user = await getCurrentUser();
-        if (!user) {
-            Alert.alert('Error', 'Login required');
-            return;
-        }
+        if (!user) return;
 
         // Optimistic UI
         setExchanges(prev => prev.map(e => {
@@ -218,6 +246,33 @@ export default function ExchangeScreen() {
             console.error('Like error:', error);
             // Revert on error could be added here
         }
+    };
+
+    const handleDeleteExchange = async (exchange: CourseExchange) => {
+        if (!currentUserId || currentUserId !== exchange.userId) return;
+
+        Alert.alert(
+            "Delete Request",
+            "Are you sure you want to delete this exchange request?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        // Optimistic UI update
+                        setExchanges(prev => prev.filter(e => e.id !== exchange.id));
+
+                        const result = await deleteExchange(exchange.id, currentUserId);
+                        if (!result.success) {
+                            Alert.alert("Error", result.error || "Failed to delete");
+                            // Revert on failure
+                            loadExchanges();
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const resetForm = () => {
@@ -258,22 +313,24 @@ export default function ExchangeScreen() {
     };
 
     const handleSendComment = async () => {
+        if (!checkLogin(currentUserId)) return;
         if (!newComment.trim() || !selectedExchange) return;
 
         const user = await getCurrentUser();
-        if (!user) {
-            Alert.alert('Error', 'Login required');
-            return;
-        }
+        if (!user) return;
 
         try {
             await postExchangeComment(selectedExchange.id, {
                 id: user.uid,
                 name: user.displayName || 'Anonymous',
                 avatar: user.photoURL || '👤'
-            }, newComment.trim());
+            }, newComment.trim(),
+                replyTarget?.parentCommentId || replyTarget?.id,
+                replyTarget?.authorName
+            );
 
             setNewComment('');
+            setReplyTarget(null);
             const data = await fetchExchangeComments(selectedExchange.id);
             setComments(data);
             setExchanges(prev => prev.map(e =>
@@ -308,96 +365,46 @@ export default function ExchangeScreen() {
             <View style={styles.cardHeader}>
                 <View style={styles.userInfo}>
                     {renderAvatar(item.userAvatar, styles.userAvatar)}
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.userNameRow}>
                         <Text style={styles.userName} numberOfLines={1}>{item.userName}</Text>
-                        <Text style={styles.userMajor} numberOfLines={1}>{item.userMajor}</Text>
+                        <View style={styles.dotSeparator} />
+                        <Text style={styles.cardTime}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                     </View>
                 </View>
-                <View style={styles.timeTag}>
-                    <Clock size={10} color="#9CA3AF" />
-                    <Text style={styles.cardTime}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-                </View>
+                {currentUserId === item.userId && (
+                    <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteExchange(item)}>
+                        <Trash2 size={16} color="#9CA3AF" />
+                    </TouchableOpacity>
+                )}
             </View>
 
             <View style={styles.mainExchangeRow}>
                 {/* HAVE SECTION */}
                 <View style={[styles.courseBlock, styles.haveBlock]}>
-                    <View style={styles.blockHeader}>
-                        <View style={styles.indicatorHave} />
-                        <Text style={styles.blockLabelHave}>HAVE</Text>
-                    </View>
+                    <Text style={styles.blockLabelHave}>{t('exchange.have_label')}</Text>
                     <Text style={styles.courseCodeMain}>{item.haveCourse}</Text>
-
-                    <View style={styles.detailList}>
-                        {item.haveSection && (
-                            <View style={styles.detailItem}>
-                                <Users size={12} color="#8B5CF6" />
-                                <Text style={styles.detailText}>{item.haveSection}</Text>
-                            </View>
-                        )}
-                        {item.haveTeacher && (
-                            <View style={styles.detailItem}>
-                                <User size={12} color="#8B5CF6" />
-                                <Text style={styles.detailText} numberOfLines={1}>{item.haveTeacher}</Text>
-                            </View>
-                        )}
-                        {item.haveTime && (
-                            <View style={styles.detailItem}>
-                                <Clock size={12} color="#8B5CF6" />
-                                <Text style={styles.detailText} numberOfLines={1}>{item.haveTime}</Text>
-                            </View>
-                        )}
-                    </View>
+                    {item.haveSection && <Text style={styles.detailTextTiny}>{t('exchange.sec_label')} {item.haveSection}</Text>}
                 </View>
 
                 {/* TRANSFER ICON */}
                 <View style={styles.transferIconWrapper}>
-                    <View style={styles.transferCircle}>
-                        <ArrowLeftRight size={16} color="#fff" />
-                    </View>
-                    <View style={styles.transferDashedLine} />
+                    <ArrowLeftRight size={20} color="#E5E7EB" />
                 </View>
 
                 {/* WANT SECTION */}
                 <View style={[styles.courseBlock, styles.wantBlock]}>
-                    <View style={styles.blockHeader}>
-                        <View style={styles.indicatorWant} />
-                        <Text style={styles.blockLabelWant}>WANT {item.wantCourses.length > 1 ? '(Any of)' : ''}</Text>
-                    </View>
-
-                    <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 150 }}>
-                        {item.wantCourses.map((want, idx) => (
-                            <View key={idx} style={[styles.wantItemDetail, idx > 0 && styles.wantItemDivider]}>
-                                <Text style={[styles.courseCodeMain, { color: '#065F46', fontSize: 15, marginBottom: 4 }]}>{want.code}</Text>
-                                <View style={styles.detailList}>
-                                    {want.section && (
-                                        <View style={styles.detailItem}>
-                                            <Users size={10} color="#10B981" />
-                                            <Text style={[styles.detailText, { color: '#065F46', fontSize: 11 }]}>{want.section}</Text>
-                                        </View>
-                                    )}
-                                    {want.teacher && (
-                                        <View style={styles.detailItem}>
-                                            <User size={10} color="#10B981" />
-                                            <Text style={[styles.detailText, { color: '#065F46', fontSize: 11 }]} numberOfLines={1}>{want.teacher}</Text>
-                                        </View>
-                                    )}
-                                    {want.time && (
-                                        <View style={styles.detailItem}>
-                                            <Clock size={10} color="#10B981" />
-                                            <Text style={[styles.detailText, { color: '#065F46', fontSize: 11 }]} numberOfLines={1}>{want.time}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-                        ))}
-                    </ScrollView>
+                    <Text style={styles.blockLabelWant}>{t('exchange.want_label')}</Text>
+                    {item.wantCourses.map((want, idx) => (
+                        <View key={idx} style={styles.wantItemMini}>
+                            <Text style={styles.courseCodeMainWant}>{want.code}</Text>
+                            {want.section && <Text style={styles.detailTextTinyWant}>{t('exchange.sec_label')} {want.section}</Text>}
+                        </View>
+                    ))}
                 </View>
             </View>
 
             {item.reason && (
                 <View style={styles.reasonBox}>
-                    <Text style={styles.reasonTitle}>Note:</Text>
                     <Text style={styles.reasonBody} numberOfLines={2}>{item.reason}</Text>
                 </View>
             )}
@@ -417,12 +424,14 @@ export default function ExchangeScreen() {
                 <TouchableOpacity
                     style={styles.contactBtn}
                     onPress={() => {
-                        setSelectedExchange(item);
-                        setIsContactModalVisible(true);
+                        if (checkLogin(currentUserId)) {
+                            setSelectedExchange(item);
+                            setIsContactModalVisible(true);
+                        }
                     }}
                 >
-                    <AtSign size={16} color="#fff" />
-                    <Text style={styles.contactBtnText}>Contact</Text>
+                    <AtSign size={14} color="#fff" />
+                    <Text style={styles.contactBtnText}>{t('exchange.contact_btn')}</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -432,8 +441,10 @@ export default function ExchangeScreen() {
         <TouchableOpacity
             style={styles.compactCard}
             onPress={() => {
-                setSelectedExchange(item);
-                setIsContactModalVisible(true);
+                if (checkLogin(currentUserId)) {
+                    setSelectedExchange(item);
+                    setIsContactModalVisible(true);
+                }
             }}
         >
             <View style={styles.compactCourseRow}>
@@ -481,7 +492,7 @@ export default function ExchangeScreen() {
                 }} style={styles.backButton}>
                     <ArrowLeft size={24} color="#fff" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>換課</Text>
+                <Text style={styles.headerTitle}>{t('exchange.title')}</Text>
                 <TouchableOpacity
                     style={styles.viewToggle}
                     onPress={() => setViewMode(viewMode === 'card' ? 'compact' : 'card')}
@@ -496,7 +507,7 @@ export default function ExchangeScreen() {
                     <Search size={20} color="#9CA3AF" />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="輸入課程代碼..."
+                        placeholder={t('exchange.search_placeholder')}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                     />
@@ -517,7 +528,7 @@ export default function ExchangeScreen() {
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <ArrowLeftRight size={48} color="#D1D5DB" />
-                            <Text style={styles.emptyText}>No swap requests found.</Text>
+                            <Text style={styles.emptyText}>{t('exchange.empty_list')}</Text>
                         </View>
                     }
                 />
@@ -526,7 +537,11 @@ export default function ExchangeScreen() {
             {/* Post FAB */}
             <TouchableOpacity
                 style={styles.fab}
-                onPress={() => setIsPostModalVisible(true)}
+                onPress={() => {
+                    if (checkLogin(currentUserId)) {
+                        setIsPostModalVisible(true);
+                    }
+                }}
             >
                 <Plus size={30} color="#fff" />
             </TouchableOpacity>
@@ -545,7 +560,7 @@ export default function ExchangeScreen() {
                     >
                         <View style={[styles.modalContent, { maxHeight: '90%' }]} onStartShouldSetResponder={() => true}>
                             <View style={styles.modalHeader}>
-                                <Text style={styles.modalTitle}>Post Swap Request</Text>
+                                <Text style={styles.modalTitle}>{t('exchange.post_swap_request')}</Text>
                                 <TouchableOpacity onPress={() => setIsPostModalVisible(false)}>
                                     <X size={24} color="#6B7280" />
                                 </TouchableOpacity>
@@ -559,10 +574,10 @@ export default function ExchangeScreen() {
                                 keyboardShouldPersistTaps="handled"
                             >
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.inputLabel}>I Have (Course Code)</Text>
+                                    <Text style={styles.inputLabel}>{t('exchange.i_have')}</Text>
                                     <TextInput
                                         style={styles.input}
-                                        placeholder="Course Code"
+                                        placeholder={t('exchange.course_code')}
                                         placeholderTextColor="#9CA3AF"
                                         value={haveCourse}
                                         onChangeText={(text) => setHaveCourse(text.toUpperCase().replace(/[^A-Z0-9.]/g, ''))}
@@ -574,12 +589,12 @@ export default function ExchangeScreen() {
                                             onPress={() => openSectionPicker('have')}
                                         >
                                             <Text style={{ color: haveSection ? '#111' : '#9CA3AF' }}>
-                                                {haveSection ? `Section ${haveSection}` : 'Section'}
+                                                {haveSection ? `${t('exchange.section')} ${haveSection}` : t('exchange.section')}
                                             </Text>
                                         </TouchableOpacity>
                                         <TextInput
                                             style={[styles.input, { flex: 2, marginTop: 10 }]}
-                                            placeholder="Teacher"
+                                            placeholder={t('exchange.teacher')}
                                             placeholderTextColor="#9CA3AF"
                                             value={haveTeacher}
                                             onChangeText={setHaveTeacher}
@@ -587,7 +602,7 @@ export default function ExchangeScreen() {
                                     </View>
                                     <TextInput
                                         style={[styles.input, { marginTop: 10 }]}
-                                        placeholder="Class Time"
+                                        placeholder={t('exchange.class_time')}
                                         placeholderTextColor="#9CA3AF"
                                         value={haveTime}
                                         onChangeText={setHaveTime}
@@ -596,17 +611,17 @@ export default function ExchangeScreen() {
 
                                 <View style={styles.inputGroup}>
                                     <View style={styles.sectionHeader}>
-                                        <Text style={styles.inputLabel}>I Want (One or Multiple)</Text>
+                                        <Text style={styles.inputLabel}>{t('exchange.i_want')}</Text>
                                         <TouchableOpacity onPress={addWantCourse} style={styles.addBtn}>
                                             <PlusCircle size={20} color="#8B5CF6" />
-                                            <Text style={styles.addBtnText}>Add Course</Text>
+                                            <Text style={styles.addBtnText}>{t('exchange.add_course')}</Text>
                                         </TouchableOpacity>
                                     </View>
 
                                     {wantCourses.map((want, index) => (
                                         <View key={index} style={[styles.wantFormItem, index > 0 && { marginTop: 20, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 20 }]}>
                                             <View style={styles.wantFormHeader}>
-                                                <Text style={styles.wantFormTitle}>Target Course #{index + 1}</Text>
+                                                <Text style={styles.wantFormTitle}>{t('exchange.target_course', { index: index + 1 })}</Text>
                                                 {wantCourses.length > 1 && (
                                                     <TouchableOpacity onPress={() => removeWantCourse(index)}>
                                                         <Trash2 size={18} color="#EF4444" />
@@ -615,7 +630,7 @@ export default function ExchangeScreen() {
                                             </View>
                                             <TextInput
                                                 style={styles.input}
-                                                placeholder="Course Code"
+                                                placeholder={t('exchange.course_code')}
                                                 placeholderTextColor="#9CA3AF"
                                                 value={want.code}
                                                 onChangeText={(text) => updateWantCourse(index, 'code', text.toUpperCase().replace(/[^A-Z0-9.]/g, ''))}
@@ -627,12 +642,12 @@ export default function ExchangeScreen() {
                                                     onPress={() => openSectionPicker('want', index)}
                                                 >
                                                     <Text style={{ color: want.section ? '#111' : '#9CA3AF' }}>
-                                                        {want.section ? `Section ${want.section}` : 'Section'}
+                                                        {want.section ? `${t('exchange.section')} ${want.section}` : t('exchange.section')}
                                                     </Text>
                                                 </TouchableOpacity>
                                                 <TextInput
                                                     style={[styles.input, { flex: 2, marginTop: 10 }]}
-                                                    placeholder="Teacher"
+                                                    placeholder={t('exchange.teacher')}
                                                     placeholderTextColor="#9CA3AF"
                                                     value={want.teacher}
                                                     onChangeText={(text) => updateWantCourse(index, 'teacher', text)}
@@ -640,7 +655,7 @@ export default function ExchangeScreen() {
                                             </View>
                                             <TextInput
                                                 style={[styles.input, { marginTop: 10 }]}
-                                                placeholder="Class Time"
+                                                placeholder={t('exchange.class_time')}
                                                 placeholderTextColor="#9CA3AF"
                                                 value={want.time}
                                                 onChangeText={(text) => updateWantCourse(index, 'time', text)}
@@ -650,7 +665,7 @@ export default function ExchangeScreen() {
                                 </View>
 
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.inputLabel}>Contact Methods (Select one or more)</Text>
+                                    <Text style={styles.inputLabel}>{t('exchange.contact_methods')}</Text>
                                     <View style={styles.chipContainer}>
                                         {CONTACT_PLATFORMS.map(platform => (
                                             <TouchableOpacity
@@ -677,7 +692,7 @@ export default function ExchangeScreen() {
                                     <View key={method} style={styles.dynamicInputContainer}>
                                         <View style={styles.dynamicHeader}>
                                             <Text style={styles.dynamicLabel}>
-                                                {method === 'Other' ? 'Custom Platform' : `${method} ID`}
+                                                {method === 'Other' ? t('exchange.custom_platform') : `${method} ID`}
                                             </Text>
                                             <TouchableOpacity onPress={() => toggleMethod(method)}>
                                                 <X size={14} color="#EF4444" />
@@ -687,7 +702,7 @@ export default function ExchangeScreen() {
                                         {method === 'Other' && (
                                             <TextInput
                                                 style={[styles.input, { marginBottom: 10 }]}
-                                                placeholder="Platform Name (e.g. Line, Kakao)"
+                                                placeholder={t('exchange.platform_name')}
                                                 value={otherPlatformName}
                                                 onChangeText={setOtherPlatformName}
                                             />
@@ -695,7 +710,7 @@ export default function ExchangeScreen() {
 
                                         <TextInput
                                             style={styles.input}
-                                            placeholder={method === 'Email' ? 'example@email.com' : `Enter your ${method === 'Other' ? 'ID/Info' : method}`}
+                                            placeholder={method === 'Email' ? 'example@email.com' : t('exchange.enter_id', { method: method === 'Other' ? t('exchange.enter_info') : method })}
                                             value={contactValues[method] || ''}
                                             onChangeText={(text) => setContactValues(prev => ({ ...prev, [method]: text }))}
                                             keyboardType={method === 'Email' ? 'email-address' : 'default'}
@@ -704,10 +719,10 @@ export default function ExchangeScreen() {
                                 ))}
 
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.inputLabel}>Reason (Optional)</Text>
+                                    <Text style={styles.inputLabel}>{t('exchange.reason')}</Text>
                                     <TextInput
                                         style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-                                        placeholder="Reason"
+                                        placeholder={t('exchange.reason_placeholder')}
                                         placeholderTextColor="#9CA3AF"
                                         multiline
                                         value={reason}
@@ -720,7 +735,7 @@ export default function ExchangeScreen() {
                                     onPress={handlePostExchange}
                                     disabled={submitting}
                                 >
-                                    {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Publish Request</Text>}
+                                    {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{t('exchange.publish_request')}</Text>}
                                 </TouchableOpacity>
                                 <View style={{ height: 40 }} />
                             </ScrollView>
@@ -731,7 +746,7 @@ export default function ExchangeScreen() {
                                     <Pressable style={{ flex: 1 }} onPress={() => setIsSectionPickerVisible(false)} />
                                     <View style={styles.pickerContent}>
                                         <View style={styles.pickerHeader}>
-                                            <Text style={styles.pickerTitle}>Select Section</Text>
+                                            <Text style={styles.pickerTitle}>{t('exchange.select_section')}</Text>
                                             <TouchableOpacity onPress={() => setIsSectionPickerVisible(false)}>
                                                 <X size={24} color="#6B7280" />
                                             </TouchableOpacity>
@@ -756,7 +771,7 @@ export default function ExchangeScreen() {
                                             style={styles.pickerConfirmBtn}
                                             onPress={() => setIsSectionPickerVisible(false)}
                                         >
-                                            <Text style={styles.pickerConfirmText}>Confirm</Text>
+                                            <Text style={styles.pickerConfirmText}>{t('exchange.confirm')}</Text>
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -791,16 +806,56 @@ export default function ExchangeScreen() {
                                 <ActivityIndicator style={{ padding: 40 }} />
                             ) : (
                                 <FlatList
-                                    data={comments}
+                                    data={organizedComments}
                                     keyExtractor={(item) => item.id}
                                     renderItem={({ item }) => (
-                                        <View style={styles.commentRow}>
-                                            {renderAvatar(item.authorAvatar, styles.commentAvatar)}
-                                            <View style={styles.commentInfo}>
-                                                <Text style={styles.commentAuthor}>{item.authorName}</Text>
-                                                <Text style={styles.commentText}>{item.content}</Text>
-                                                <Text style={styles.commentTime}>{new Date(item.createdAt).toLocaleTimeString()}</Text>
+                                        <View style={styles.commentContainer}>
+                                            <View style={styles.commentRow}>
+                                                {renderAvatar(item.authorAvatar, styles.commentAvatar)}
+                                                <View style={styles.commentInfo}>
+                                                    <View style={styles.commentHeaderInternal}>
+                                                        <Text style={styles.commentAuthor}>{item.authorName}</Text>
+                                                        <TouchableOpacity onPress={() => {
+                                                            setReplyTarget(item);
+                                                            setTimeout(() => commentInputRef.current?.focus(), 100);
+                                                        }}>
+                                                            <Text style={styles.replyActionText}>{t('forum.row.replies')}</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                    <TranslatableText style={styles.commentText} text={item.content} />
+                                                    <Text style={styles.commentTime}>{new Date(item.createdAt).toLocaleString()}</Text>
+                                                </View>
                                             </View>
+
+                                            {/* Replies */}
+                                            {item.replies && item.replies.length > 0 && (
+                                                <View style={styles.nestedReplies}>
+                                                    {item.replies.map((reply: ExchangeComment) => (
+                                                        <View key={reply.id} style={styles.commentRowSmall}>
+                                                            {renderAvatar(reply.authorAvatar, styles.commentAvatarSmall)}
+                                                            <View style={styles.commentInfoSmall}>
+                                                                <View style={styles.commentHeaderInternal}>
+                                                                    <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
+                                                                    {reply.replyToName && (
+                                                                        <Text style={styles.replyIndicator}> ▶ {reply.replyToName}</Text>
+                                                                    )}
+                                                                    <TouchableOpacity
+                                                                        onPress={() => {
+                                                                            setReplyTarget(reply);
+                                                                            setTimeout(() => commentInputRef.current?.focus(), 100);
+                                                                        }}
+                                                                        style={{ marginLeft: 'auto' }}
+                                                                    >
+                                                                        <Text style={styles.replyActionTextSmall}>{t('forum.row.replies')}</Text>
+                                                                    </TouchableOpacity>
+                                                                </View>
+                                                                <TranslatableText style={styles.commentTextSmall} text={reply.content} />
+                                                                <Text style={styles.commentTimeSmall}>{new Date(reply.createdAt).toLocaleString()}</Text>
+                                                            </View>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            )}
                                         </View>
                                     )}
                                     contentContainerStyle={{ padding: 20 }}
@@ -808,13 +863,24 @@ export default function ExchangeScreen() {
                                 />
                             )}
 
+                            {replyTarget && (
+                                <View style={styles.replyBar}>
+                                    <Text style={styles.replyBarText} numberOfLines={1}>
+                                        {t('forum.detail.replying_to', { name: replyTarget.authorName })}: {replyTarget.content}
+                                    </Text>
+                                    <TouchableOpacity onPress={() => setReplyTarget(null)}>
+                                        <X size={16} color="#8B5CF6" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                             <View style={styles.commentInputRow}>
                                 <TextInput
+                                    ref={commentInputRef}
                                     style={styles.commentInput}
-                                    placeholder="Write a comment..."
+                                    placeholder={replyTarget ? t('forum.detail.replying_to', { name: replyTarget.authorName }) : "Add a comment..."}
                                     value={newComment}
                                     onChangeText={setNewComment}
-                                    multiline={false}
+                                    multiline
                                 />
                                 <TouchableOpacity style={styles.sendButton} onPress={handleSendComment}>
                                     <Send size={20} color="#fff" />
@@ -966,6 +1032,18 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         marginTop: 1,
     },
+    userNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    dotSeparator: {
+        width: 3,
+        height: 3,
+        borderRadius: 1.5,
+        backgroundColor: '#D1D5DB',
+        marginHorizontal: 6,
+    },
     timeTag: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -980,22 +1058,26 @@ const styles = StyleSheet.create({
         marginLeft: 4,
         fontWeight: '500',
     },
+    deleteBtn: {
+        padding: 4,
+    },
     mainExchangeRow: {
         flexDirection: 'row',
-        alignItems: 'stretch',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 16,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 16,
+        padding: 12,
+        marginBottom: 10,
     },
     courseBlock: {
         flex: 1,
-        padding: 12,
-        borderRadius: 16,
     },
     haveBlock: {
-        backgroundColor: '#F5F3FF',
+        alignItems: 'flex-start',
     },
     wantBlock: {
-        backgroundColor: '#ECFDF5',
+        alignItems: 'flex-end',
     },
     blockHeader: {
         flexDirection: 'row',
@@ -1021,18 +1103,42 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: '#7C3AED',
         letterSpacing: 0.5,
+        marginBottom: 4,
     },
     blockLabelWant: {
         fontSize: 10,
         fontWeight: '900',
         color: '#059669',
         letterSpacing: 0.5,
+        marginBottom: 4,
     },
     courseCodeMain: {
-        fontSize: 17,
+        fontSize: 15,
         fontWeight: '800',
-        color: '#4B3BC3',
-        marginBottom: 8,
+        color: '#111827',
+        letterSpacing: -0.5,
+    },
+    courseCodeMainWant: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#065F46',
+        letterSpacing: -0.5,
+    },
+    detailTextTiny: {
+        fontSize: 11,
+        color: '#6B7280',
+        marginTop: 2,
+        fontWeight: '500',
+    },
+    detailTextTinyWant: {
+        fontSize: 11,
+        color: '#059669',
+        marginTop: 2,
+        fontWeight: '500',
+    },
+    wantItemMini: {
+        alignItems: 'flex-end',
+        marginBottom: 2,
     },
     detailList: {
         gap: 6,
@@ -1057,7 +1163,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     transferIconWrapper: {
-        width: 40,
+        paddingHorizontal: 8,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -1078,21 +1184,19 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
     reasonBox: {
-        backgroundColor: '#F9FAFB',
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 16,
+        marginBottom: 10,
+        paddingHorizontal: 4,
     },
     reasonTitle: {
         fontSize: 11,
         fontWeight: '700',
-        color: '#6B7280',
+        color: '#9CA3AF',
         marginBottom: 4,
+        textTransform: 'uppercase',
     },
     reasonBody: {
         fontSize: 13,
         color: '#4B5563',
-        fontStyle: 'italic',
         lineHeight: 18,
     },
     cardFooter: {
@@ -1101,7 +1205,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderTopWidth: 1,
         borderTopColor: '#F3F4F6',
-        paddingTop: 16,
+        paddingTop: 10,
     },
     leftActions: {
         flexDirection: 'row',
@@ -1129,7 +1233,7 @@ const styles = StyleSheet.create({
     contactBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#111827',
+        backgroundColor: '#8B5CF6',
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 12,
@@ -1417,9 +1521,94 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#111827',
     },
+    commentContainer: {
+        marginBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+        paddingBottom: 16,
+    },
     commentRow: {
         flexDirection: 'row',
-        marginBottom: 20,
+        marginBottom: 8,
+    },
+    commentRowSmall: {
+        flexDirection: 'row',
+        marginBottom: 12,
+    },
+    commentHeaderInternal: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    replyActionText: {
+        fontSize: 12,
+        color: '#8B5CF6',
+        fontWeight: '700',
+    },
+    replyActionTextSmall: {
+        fontSize: 11,
+        color: '#8B5CF6',
+        fontWeight: '700',
+    },
+    nestedReplies: {
+        marginLeft: 48,
+        marginTop: 12,
+        paddingLeft: 12,
+        borderLeftWidth: 2,
+        borderLeftColor: '#F3F4F6',
+    },
+    replyIndicator: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginHorizontal: 4,
+    },
+    commentAvatarSmall: {
+        fontSize: 18,
+        width: 28,
+        height: 28,
+        marginRight: 10,
+        borderRadius: 14,
+        textAlign: 'center',
+        lineHeight: 28,
+        backgroundColor: '#F3F4F6',
+    },
+    commentInfoSmall: {
+        flex: 1,
+        backgroundColor: '#F9FAFB',
+        padding: 12,
+        borderRadius: 16,
+    },
+    commentAuthorSmall: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    commentTextSmall: {
+        fontSize: 13,
+        color: '#374151',
+        lineHeight: 18,
+    },
+    commentTimeSmall: {
+        fontSize: 9,
+        color: '#9CA3AF',
+        marginTop: 4,
+    },
+    replyBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#F5F3FF',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#E9E4FF',
+    },
+    replyBarText: {
+        fontSize: 12,
+        color: '#7C3AED',
+        flex: 1,
+        marginRight: 10,
     },
     commentAvatar: {
         fontSize: 24,

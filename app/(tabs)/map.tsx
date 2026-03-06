@@ -12,6 +12,7 @@ import {
     Dimensions,
     Easing,
     Image,
+    InteractionManager,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -648,7 +649,10 @@ export default function MapScreen() {
     // Refresh data when screen is focused
     useFocusEffect(
         useCallback(() => {
-            loadPostsData();
+            const task = InteractionManager.runAfterInteractions(() => {
+                loadPostsData();
+            });
+            return () => task.cancel();
         }, [loadPostsData])
     );
 
