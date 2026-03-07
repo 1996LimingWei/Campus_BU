@@ -11,6 +11,11 @@ export interface Notification {
     created_at: string;
 }
 
+export interface NotificationCountSummary {
+    unreadCount: number;
+    hasUnread: boolean;
+}
+
 /**
  * Fetch all notifications for a specific user
  */
@@ -23,6 +28,25 @@ export const fetchNotifications = async (userId: string): Promise<Notification[]
 
     if (error) throw error;
     return data || [];
+};
+
+/**
+ * Fetch unread notification summary for a specific user without loading all rows.
+ */
+export const fetchUnreadNotificationSummary = async (userId: string): Promise<NotificationCountSummary> => {
+    const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+
+    if (error) throw error;
+
+    const unreadCount = count || 0;
+    return {
+        unreadCount,
+        hasUnread: unreadCount > 0,
+    };
 };
 
 /**
@@ -65,17 +89,29 @@ export const createNotification = async (data: Omit<Notification, 'id' | 'create
  * Subscribe to real-time notification updates for a user
  */
 export const subscribeToNotifications = (userId: string, callback: (payload: any) => void) => {
-    return supabase
-        .channel(`notifications:user_id=eq.${userId}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'notifications',
-                filter: `user_id=eq.${userId}`,
-            },
-            callback
-        )
-        .subscribe();
+    const channel = supabase.channel(`notifications:user_id=eq.${userId}`);
+
+    channel.on(
+        'postgres_changes',
+        {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`,
+        },
+        callback
+    );
+
+    channel.on(
+        'postgres_changes',
+        {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`,
+        },
+        callback
+    );
+
+    return channel.subscribe();
 };

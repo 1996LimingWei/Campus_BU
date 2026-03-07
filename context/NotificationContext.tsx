@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { getCurrentUser } from '../services/auth';
-import { fetchNotifications, subscribeToNotifications } from '../services/notifications';
+import { fetchUnreadNotificationSummary, subscribeToNotifications } from '../services/notifications';
 
 interface NotificationContextType {
     unreadCount: number;
+    hasUnread: boolean;
     refreshCount: () => Promise<void>;
     clearCount: () => void;
 }
@@ -12,14 +13,18 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [unreadCount, setUnreadCount] = useState(0);
+    const [hasUnread, setHasUnread] = useState(false);
 
     const refreshCount = useCallback(async () => {
         try {
             const user = await getCurrentUser();
             if (user) {
-                const notifications = await fetchNotifications(user.uid);
-                const unread = notifications.filter(n => !n.is_read).length;
-                setUnreadCount(unread);
+                const summary = await fetchUnreadNotificationSummary(user.uid);
+                setUnreadCount(summary.unreadCount);
+                setHasUnread(summary.hasUnread);
+            } else {
+                setUnreadCount(0);
+                setHasUnread(false);
             }
         } catch (error) {
             console.error('Error refreshing notification count:', error);
@@ -28,6 +33,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const clearCount = useCallback(() => {
         setUnreadCount(0);
+        setHasUnread(false);
     }, []);
 
     useEffect(() => {
@@ -41,11 +47,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
                 // Subscribe to real-time updates
                 subscription = subscribeToNotifications(user.uid, (payload) => {
-                    if (payload.new && !payload.new.is_read) {
+                    if (payload.eventType === 'INSERT' && payload.new && !payload.new.is_read) {
+                        setHasUnread(true);
                         setUnreadCount(prev => prev + 1);
-                    } else if (payload.old && payload.new && payload.old.is_read === false && payload.new.is_read === true) {
-                        // If marked as read, decrease count
-                        setUnreadCount(prev => Math.max(0, prev - 1));
+                    } else if (
+                        payload.eventType === 'UPDATE' &&
+                        payload.old &&
+                        payload.new &&
+                        payload.old.is_read === false &&
+                        payload.new.is_read === true
+                    ) {
+                        setUnreadCount(prev => {
+                            const nextCount = Math.max(0, prev - 1);
+                            return nextCount;
+                        });
+                        refreshCount().catch((error) => {
+                            console.error('Error refreshing notification count after read update:', error);
+                        });
+                    } else if (
+                        payload.eventType === 'UPDATE' &&
+                        payload.old &&
+                        payload.new &&
+                        payload.old.is_read === true &&
+                        payload.new.is_read === false
+                    ) {
+                        setHasUnread(true);
+                        setUnreadCount(prev => prev + 1);
                     }
                 });
             }
@@ -59,7 +86,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }, [refreshCount]);
 
     return (
-        <NotificationContext.Provider value={{ unreadCount, refreshCount, clearCount }}>
+        <NotificationContext.Provider value={{ unreadCount, hasUnread, refreshCount, clearCount }}>
             {children}
         </NotificationContext.Provider>
     );

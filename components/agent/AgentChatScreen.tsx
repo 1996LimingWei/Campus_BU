@@ -3,6 +3,7 @@ import { ArrowLeft, Bot, Send, Sparkles, User } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -12,6 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { APP_CONFIG } from '../../constants/Config';
 import { agentBridge } from '../../services/agent/bridge';
@@ -26,6 +28,7 @@ interface AgentChatScreenProps {
 
 export default function AgentChatScreen({ showBackButton = false }: AgentChatScreenProps) {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState<{
         role: 'user' | 'assistant',
@@ -35,6 +38,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         id?: string
     }[]>([]);
     const [loading, setLoading] = useState(false);
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
     const [showWebView, setShowWebView] = useState(false);
     const [useLangGraph, setUseLangGraph] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
@@ -68,6 +72,19 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
             agentBridge.setWebView(webViewRef as unknown as React.RefObject<WebView>);
         }
     });
+
+    useEffect(() => {
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+        const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+        const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     useEffect(() => {
         const setupLangGraphCallbacks = async () => {
@@ -158,53 +175,70 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         }
     };
 
+    const bottomComposerOffset = showBackButton
+        ? Math.max(insets.bottom, 16)
+        : keyboardVisible
+            ? Math.max(insets.bottom, 4)
+            : Math.max(insets.bottom + 68, 76);
+
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.container}
             keyboardVerticalOffset={0}
         >
-            <View style={styles.header}>
-                {showBackButton ? (
-                    <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-                        <ArrowLeft size={24} color="#1E3A8A" />
-                    </TouchableOpacity>
-                ) : (
-                    <View style={styles.backSpacer} />
-                )}
-                <View style={styles.headerInfo}>
-                    <Text style={styles.headerTitle}>创新实验室校园生活 Agent</Text>
-                    {APP_CONFIG.shouldShowDebug(currentUser?.uid) && (
-                        <View style={styles.statusRow}>
-                            <View style={styles.statusDot} />
-                            <Text style={styles.statusText}>AI 实验室 {useLangGraph ? '(LG)' : ''}</Text>
+            <View style={[styles.headerShell, { paddingTop: Math.max(insets.top, 12) + 4 }]}>
+                <View style={styles.headerTopRow}>
+                    {showBackButton ? (
+                        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+                            <ArrowLeft size={18} color="#1E3A8A" />
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.backSpacer} />
+                    )}
+                    <View style={styles.headerTitleGroup}>
+                        <View style={styles.headerAgentBadge}>
+                            <Bot size={22} color="#1E3A8A" />
                         </View>
-                    )}
-                </View>
-                <View style={styles.headerActions}>
-                    {APP_CONFIG.shouldShowDebug(currentUser?.uid) && (
-                        <>
-                            <TouchableOpacity onPress={() => {
-                                setUseLangGraph(!useLangGraph);
-                                setMessages(prev => [...prev, {
-                                    role: 'assistant',
-                                    content: `已切换至 ${!useLangGraph ? 'LangGraph (Pilot)' : '标准引擎'}`
-                                }]);
-                            }} style={[styles.pilotButton, useLangGraph && styles.pilotButtonActive]}>
-                                <Text style={[styles.pilotButtonText, useLangGraph && styles.pilotButtonTextActive]}>PILOT</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setShowWebView(!showWebView)} style={styles.debugButton}>
-                                <Bot size={20} color={showWebView ? '#3B82F6' : '#6B7280'} />
-                            </TouchableOpacity>
-                        </>
-                    )}
+                        <View>
+                            <Text style={styles.headerTitle}>Campus Agent</Text>
+                            <Text style={styles.headerSubtitle}>校园信息助手</Text>
+                        </View>
+                    </View>
+                    <View style={styles.headerActions}>
+                        {APP_CONFIG.shouldShowDebug(currentUser?.uid) && (
+                            <>
+                                <TouchableOpacity onPress={() => {
+                                    setUseLangGraph(!useLangGraph);
+                                    setMessages(prev => [...prev, {
+                                        role: 'assistant',
+                                        content: `已切换至 ${!useLangGraph ? 'LangGraph (Pilot)' : '标准引擎'}`
+                                    }]);
+                                }} style={[styles.pilotButton, useLangGraph && styles.pilotButtonActive]}>
+                                    <Text style={[styles.pilotButtonText, useLangGraph && styles.pilotButtonTextActive]}>{useLangGraph ? 'LG' : 'STD'}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => setShowWebView(!showWebView)}
+                                    style={[
+                                        styles.debugButton,
+                                        showWebView && styles.debugButtonActive
+                                    ]}
+                                >
+                                    <Bot size={16} color={showWebView ? '#FFFFFF' : '#1E3A8A'} />
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
                 </View>
             </View>
 
             <ScrollView
                 ref={scrollViewRef}
                 style={styles.chatContainer}
-                contentContainerStyle={styles.chatContent}
+                contentContainerStyle={[
+                    styles.chatContent,
+                    { paddingBottom: bottomComposerOffset + 12 }
+                ]}
                 onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
             >
                 <View style={styles.welcomeCard}>
@@ -275,14 +309,16 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 ))}
             </ScrollView>
 
-            <View style={styles.inputArea}>
-                <TextInput
-                    style={styles.input}
-                    placeholder="输入指令..."
-                    value={input}
-                    onChangeText={setInput}
-                    multiline
-                />
+            <View style={[styles.inputArea, { paddingBottom: bottomComposerOffset }]}>
+                <View style={styles.inputShell}>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="输入指令..."
+                        value={input}
+                        onChangeText={setInput}
+                        multiline
+                    />
+                </View>
                 <TouchableOpacity
                     style={[styles.sendButton, !input.trim() && styles.sendButtonDisabled]}
                     onPress={() => handleSend()}
@@ -334,35 +370,66 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#F9FAFB',
     },
-    header: {
+    headerShell: {
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F2F8',
+    },
+    headerTopRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingTop: 60,
-        paddingBottom: 16,
-        paddingHorizontal: 20,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
+        justifyContent: 'space-between',
+        paddingLeft: 0,
+        paddingRight: 2,
+        paddingVertical: 4,
+    },
+    headerTitleGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: 8,
+        marginLeft: 0,
+    },
+    headerAgentBadge: {
+        width: 40,
+        height: 40,
+        borderRadius: 14,
+        backgroundColor: '#DBEAFE',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     backButton: {
-        padding: 4,
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: '#F0F2F8',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     backSpacer: {
         width: 32,
-    },
-    headerInfo: {
-        marginLeft: 16,
-        flex: 1,
+        height: 32,
     },
     headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
+        fontSize: 17,
+        fontWeight: '800',
         color: '#111827',
+    },
+    headerSubtitle: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2,
     },
     statusRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 2,
+        marginLeft: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 5,
+        borderRadius: 999,
+        backgroundColor: '#F3F4F6',
     },
     statusDot: {
         width: 8,
@@ -373,7 +440,7 @@ const styles = StyleSheet.create({
     },
     statusText: {
         fontSize: 12,
-        color: '#6B7280',
+        color: '#4B5563',
     },
     chatContainer: {
         flex: 1,
@@ -472,17 +539,22 @@ const styles = StyleSheet.create({
     inputArea: {
         flexDirection: 'row',
         padding: 16,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+        paddingBottom: 16,
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#E5E7EB',
         alignItems: 'flex-end',
     },
-    input: {
+    inputShell: {
         flex: 1,
         backgroundColor: '#F3F4F6',
         borderRadius: 20,
-        paddingHorizontal: 16,
+        paddingLeft: 16,
+        paddingRight: 16,
+    },
+    input: {
+        flex: 1,
+        backgroundColor: 'transparent',
         paddingTop: 10,
         paddingBottom: 10,
         maxHeight: 120,
@@ -526,12 +598,12 @@ const styles = StyleSheet.create({
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
     },
     pilotButton: {
-        marginRight: 10,
         paddingHorizontal: 8,
         paddingVertical: 4,
-        borderRadius: 6,
+        borderRadius: 999,
         borderWidth: 1,
         borderColor: '#E5E7EB',
         backgroundColor: '#F9FAFB',
@@ -546,10 +618,20 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
     pilotButtonTextActive: {
-        color: '#fff',
+        color: '#FFFFFF',
     },
     debugButton: {
-        padding: 4,
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        backgroundColor: '#F0F2F8',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    debugButtonActive: {
+        backgroundColor: '#1E3A8A',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     quickRepliesContainer: {
         flexDirection: 'row',

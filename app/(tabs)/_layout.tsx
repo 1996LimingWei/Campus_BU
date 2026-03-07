@@ -25,7 +25,7 @@ export default function TabLayout() {
 
   // Custom TabBar Component to handle the sliding indicator
   const CustomTabBar = ({ state, descriptors, navigation }: any) => {
-    const { unreadCount } = useNotifications();
+    const { unreadCount, hasUnread } = useNotifications();
     // Filter out tabs that should be hidden (href: null) OR don't have an icon
     const visibleRoutes = state.routes.filter((r: any) => {
       const { options } = descriptors[r.key];
@@ -99,7 +99,7 @@ export default function TabLayout() {
                   color: isFocused ? '#1E3A8A' : '#8E8E93',
                   focused: isFocused
                 })}
-                {route.name === 'profile' && unreadCount > 0 && (
+                {route.name === 'profile' && (hasUnread || unreadCount > 0) && (
                   <View style={styles.unreadDot} />
                 )}
                 <Text style={[styles.tabLabel, { color: isFocused ? '#1E3A8A' : '#8E8E93' }]}>
@@ -146,15 +146,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="course"
-        options={{
-          tabBarLabel: t('navigation.course'),
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={GraduationCap} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="classroom"
         options={{
           href: null,
@@ -166,6 +157,15 @@ export default function TabLayout() {
           tabBarLabel: t('navigation.agent'),
           tabBarIcon: ({ color, focused }) => (
             <AgentTabIcon color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="course"
+        options={{
+          tabBarLabel: t('navigation.course'),
+          tabBarIcon: ({ color, focused }) => (
+            <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={GraduationCap} />
           ),
         }}
       />
