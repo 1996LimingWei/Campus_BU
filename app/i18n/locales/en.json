@@ -3,6 +3,7 @@
         "home": "Home",
         "map": "Nearby",
         "course": "Course",
+        "agent": "Agent",
         "classroom": "Classroom",
         "me": "Me"
     },
@@ -76,10 +77,7 @@
         "no_notifications_yet": "No notifications yet",
         "guest_name": "Guest",
         "guest_major": "Campus Visitor",
-        "login_signup": "Login / Sign Up",
-        "innovation_lab": "Innovation Lab (Experimental)",
-        "agent_title": "Campus Life Agent",
-        "agent_desc": "Smart assistant: find seats, order food, and understand your needs"
+        "login_signup": "Login / Sign Up"
     },
     "notifications": {
         "title_comment": "New Comment",
@@ -146,6 +144,10 @@
             "title": "Region Unavailable",
             "message": "This feature is currently only available in Hong Kong.",
             "confirm": "OK"
+        },
+        "classroom_sheet": {
+            "empty_title": "No building found",
+            "empty_hint": "Try searching building codes like AAB, WLB, or RRS."
         }
     },
     "campus": {

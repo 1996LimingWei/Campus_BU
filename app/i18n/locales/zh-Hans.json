@@ -3,6 +3,7 @@
         "home": "首页",
         "map": "附近",
         "course": "点评",
+        "agent": "Agent",
         "classroom": "教室",
         "me": "我的"
     },
@@ -76,10 +77,7 @@
         "no_notifications_yet": "暂无通知",
         "guest_name": "访客",
         "guest_major": "校园游客",
-        "login_signup": "登录 / 注册",
-        "innovation_lab": "创新实验室 (Experimental)",
-        "agent_title": "校园生活 Agent",
-        "agent_desc": "智能办公助手：查位子、点外卖、懂你心"
+        "login_signup": "登录 / 注册"
     },
     "notifications": {
         "title_comment": "新评论",
@@ -146,6 +144,10 @@
             "title": "地区限制",
             "message": "该功能目前仅在香港地区可用",
             "confirm": "确定"
+        },
+        "classroom_sheet": {
+            "empty_title": "未找到相关建筑",
+            "empty_hint": "试试搜索建筑简称，例如 AAB、WLB 或 RRS。"
         }
     },
     "campus": {

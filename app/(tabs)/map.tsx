@@ -11,10 +11,12 @@ import {
     Animated,
     Dimensions,
     Easing,
+    FlatList,
     Image,
     InteractionManager,
     KeyboardAvoidingView,
     Modal,
+    PanResponder,
     Platform,
     ScrollView,
     StyleSheet,
@@ -41,6 +43,11 @@ const HKBU_CENTER = {
     lat: 22.3377659528824,
     lng: 114.181895256042
 };
+const CLASSROOM_SHEET_HEIGHT = Math.min(height * 0.7, 620);
+const CLASSROOM_SHEET_COLLAPSED_OFFSET = Math.min(140, CLASSROOM_SHEET_HEIGHT * 0.24);
+const FOOD_SHEET_HEIGHT = Math.min(height * 0.46, 420);
+const FOOD_SHEET_VISIBLE_HEIGHT = 404;
+const FOOD_SHEET_COLLAPSED_OFFSET = Math.max(0, FOOD_SHEET_HEIGHT - FOOD_SHEET_VISIBLE_HEIGHT);
 
 // Keep edit button code path for future use, but hide it in current builds.
 const SHOW_BUILDING_EDIT_BUTTON = false;
@@ -50,9 +57,9 @@ const SHOW_BUILDING_EDIT_BUTTON = false;
 const TEST_REGION_RESTRICTION = false;
 
 const FOOD_ORDER_OPTIONS = [
-    { key: 'main-canteen', name: 'Main Canteen', orderUrl: 'https://csd2.order.place/store/112867/mode/prekiosk' },
-    { key: 'chapter-coffee', name: 'Chapter Coffee', orderUrl: 'https://app.eats365pos.com/hk/tc/chaptercoffee_kowloontong/menu' },
-    { key: 'harmony-cafeteria', name: 'Harmony Cafeteria', orderUrl: 'https://food.order.place/home/store/5768631610769408?mode=prekiosk' },
+    { key: 'main-canteen', name: 'Main Canteen', orderUrl: 'https://csd2.order.place/store/112867/mode/prekiosk', locationId: 'o1' },
+    { key: 'chapter-coffee', name: 'Chapter Coffee', orderUrl: 'https://app.eats365pos.com/hk/tc/chaptercoffee_kowloontong/menu', locationId: 'o3' },
+    { key: 'harmony-cafeteria', name: 'Harmony Cafeteria', orderUrl: 'https://food.order.place/home/store/5768631610769408?mode=prekiosk', locationId: 'o5' },
 ];
 
 type FilterType = 'newest' | 'hottest' | 'viewed' | 'mine';
@@ -87,21 +94,29 @@ const generateMapHTML = (
     `;
 
     // Food Marker Template (Circular with Image + Building Label)
-    const foodMarkerHtml = (imageUrl: string, name: string, description: string, labelPosition: 'top' | 'bottom' = 'top') => {
+    const foodMarkerHtml = (
+        imageUrl: string,
+        name: string,
+        description: string,
+        labelPosition: 'top' | 'bottom' = 'top',
+        highlighted: boolean = false
+    ) => {
         const buildingMatch = description.match(/\(([^)]+)\)/);
         const building = buildingMatch ? buildingMatch[1] : '';
+        const highlightColor = '#F59E0B';
+        const highlightRing = '#FEF3C7';
         const labelHtml = building ? `
             <div style="
-                background: #FF6B6B;
+                background: ${highlighted ? highlightColor : '#FF6B6B'};
                 color: white;
                 font-size: 8px;
                 font-weight: bold;
                 padding: 1px 4px;
                 border-radius: 4px;
                 z-index: 10;
-                border: 1px solid white;
+                border: 1px solid ${highlighted ? highlightRing : 'white'};
                 white-space: nowrap;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                box-shadow: 0 1px 6px rgba(0,0,0,${highlighted ? '0.35' : '0.1'});
                 ${labelPosition === 'top' ? 'margin-bottom: -6px;' : 'margin-top: -6px;'}
             ">🏢 ${building}</div>` : '';
 
@@ -113,8 +128,8 @@ const generateMapHTML = (
                     height: 36px;
                     border-radius: 18px;
                     background: white;
-                    border: 2px solid #FF6B6B;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                    border: 3px solid ${highlighted ? highlightColor : '#FF6B6B'};
+                    box-shadow: 0 2px 8px rgba(0,0,0,${highlighted ? '0.35' : '0.2'});
                     overflow: hidden;
                     display: flex;
                     align-items: center;
@@ -123,6 +138,7 @@ const generateMapHTML = (
                     position: relative;
                 " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
                     <img src="${imageUrl}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3170/3170733.png'"/>
+                    ${highlighted ? `<div style="position:absolute; inset:-1px; border:2px solid ${highlightRing}; border-radius:18px;"></div>` : ''}
                 </div>
                 ${labelPosition === 'bottom' ? labelHtml : ''}
             </div>
@@ -130,22 +146,25 @@ const generateMapHTML = (
     };
 
     // Building Marker Template (Blue Square with Label)
-    const buildingMarkerHtml = (name: string) => {
+    const buildingMarkerHtml = (name: string, highlighted: boolean = false) => {
         // If name is "Full Name (ABBR)", extract "ABBR". Otherwise use clean name.
         const abbrMatch = name.match(/\(([^)]+)\)/);
         const abbr = abbrMatch ? abbrMatch[1] : name;
+        const labelBg = highlighted ? '#F59E0B' : '#4B0082';
+        const dotBg = highlighted ? '#F59E0B' : '#4B0082';
+        const ringColor = highlighted ? '#FEF3C7' : 'white';
 
         return `
             <div style="display: flex; flex-direction: column; align-items: center;">
                 <div style="
-                    background: #4B0082;
+                    background: ${labelBg};
                     color: white;
                     font-size: 10px;
                     font-weight: bold;
                     padding: 2px 6px;
                     border-radius: 4px;
-                    border: 1px solid white;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                    border: 1px solid ${ringColor};
+                    box-shadow: 0 1px 6px rgba(0,0,0,${highlighted ? '0.35' : '0.2'});
                     margin-bottom: -4px;
                     z-index: 10;
                     white-space: nowrap;
@@ -153,10 +172,10 @@ const generateMapHTML = (
                 <div style="
                     width: 12px;
                     height: 12px;
-                    background: #4B0082;
-                    border: 2px solid white;
+                    background: ${dotBg};
+                    border: 2px solid ${ringColor};
                     border-radius: 50%;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    box-shadow: 0 2px 6px rgba(0,0,0,${highlighted ? '0.35' : '0.2'});
                 "></div>
             </div>
         `;
@@ -211,7 +230,7 @@ const generateMapHTML = (
         const labelPos = (['o5', 'o7', 'o14'].includes(spot.id)) ? 'bottom' : 'top';
 
         return `
-            L.marker([${spot.coordinates.latitude}, ${spot.coordinates.longitude}], { 
+            var fm = L.marker([${spot.coordinates.latitude}, ${spot.coordinates.longitude}], { 
                 icon: L.divIcon({
                     className: 'food-marker-icon',
                     html: \`${foodMarkerHtml(spot.imageUrl || '', spot.name, spot.description || '', labelPos)}\`,
@@ -220,8 +239,12 @@ const generateMapHTML = (
                     popupAnchor: [0, -18]
                 }) 
             })
-            .addTo(foodLayer)
-            .bindPopup(\`
+            .addTo(foodLayer);
+            fm.__foodId = '${spot.id}';
+            fm.__defaultHtml = \`${foodMarkerHtml(spot.imageUrl || '', spot.name, spot.description || '', labelPos)}\`;
+            fm.__highlightedHtml = \`${foodMarkerHtml(spot.imageUrl || '', spot.name, spot.description || '', labelPos, true)}\`;
+            foodMarkersById['${spot.id}'] = fm;
+            fm.bindPopup(\`
                 <div style="min-width: 160px; padding: 2px;">
                     <img src="${spot.imageUrl}" style="width: 100%; height: 80px; object-fit: cover; border-radius: 8px; margin-bottom: 8px;" />
                     <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px; color: #111;">${spot.name}</div>
@@ -256,13 +279,43 @@ const generateMapHTML = (
                     popupAnchor: [0, -20]
                 }),
                 draggable: ${editMode} 
-            })
-            .addTo(buildingLayer)
-            .bindPopup(\`
+            }).addTo(buildingLayer);
+
+            bm.__buildingId = '${b.id}';
+            bm.__buildingName = ${JSON.stringify(b.name)};
+            bm.__defaultHtml = \`${buildingMarkerHtml(b.name)}\`;
+            bm.__highlightedHtml = \`${buildingMarkerHtml(b.name, true)}\`;
+            buildingMarkersById['${b.id}'] = bm;
+
+            bm.bindPopup(\`
                 <div style="min-width: 160px; padding: 2px;">
                     <img src="${b.imageUrl}" style="width: 100%; height: 80px; object-fit: cover; border-radius: 8px; margin-bottom: 8px;" onerror="this.style.display='none'" />
                     <div style="font-weight: bold; font-size: 14px; margin-bottom: 2px; color: #111;">${b.description || b.name}</div>
-                    <div style="font-size: 11px; color: #444; line-height: 1.4;">${b.description ? b.name : ''} ${t('map.markers.building')}</div>
+                    <div style="font-size: 11px; color: #444; line-height: 1.4; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                        <span>${b.description ? b.name : ''} ${t('map.markers.building')}</span>
+                        <button onclick="window.ReactNativeWebView.postMessage(JSON.stringify({type: 'view_building', id: '${b.id}'}))" style="
+                            width: 24px;
+                            height: 24px;
+                            min-width: 24px;
+                            border-radius: 12px;
+                            border: none;
+                            background: #4B0082;
+                            color: white;
+                            font-size: 16px;
+                            font-weight: 600;
+                            line-height: 1;
+                            cursor: pointer;
+                            padding: 0;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            box-shadow: 0 1px 3px rgba(75,0,130,0.28);
+                        ">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+                                <path d="M3 1.5L6.5 5L3 8.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
                     ${editMode ? `<div style="font-size: 10px; color: red; margin-top: 4px;">${t('map.markers.drag_to_move')}</div>` : ''}
                 </div>
             \`, { closeButton: false });
@@ -362,6 +415,10 @@ const generateMapHTML = (
         var markerLayer = L.layerGroup().addTo(map);
         var foodLayer = L.layerGroup();
         var buildingLayer = L.layerGroup();
+        var foodMarkersById = {};
+        var buildingMarkersById = {};
+        var highlightedFoodId = null;
+        var highlightedBuildingId = null;
         
         if (${showFoodMap}) foodLayer.addTo(map);
         if (${showBuildingMap}) buildingLayer.addTo(map);
@@ -389,12 +446,115 @@ const generateMapHTML = (
             }
         };
 
+        window.clearHighlightedFood = function() {
+            if (!highlightedFoodId) return;
+            var prevFoodMarker = foodMarkersById[highlightedFoodId];
+            if (prevFoodMarker) {
+                prevFoodMarker.setIcon(L.divIcon({
+                    className: 'food-marker-icon',
+                    html: prevFoodMarker.__defaultHtml,
+                    iconSize: [50, 50],
+                    iconAnchor: [25, 25],
+                    popupAnchor: [0, -18]
+                }));
+                prevFoodMarker.closePopup();
+            }
+            highlightedFoodId = null;
+        };
+
+        window.highlightFood = function(foodId) {
+            if (!foodId || !foodMarkersById[foodId]) return;
+
+            if (!map.hasLayer(foodLayer)) {
+                foodLayer.addTo(map);
+            }
+
+            if (highlightedFoodId && foodMarkersById[highlightedFoodId] && highlightedFoodId !== foodId) {
+                var previousFoodMarker = foodMarkersById[highlightedFoodId];
+                previousFoodMarker.setIcon(L.divIcon({
+                    className: 'food-marker-icon',
+                    html: previousFoodMarker.__defaultHtml,
+                    iconSize: [50, 50],
+                    iconAnchor: [25, 25],
+                    popupAnchor: [0, -18]
+                }));
+                previousFoodMarker.closePopup();
+            }
+
+            var foodMarker = foodMarkersById[foodId];
+            foodMarker.setIcon(L.divIcon({
+                className: 'food-marker-icon',
+                html: foodMarker.__highlightedHtml,
+                iconSize: [50, 50],
+                iconAnchor: [25, 25],
+                popupAnchor: [0, -18]
+            }));
+            highlightedFoodId = foodId;
+            foodMarker.openPopup();
+            map.flyTo(foodMarker.getLatLng(), Math.max(map.getZoom(), 18), {
+                animate: true,
+                duration: 0.45
+            });
+        };
+
         window.setBuildingMapVisible = function(visible) {
             if (visible) {
                 buildingLayer.addTo(map);
             } else {
                 map.removeLayer(buildingLayer);
             }
+        };
+
+
+        window.clearHighlightedBuilding = function() {
+            if (!highlightedBuildingId) return;
+            var prevMarker = buildingMarkersById[highlightedBuildingId];
+            if (prevMarker) {
+                prevMarker.setIcon(L.divIcon({
+                    className: 'building-marker-icon',
+                    html: prevMarker.__defaultHtml,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 26],
+                    popupAnchor: [0, -20]
+                }));
+                prevMarker.closePopup();
+            }
+            highlightedBuildingId = null;
+        };
+
+        window.highlightBuilding = function(buildingId) {
+            if (!buildingId || !buildingMarkersById[buildingId]) return;
+
+            if (!map.hasLayer(buildingLayer)) {
+                buildingLayer.addTo(map);
+            }
+
+            if (highlightedBuildingId && buildingMarkersById[highlightedBuildingId] && highlightedBuildingId !== buildingId) {
+                var previousMarker = buildingMarkersById[highlightedBuildingId];
+                previousMarker.setIcon(L.divIcon({
+                    className: 'building-marker-icon',
+                    html: previousMarker.__defaultHtml,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 26],
+                    popupAnchor: [0, -20]
+                }));
+                previousMarker.closePopup();
+            }
+
+            var marker = buildingMarkersById[buildingId];
+            marker.setIcon(L.divIcon({
+                className: 'building-marker-icon',
+                html: marker.__highlightedHtml,
+                iconSize: [40, 40],
+                iconAnchor: [20, 26],
+                popupAnchor: [0, -20]
+            }));
+            highlightedBuildingId = buildingId;
+            marker.openPopup();
+            map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 18), {
+                animate: true,
+                duration: 0.45
+            });
         };
         
         // User Location Marker
@@ -544,11 +704,15 @@ export default function MapScreen() {
     const [markersVisible, setMarkersVisible] = useState(true);
     const [showFoodMap, setShowFoodMap] = useState(false);
     const [showBuildingMap, setShowBuildingMap] = useState(false);
+    const [highlightedFoodId, setHighlightedFoodId] = useState<string | null>(null);
+    const [highlightedBuildingId, setHighlightedBuildingId] = useState<string | null>(null);
     const [posts, setPosts] = useState<any[]>([]);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [loadingPosts, setLoadingPosts] = useState(true);
     const [editMode, setEditMode] = useState(false);
     const [buildingsData, setBuildingsData] = useState(CAMPUS_BUILDINGS);
+    const [isClassroomSheetVisible, setIsClassroomSheetVisible] = useState(false);
+    const [classroomSearchQuery, setClassroomSearchQuery] = useState('');
     const [isCommentModalVisible, setIsCommentModalVisible] = useState(false);
     const [isFoodOrderModalVisible, setIsFoodOrderModalVisible] = useState(false);
     const [foodOrderWebUrl, setFoodOrderWebUrl] = useState<string | null>(null);
@@ -723,6 +887,158 @@ export default function MapScreen() {
 
     const webViewRef = useRef<WebView>(null);
     const fadeAnim = useRef(new Animated.Value(0)).current;
+    const classroomSheetTranslateY = useRef(new Animated.Value(CLASSROOM_SHEET_HEIGHT)).current;
+    const classroomSheetOffsetRef = useRef(CLASSROOM_SHEET_HEIGHT);
+    const foodSheetTranslateY = useRef(new Animated.Value(FOOD_SHEET_HEIGHT)).current;
+    const foodSheetOffsetRef = useRef(FOOD_SHEET_HEIGHT);
+
+    const filteredBuildings = useMemo(() => {
+        const query = classroomSearchQuery.trim().toLowerCase();
+        if (!query) return buildingsData;
+
+        return buildingsData.filter(building => (
+            (building.name || '').toLowerCase().includes(query) ||
+            (building.id || '').toLowerCase().includes(query) ||
+            (building.description || '').toLowerCase().includes(query)
+        ));
+    }, [buildingsData, classroomSearchQuery]);
+
+    const animateClassroomSheet = useCallback((toValue: number, onEnd?: () => void) => {
+        classroomSheetOffsetRef.current = toValue;
+        Animated.spring(classroomSheetTranslateY, {
+            toValue,
+            useNativeDriver: true,
+            damping: 24,
+            stiffness: 220,
+        }).start(({ finished }) => {
+            if (finished) {
+                onEnd?.();
+            }
+        });
+    }, [classroomSheetTranslateY]);
+
+    const closeClassroomSheet = useCallback(() => {
+        Animated.timing(classroomSheetTranslateY, {
+            toValue: CLASSROOM_SHEET_HEIGHT,
+            duration: 220,
+            useNativeDriver: true,
+        }).start(({ finished }) => {
+            if (finished) {
+                classroomSheetOffsetRef.current = CLASSROOM_SHEET_HEIGHT;
+                setIsClassroomSheetVisible(false);
+                setClassroomSearchQuery('');
+            }
+        });
+    }, [classroomSheetTranslateY]);
+
+    const animateFoodSheet = useCallback((toValue: number, onEnd?: () => void) => {
+        foodSheetOffsetRef.current = toValue;
+        Animated.spring(foodSheetTranslateY, {
+            toValue,
+            useNativeDriver: true,
+            damping: 24,
+            stiffness: 220,
+        }).start(({ finished }) => {
+            if (finished) onEnd?.();
+        });
+    }, [foodSheetTranslateY]);
+
+    const closeFoodSheet = useCallback(() => {
+        Animated.timing(foodSheetTranslateY, {
+            toValue: FOOD_SHEET_HEIGHT,
+            duration: 220,
+            useNativeDriver: true,
+        }).start(({ finished }) => {
+            if (finished) {
+                foodSheetOffsetRef.current = FOOD_SHEET_HEIGHT;
+                setIsFoodOrderModalVisible(false);
+            }
+        });
+    }, [foodSheetTranslateY]);
+
+    const openFoodSheet = useCallback(() => {
+        setIsFoodOrderModalVisible(true);
+        requestAnimationFrame(() => {
+            animateFoodSheet(FOOD_SHEET_COLLAPSED_OFFSET);
+        });
+    }, [animateFoodSheet]);
+
+    const openClassroomSheet = useCallback(() => {
+        setIsClassroomSheetVisible(true);
+        requestAnimationFrame(() => {
+            animateClassroomSheet(CLASSROOM_SHEET_COLLAPSED_OFFSET);
+        });
+    }, [animateClassroomSheet]);
+
+    const classroomSheetPanResponder = useMemo(() => PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+            Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 4,
+        onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+            Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 2,
+        onPanResponderGrant: () => {
+            classroomSheetTranslateY.stopAnimation((value: number) => {
+                classroomSheetOffsetRef.current = value;
+            });
+        },
+        onPanResponderMove: (_, gestureState) => {
+            const nextValue = Math.max(
+                0,
+                Math.min(CLASSROOM_SHEET_HEIGHT, classroomSheetOffsetRef.current + gestureState.dy)
+            );
+            classroomSheetTranslateY.setValue(nextValue);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+            const finalOffset = Math.max(
+                0,
+                Math.min(CLASSROOM_SHEET_HEIGHT, classroomSheetOffsetRef.current + gestureState.dy)
+            );
+            classroomSheetOffsetRef.current = finalOffset;
+
+            if (finalOffset > CLASSROOM_SHEET_HEIGHT * 0.72 || gestureState.vy > 1.1) {
+                closeClassroomSheet();
+                return;
+            }
+            const midpoint = CLASSROOM_SHEET_COLLAPSED_OFFSET / 2;
+            animateClassroomSheet(finalOffset < midpoint ? 0 : CLASSROOM_SHEET_COLLAPSED_OFFSET);
+        },
+        onPanResponderTerminate: () => {
+            animateClassroomSheet(CLASSROOM_SHEET_COLLAPSED_OFFSET);
+        },
+    }), [animateClassroomSheet, classroomSheetTranslateY, closeClassroomSheet]);
+
+    const foodSheetPanResponder = useMemo(() => PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+            Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 4,
+        onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+            Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 2,
+        onPanResponderGrant: () => {
+            foodSheetTranslateY.stopAnimation((value: number) => {
+                foodSheetOffsetRef.current = value;
+            });
+        },
+        onPanResponderMove: (_, gestureState) => {
+            const nextValue = Math.max(0, Math.min(FOOD_SHEET_HEIGHT, foodSheetOffsetRef.current + gestureState.dy));
+            foodSheetTranslateY.setValue(nextValue);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+            const finalOffset = Math.max(0, Math.min(FOOD_SHEET_HEIGHT, foodSheetOffsetRef.current + gestureState.dy));
+            foodSheetOffsetRef.current = finalOffset;
+
+            if (finalOffset > FOOD_SHEET_HEIGHT * 0.72 || gestureState.vy > 1.1) {
+                closeFoodSheet();
+                return;
+            }
+            const midpoint = FOOD_SHEET_COLLAPSED_OFFSET / 2;
+            animateFoodSheet(finalOffset < midpoint ? 0 : FOOD_SHEET_COLLAPSED_OFFSET);
+        },
+        onPanResponderTerminate: () => {
+            animateFoodSheet(FOOD_SHEET_COLLAPSED_OFFSET);
+        },
+    }), [animateFoodSheet, closeFoodSheet, foodSheetTranslateY]);
 
     // Track heading
     React.useEffect(() => {
@@ -824,6 +1140,24 @@ export default function MapScreen() {
         `);
     }, [markersVisible, showFoodMap]);
 
+    React.useEffect(() => {
+        webViewRef.current?.injectJavaScript(
+            highlightedFoodId
+                ? `
+                    if (window.highlightFood) {
+                        window.highlightFood('${highlightedFoodId}');
+                    }
+                    true;
+                `
+                : `
+                    if (window.clearHighlightedFood) {
+                        window.clearHighlightedFood();
+                    }
+                    true;
+                `
+        );
+    }, [highlightedFoodId, showFoodMap]);
+
     // Sync building map visibility with WebView
     React.useEffect(() => {
         webViewRef.current?.injectJavaScript(`
@@ -834,6 +1168,36 @@ export default function MapScreen() {
             true;
         `);
     }, [showBuildingMap]);
+
+    React.useEffect(() => {
+        webViewRef.current?.injectJavaScript(
+            highlightedBuildingId
+                ? `
+                    if (window.highlightBuilding) {
+                        window.highlightBuilding('${highlightedBuildingId}');
+                    }
+                    true;
+                `
+                : `
+                    if (window.clearHighlightedBuilding) {
+                        window.clearHighlightedBuilding();
+                    }
+                    true;
+                `
+        );
+    }, [highlightedBuildingId, showBuildingMap]);
+
+    React.useEffect(() => {
+        if (!showBuildingMap && highlightedBuildingId) {
+            setHighlightedBuildingId(null);
+        }
+    }, [showBuildingMap, highlightedBuildingId]);
+
+    React.useEffect(() => {
+        if (!showFoodMap && highlightedFoodId) {
+            setHighlightedFoodId(null);
+        }
+    }, [showFoodMap, highlightedFoodId]);
 
     // Filter data based on active filter and navigation state
     const currentPosts = useMemo(() => {
@@ -954,21 +1318,54 @@ export default function MapScreen() {
 
 
     const handleFindClassroom = () => {
-        router.push('/classroom' as any);
+        handleLocationPress(false);
+        setShowBuildingMap(true);
+        setShowFoodMap(false);
+        openClassroomSheet();
+    };
+
+    const handleClassroomSelect = (buildingId: string) => {
+        setShowBuildingMap(true);
+        setHighlightedBuildingId(buildingId);
+        closeClassroomSheet();
     };
 
     const handleFindFood = () => {
-        setIsFoodOrderModalVisible(true);
+        handleLocationPress(false);
+        setShowFoodMap(true);
+        setShowBuildingMap(false);
+        setHighlightedFoodId(null);
+        setHighlightedBuildingId(null);
+        openFoodSheet();
     };
 
     const handleFoodOrderPress = async (orderUrl: string) => {
         try {
-            setIsFoodOrderModalVisible(false);
-            setFoodOrderWebUrl(orderUrl);
+            Animated.timing(foodSheetTranslateY, {
+                toValue: FOOD_SHEET_HEIGHT,
+                duration: 220,
+                useNativeDriver: true,
+            }).start(({ finished }) => {
+                if (finished) {
+                    foodSheetOffsetRef.current = FOOD_SHEET_HEIGHT;
+                    setIsFoodOrderModalVisible(false);
+                    setFoodOrderWebUrl(orderUrl);
+                }
+            });
         } catch (error) {
             console.error('Failed to open order online link', error);
             Alert.alert(t('common.error'), t('common.retry'));
         }
+    };
+
+    const handleFocusFoodLocation = (locationId: string) => {
+        const target = CAMPUS_LOCATIONS.find(location => location.id === locationId);
+        if (!target) return;
+
+        setShowFoodMap(true);
+        setShowBuildingMap(false);
+        setHighlightedBuildingId(null);
+        setHighlightedFoodId(locationId);
     };
 
     const handleWebViewMessage = (event: any) => {
@@ -998,6 +1395,11 @@ export default function MapScreen() {
             }
             if (data.type === 'view_food') {
                 router.push(`/food/${data.id}` as any);
+                return;
+            }
+
+            if (data.type === 'view_building') {
+                router.push(`/classroom/${data.id}` as any);
                 return;
             }
             if (data.type === 'building_dragged') {
@@ -1123,7 +1525,12 @@ export default function MapScreen() {
                         onPress={() => {
                             const next = !showFoodMap;
                             setShowFoodMap(next);
-                            if (next) setShowBuildingMap(false);
+                            if (next) {
+                                setShowBuildingMap(false);
+                                setHighlightedBuildingId(null);
+                            } else {
+                                setHighlightedFoodId(null);
+                            }
                         }}
                     >
                         <Utensils size={18} color={showFoodMap ? "#fff" : "#FF6B6B"} />
@@ -1141,7 +1548,12 @@ export default function MapScreen() {
                         onPress={() => {
                             const next = !showBuildingMap;
                             setShowBuildingMap(next);
-                            if (next) setShowFoodMap(false);
+                            if (next) {
+                                setShowFoodMap(false);
+                                setHighlightedFoodId(null);
+                            } else {
+                                setHighlightedBuildingId(null);
+                            }
                         }}
                     >
                         <Building size={16} color={showBuildingMap ? "#fff" : "#4B0082"} />
@@ -1455,48 +1867,164 @@ export default function MapScreen() {
             </Modal>
 
             <Modal
+                visible={isClassroomSheetVisible}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={closeClassroomSheet}
+            >
+                <View style={styles.classroomSheetOverlay}>
+                    <TouchableOpacity
+                        style={styles.classroomSheetBackdrop}
+                        activeOpacity={1}
+                        onPress={closeClassroomSheet}
+                    />
+                    <Animated.View
+                        style={[
+                            styles.classroomSheetContainer,
+                            { transform: [{ translateY: classroomSheetTranslateY }] }
+                        ]}
+                    >
+                        <View
+                            {...classroomSheetPanResponder.panHandlers}
+                            style={styles.classroomSheetDragArea}
+                        >
+                            <View style={styles.classroomSheetGrabber} />
+                        </View>
+
+                        <View style={styles.classroomSearchRow}>
+                            <View style={styles.classroomSearchInputWrap}>
+                                <Building size={18} color="#6B7280" />
+                                <TextInput
+                                    style={styles.classroomSearchInput}
+                                    placeholder={t('classroom_tab.search_hint')}
+                                    placeholderTextColor="#9CA3AF"
+                                    value={classroomSearchQuery}
+                                    onChangeText={setClassroomSearchQuery}
+                                    autoCapitalize="characters"
+                                    autoCorrect={false}
+                                />
+                            </View>
+                            <TouchableOpacity
+                                style={styles.classroomSearchCloseButton}
+                                onPress={closeClassroomSheet}
+                            >
+                                <X size={20} color="#111827" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.classroomSheetListWrap}>
+                            <Text style={styles.classroomSheetHint}>{filteredBuildings.length} buildings</Text>
+                        </View>
+
+                        <FlatList
+                            data={filteredBuildings}
+                            keyExtractor={(item) => item.id}
+                            keyboardShouldPersistTaps="handled"
+                            contentContainerStyle={styles.classroomSheetListContent}
+                            showsVerticalScrollIndicator={false}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.classroomSheetCard}
+                                    activeOpacity={0.88}
+                                    onPress={() => handleClassroomSelect(item.id)}
+                                >
+                                    <View style={styles.classroomSheetCardIcon}>
+                                        <Building size={20} color="#4B0082" />
+                                    </View>
+                                    <View style={styles.classroomSheetCardText}>
+                                        <View style={styles.classroomSheetCardTitleRow}>
+                                            <Text style={styles.classroomSheetCardTitle}>{item.name}</Text>
+                                            <Text style={styles.classroomSheetCardTag}>{item.category}</Text>
+                                        </View>
+                                        <Text style={styles.classroomSheetCardSubtitle} numberOfLines={2}>
+                                            {item.description || item.id}
+                                        </Text>
+                                    </View>
+                                    <ChevronRight size={18} color="#9CA3AF" />
+                                </TouchableOpacity>
+                            )}
+                            ListEmptyComponent={
+                                <View style={styles.classroomSheetEmptyState}>
+                                    <Text style={styles.classroomSheetEmptyTitle}>{t('map.classroom_sheet.empty_title')}</Text>
+                                    <Text style={styles.classroomSheetEmptyText}>
+                                        {t('map.classroom_sheet.empty_hint')}
+                                    </Text>
+                                </View>
+                            }
+                        />
+                    </Animated.View>
+                </View>
+            </Modal>
+
+            <Modal
                 visible={isFoodOrderModalVisible}
                 animationType="fade"
                 transparent={true}
-                onRequestClose={() => setIsFoodOrderModalVisible(false)}
+                onRequestClose={closeFoodSheet}
             >
-                <View style={styles.foodOrderModalOverlay}>
+                <View style={styles.classroomSheetOverlay}>
                     <TouchableOpacity
-                        style={styles.foodOrderModalBackdrop}
+                        style={styles.classroomSheetBackdrop}
                         activeOpacity={1}
-                        onPress={() => setIsFoodOrderModalVisible(false)}
+                        onPress={closeFoodSheet}
                     />
-                    <View style={styles.foodOrderModalCard}>
+                    <Animated.View
+                        style={[
+                            styles.foodSheetContainer,
+                            { transform: [{ translateY: foodSheetTranslateY }] }
+                        ]}
+                    >
+                        <View
+                            {...foodSheetPanResponder.panHandlers}
+                            style={styles.foodSheetDragArea}
+                        >
+                            <View style={styles.classroomSheetGrabber} />
+                        </View>
                         <View style={styles.foodOrderModalHeader}>
-                            <View style={styles.foodOrderModalIcon}>
-                                <Utensils size={16} color="#E65100" />
-                            </View>
                             <View style={styles.foodOrderModalHeaderText}>
                                 <Text style={styles.foodOrderModalTitle}>{t('map.overlay.order_food')}</Text>
-                                <Text style={styles.foodOrderModalSubtitle}>{t('map.overlay.food')}</Text>
+                                <Text style={styles.foodOrderModalSubtitle}>Choose a restaurant to continue</Text>
                             </View>
+                            <TouchableOpacity
+                                style={styles.classroomSearchCloseButton}
+                                onPress={closeFoodSheet}
+                            >
+                                <X size={20} color="#111827" />
+                            </TouchableOpacity>
                         </View>
                         {FOOD_ORDER_OPTIONS.map(option => (
-                            <TouchableOpacity
-                                key={option.key}
-                                style={styles.foodOrderOptionButton}
-                                onPress={() => handleFoodOrderPress(option.orderUrl)}
-                                activeOpacity={0.85}
-                            >
-                                <View style={styles.foodOrderOptionLeft}>
-                                    <View style={styles.foodOrderOptionDot} />
-                                    <Text style={styles.foodOrderOptionText}>{option.name}</Text>
-                                </View>
-                                <ChevronRight size={18} color="#9CA3AF" />
-                            </TouchableOpacity>
+                            <View key={option.key} style={styles.foodOrderOptionButton}>
+                                <TouchableOpacity
+                                    style={styles.foodOrderOptionMain}
+                                    onPress={() => handleFoodOrderPress(option.orderUrl)}
+                                    activeOpacity={0.85}
+                                >
+                                    <View style={styles.foodOrderOptionLeft}>
+                                        <View style={styles.foodOrderOptionIcon}>
+                                            <Utensils size={14} color="#E65100" />
+                                        </View>
+                                        <View style={styles.foodOrderOptionTextWrap}>
+                                            <Text style={styles.foodOrderOptionText}>{option.name}</Text>
+                                            <Text style={styles.foodOrderOptionSubtext}>Open ordering page</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.foodOrderOptionActions}>
+                                        <TouchableOpacity
+                                            style={styles.foodOrderInlineLocateButton}
+                                            onPress={(event) => {
+                                                event.stopPropagation?.();
+                                                handleFocusFoodLocation(option.locationId);
+                                            }}
+                                            activeOpacity={0.8}
+                                        >
+                                            <MapPin size={14} color="#4B0082" />
+                                        </TouchableOpacity>
+                                        <ChevronRight size={18} color="#9CA3AF" />
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
                         ))}
-                        <TouchableOpacity
-                            style={styles.foodOrderCancelButton}
-                            onPress={() => setIsFoodOrderModalVisible(false)}
-                        >
-                            <Text style={styles.foodOrderCancelText}>{t('common.cancel')}</Text>
-                        </TouchableOpacity>
-                    </View>
+                    </Animated.View>
                 </View>
             </Modal>
 
@@ -2019,10 +2547,31 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 5,
     },
+    foodSheetContainer: {
+        maxHeight: FOOD_SHEET_HEIGHT,
+        minHeight: FOOD_SHEET_HEIGHT * 0.72,
+        backgroundColor: '#F9FAFB',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingTop: 10,
+        paddingHorizontal: 16,
+        paddingBottom: 54,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 18,
+    },
+    foodSheetDragArea: {
+        paddingTop: 4,
+        paddingBottom: 6,
+        marginBottom: 2,
+    },
     foodOrderModalHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 4,
+        justifyContent: 'space-between',
+        marginBottom: 14,
     },
     foodOrderModalIcon: {
         width: 28,
@@ -2035,23 +2584,30 @@ const styles = StyleSheet.create({
     },
     foodOrderModalHeaderText: {
         flex: 1,
+        paddingLeft: 2,
     },
     foodOrderModalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#111',
+        fontSize: 22,
+        fontWeight: '800',
+        color: '#111827',
     },
     foodOrderModalSubtitle: {
-        marginTop: 2,
-        fontSize: 12,
-        color: '#666',
+        marginTop: 4,
+        fontSize: 13,
+        color: '#6B7280',
     },
     foodOrderOptionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    foodOrderOptionMain: {
+        flex: 1,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 14,
-        paddingVertical: 12,
-        paddingHorizontal: 14,
+        borderColor: '#EEF2F7',
+        borderRadius: 18,
+        paddingVertical: 16,
+        paddingHorizontal: 16,
         backgroundColor: '#FFFFFF',
         flexDirection: 'row',
         alignItems: 'center',
@@ -2060,31 +2616,47 @@ const styles = StyleSheet.create({
     foodOrderOptionLeft: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        flex: 1,
     },
-    foodOrderOptionDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#E65100',
-    },
-    foodOrderOptionText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#1F2937',
-    },
-    foodOrderCancelButton: {
-        marginTop: 2,
+    foodOrderOptionIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#FFF7ED',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 11,
-        borderRadius: 12,
-        backgroundColor: '#F3F4F6',
+        marginRight: 12,
     },
-    foodOrderCancelText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#4B5563',
+    foodOrderOptionTextWrap: {
+        flex: 1,
+        marginRight: 12,
+    },
+    foodOrderOptionText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1F2937',
+        flex: 1,
+    },
+    foodOrderOptionSubtext: {
+        marginTop: 3,
+        fontSize: 12,
+        color: '#9CA3AF',
+    },
+    foodOrderOptionActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginLeft: 12,
+    },
+    foodOrderInlineLocateButton: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#F3E8FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#E9D5FF',
     },
     foodOrderWebContainer: {
         flex: 1,
@@ -2115,5 +2687,155 @@ const styles = StyleSheet.create({
     },
     foodOrderWebView: {
         flex: 1,
+    },
+    classroomSheetOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'flex-end',
+    },
+    classroomSheetBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(17,24,39,0.22)',
+    },
+    classroomSheetContainer: {
+        maxHeight: CLASSROOM_SHEET_HEIGHT,
+        minHeight: CLASSROOM_SHEET_HEIGHT * 0.62,
+        backgroundColor: '#F9FAFB',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingTop: 10,
+        paddingHorizontal: 16,
+        paddingBottom: 34,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 18,
+    },
+    classroomSheetGrabber: {
+        alignSelf: 'center',
+        width: 44,
+        height: 5,
+        borderRadius: 999,
+        backgroundColor: '#D1D5DB',
+        marginTop: 4,
+        marginBottom: 12,
+    },
+    classroomSheetDragArea: {
+        paddingTop: 4,
+        paddingBottom: 24,
+        marginBottom: -6,
+    },
+    classroomSearchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 14,
+    },
+    classroomSearchInputWrap: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 18,
+        paddingHorizontal: 14,
+        paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    classroomSearchInput: {
+        flex: 1,
+        marginLeft: 10,
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#111827',
+    },
+    classroomSearchCloseButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    classroomSheetListWrap: {
+        marginBottom: 10,
+    },
+    classroomSheetHint: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#6B7280',
+    },
+    classroomSheetListContent: {
+        paddingBottom: 18,
+    },
+    classroomSheetCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 18,
+        padding: 14,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: '#EEF2F7',
+    },
+    classroomSheetCardIcon: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: '#F3E8FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    classroomSheetCardText: {
+        flex: 1,
+        marginRight: 12,
+    },
+    classroomSheetCardTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+        gap: 8,
+    },
+    classroomSheetCardTitle: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#111827',
+    },
+    classroomSheetCardTag: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#1E3A8A',
+        backgroundColor: '#DBEAFE',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 999,
+        overflow: 'hidden',
+    },
+    classroomSheetCardSubtitle: {
+        fontSize: 13,
+        lineHeight: 18,
+        color: '#6B7280',
+    },
+    classroomSheetEmptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 40,
+        paddingHorizontal: 20,
+    },
+    classroomSheetEmptyTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 6,
+    },
+    classroomSheetEmptyText: {
+        fontSize: 13,
+        lineHeight: 18,
+        color: '#6B7280',
+        textAlign: 'center',
     },
 });

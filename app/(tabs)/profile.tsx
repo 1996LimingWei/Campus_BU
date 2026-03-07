@@ -2,7 +2,7 @@ import { formatDistanceToNow } from 'date-fns';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Bell, Bot, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Sparkles, X } from 'lucide-react-native';
+import { Bell, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -414,31 +414,6 @@ export default function ProfileScreen() {
                     }}
                 >
                     <Edit3 size={20} color={userId ? "#1E3A8A" : "#9CA3AF"} />
-                </TouchableOpacity>
-            </View>
-
-            {/* Innovation Lab / Agent Entry */}
-            <View style={styles.innovationSection}>
-                <View style={styles.innovationHeader}>
-                    <Sparkles size={24} color="#1E3A8A" />
-                    <Text style={styles.innovationTitle}>{t('profile.innovation_lab')}</Text>
-                </View>
-                <TouchableOpacity
-                    style={styles.agentButton}
-                    onPress={() => {
-                        if (checkLogin(userId)) {
-                            router.push('/agent/chat');
-                        }
-                    }}
-                >
-                    <View style={styles.agentButtonContent}>
-                        <Bot size={24} color="#fff" />
-                        <View style={styles.agentButtonText}>
-                            <Text style={styles.agentButtonTitle}>{t('profile.agent_title')}</Text>
-                            <Text style={styles.agentButtonDesc}>{t('profile.agent_desc')}</Text>
-                        </View>
-                    </View>
-                    <ChevronRight size={20} color="#fff" />
                 </TouchableOpacity>
             </View>
 
@@ -1132,57 +1107,6 @@ const styles = StyleSheet.create({
     },
     langBtnTextActive: {
         color: '#fff',
-    },
-    innovationSection: {
-        marginHorizontal: 16,
-        marginTop: 16,
-        padding: 16,
-        backgroundColor: '#F0F9FF',
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#BAE6FD',
-    },
-    innovationHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    innovationTitle: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#1E3A8A',
-        marginLeft: 8,
-    },
-    agentButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#1E3A8A',
-        padding: 16,
-        borderRadius: 16,
-        shadowColor: '#1E3A8A',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    agentButtonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    agentButtonText: {
-        marginLeft: 12,
-    },
-    agentButtonTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    agentButtonDesc: {
-        fontSize: 11,
-        color: '#DBEAFE',
-        marginTop: 2,
     },
     modalOverlay: {
         flex: 1,

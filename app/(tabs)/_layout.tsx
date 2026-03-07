@@ -1,11 +1,22 @@
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
-import { Building2, Calendar as CalendarIcon, GraduationCap, Map as MapIcon, User as UserIcon } from 'lucide-react-native';
+import { Bot, Calendar as CalendarIcon, GraduationCap, Map as MapIcon, User as UserIcon } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AnimatedTabIcon } from '../../components/common/AnimatedTabIcon';
 import { useNotifications } from '../../context/NotificationContext';
+
+const AgentTabIcon = ({ color, focused }: { color: string; focused: boolean }) => (
+  <View style={styles.agentTabIcon}>
+    <AnimatedTabIcon focused={focused} color={color} size={20} IconComponent={Bot} />
+    <View style={styles.agentChart}>
+      <View style={[styles.agentChartBar, { height: 6, backgroundColor: color, opacity: focused ? 1 : 0.72 }]} />
+      <View style={[styles.agentChartBar, { height: 10, backgroundColor: color, opacity: focused ? 1 : 0.72 }]} />
+      <View style={[styles.agentChartBar, { height: 14, backgroundColor: color, opacity: focused ? 1 : 0.72 }]} />
+    </View>
+  </View>
+);
 
 export default function TabLayout() {
   const { t } = useTranslation();
@@ -146,9 +157,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="classroom"
         options={{
-          tabBarLabel: t('navigation.classroom'),
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="agent"
+        options={{
+          tabBarLabel: t('navigation.agent'),
           tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={Building2} />
+            <AgentTabIcon color={color} focused={focused} />
           ),
         }}
       />
@@ -218,5 +235,22 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     width: 8,
     height: 8,
+  },
+  agentTabIcon: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  agentChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 16,
+    marginLeft: -1,
+    gap: 1.5,
+  },
+  agentChartBar: {
+    width: 3,
+    borderRadius: 999,
   },
 });
