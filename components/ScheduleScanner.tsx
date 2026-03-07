@@ -2,7 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Camera, CheckCircle2, FileSearch } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ExtractedSchedule, scanScheduleFromImage } from '../services/ai-ocr';
+import { ExtractedSchedule, getPrimaryExtractedSchedule, scanScheduleFromImage } from '../services/ai-ocr';
 
 export default function ScheduleScanner() {
     const [image, setImage] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export default function ScheduleScanner() {
         setLoading(true);
         try {
             const data = await scanScheduleFromImage(image);
-            setResult(data);
+            setResult(getPrimaryExtractedSchedule(data));
         } catch (e) {
             Alert.alert('Error', 'AI scan failed. Please check if the backend is running.');
         } finally {

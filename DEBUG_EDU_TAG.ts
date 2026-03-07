@@ -19,7 +19,7 @@ console.log('Test undefined:', isHKBUEmail(undefined)); // Should be false
 
 // 3. 在createPost中添加日志
 // 在 app/campus/compose.tsx 中的handleSubmit函数内添加此日志：
-console.log('Creating post with email:', (user as any).email);
+console.log('Creating post with email:', '<replace with current user email>');
 
 // 4. 查看post数据中是否有authorEmail
 import { fetchPosts } from './services/campus';

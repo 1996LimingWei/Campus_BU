@@ -2,11 +2,12 @@ import { formatDistanceToNow } from 'date-fns';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Bell, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, X } from 'lucide-react-native';
+import { Bell, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { EduBadge } from '../../components/common/EduBadge';
+import MyScheduleCard from '../../components/profile/MyScheduleCard';
 import { useNotifications } from '../../context/NotificationContext';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import storage from '../../lib/storage';
@@ -416,6 +417,8 @@ export default function ProfileScreen() {
                     <Edit3 size={20} color={userId ? "#1E3A8A" : "#9CA3AF"} />
                 </TouchableOpacity>
             </View>
+
+            <MyScheduleCard userId={userId} />
 
             {/* Notifications Section */}
             <View style={styles.section}>

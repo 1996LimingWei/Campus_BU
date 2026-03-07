@@ -237,6 +237,51 @@ export const getCourseByCode = async (code: string): Promise<Course | null> => {
     };
 };
 
+export const searchCourses = async (query: string, limit: number = 10): Promise<Course[]> => {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+
+    const normalized = trimmed.toUpperCase();
+    const localMatches = (SEM2_COURSES_DATA as Course[])
+        .filter(course => {
+            const code = (course.code || '').toUpperCase();
+            const name = (course.name || '').toUpperCase();
+            return code.includes(normalized) || name.includes(normalized);
+        })
+        .slice(0, limit);
+
+    const merged = new Map<string, Course>();
+    localMatches.forEach(course => {
+        merged.set(course.code || course.id, course);
+    });
+
+    const safeTerm = trimmed.replace(/[%(),]/g, ' ').trim();
+    if (safeTerm) {
+        const { data, error } = await supabase
+            .from('courses')
+            .select('*')
+            .or(`code.ilike.%${safeTerm}%,name.ilike.%${safeTerm}%`)
+            .limit(limit);
+
+        if (!error && data) {
+            data.forEach((course: any) => {
+                merged.set(course.code || course.id, {
+                    id: course.id,
+                    code: course.code,
+                    name: course.name || '',
+                    instructor: course.instructor || '',
+                    department: course.department || '',
+                    credits: course.credits || 3,
+                    rating: course.rating || 0,
+                    reviewCount: course.review_count || 0,
+                });
+            });
+        }
+    }
+
+    return Array.from(merged.values()).slice(0, limit);
+};
+
 export const addCourse = async (courseData: Partial<Course>): Promise<{ data: any; error: any }> => {
     // Check if code exists first (redundant but better UX)
     const existing = await getCourseByCode(courseData.code || '');

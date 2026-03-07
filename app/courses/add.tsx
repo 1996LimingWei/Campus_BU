@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BookOpen, Building, Clock, Hash, User, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,
@@ -17,12 +17,22 @@ import { submitCourseForReview } from '../../services/courses';
 
 export default function AddCourseScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams<{ code?: string; name?: string }>();
     const [code, setCode] = useState('');
     const [name, setName] = useState('');
     const [instructor, setInstructor] = useState('');
     const [department, setDepartment] = useState('');
     const [credits, setCredits] = useState('3');
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (typeof params.code === 'string' && params.code.trim()) {
+            setCode(params.code);
+        }
+        if (typeof params.name === 'string' && params.name.trim()) {
+            setName(params.name);
+        }
+    }, [params.code, params.name]);
 
     const handleSubmit = async () => {
         const user = await getCurrentUser();

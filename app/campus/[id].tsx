@@ -219,15 +219,11 @@ export default function PostDetailScreen() {
             });
             if (newComment) {
                 setComments(prev => [...prev, newComment]);
-                setPost(prev => {
-                    const updated = prev ? { ...prev, comments: prev.comments + 1 } : null;
-                    if (updated) {
-                        DeviceEventEmitter.emit('campus_post_updated', {
-                            id: post.id,
-                            updates: { comments: updated.comments }
-                        });
-                    }
-                    return updated;
+                const nextCommentsCount = post.comments + 1;
+                setPost(prev => (prev ? { ...prev, comments: nextCommentsCount } : null));
+                DeviceEventEmitter.emit('campus_post_updated', {
+                    id: post.id,
+                    updates: { comments: nextCommentsCount }
                 });
                 setCommentText('');
                 setReplyTarget(null);
