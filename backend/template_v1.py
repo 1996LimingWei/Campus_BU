@@ -207,6 +207,15 @@ def _prepare_block_for_ocr(image: Image.Image, bbox: tuple[int, int, int, int]) 
     return binary
 
 
+def _prepare_block_for_paddle_ocr(image: Image.Image, bbox: tuple[int, int, int, int]) -> Image.Image:
+    min_x, min_y, max_x, max_y = bbox
+    crop = image.crop((min_x, min_y, max_x + 1, max_y + 1)).convert("RGB")
+    enlarged = crop.resize((crop.width * 3, crop.height * 3))
+    contrasted = ImageOps.autocontrast(enlarged, cutoff=2)
+    sharpened = contrasted.filter(ImageFilter.SHARPEN)
+    return sharpened
+
+
 def _normalize_ocr_lines(text: str) -> str:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     return "\n".join(lines)
@@ -259,7 +268,7 @@ def _ocr_block_text_paddle(image: Image.Image, bbox: tuple[int, int, int, int]) 
     if np is None:
         return ""
 
-    prepared = _prepare_block_for_ocr(image, bbox)
+    prepared = _prepare_block_for_paddle_ocr(image, bbox)
     try:
         ocr = _get_paddle_ocr()
         result = ocr.predict(np.array(prepared))
