@@ -6,6 +6,7 @@ from functools import lru_cache
 from io import BytesIO
 import os
 import re
+from collections.abc import Mapping
 from typing import Iterable
 
 from PIL import Image, ImageFilter, ImageOps
@@ -273,9 +274,16 @@ def _ocr_block_text_paddle(image: Image.Image, bbox: tuple[int, int, int, int]) 
             texts.extend(str(item).strip() for item in rec_texts if str(item).strip())
             continue
 
-        if isinstance(page, dict):
+        if isinstance(page, Mapping):
             values = page.get("rec_texts") or []
             texts.extend(str(item).strip() for item in values if str(item).strip())
+            continue
+
+        try:
+            values = page["rec_texts"] or []
+            texts.extend(str(item).strip() for item in values if str(item).strip())
+        except Exception:
+            continue
 
     return _normalize_ocr_lines("\n".join(texts))
 
