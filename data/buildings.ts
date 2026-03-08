@@ -1,5 +1,7 @@
 import { CampusLocation } from '../types';
 
+const HIDDEN_BUILDING_IDS = new Set(['lam-woo', 'sc-lw']);
+
 export const CAMPUS_BUILDINGS: CampusLocation[] = [
     // Ho Sin Hang Campus (HSHC)
     {
@@ -262,4 +264,4 @@ export const CAMPUS_BUILDINGS: CampusLocation[] = [
         description: 'Carpark Area C',
         imageUrl: ''
     }
-];
+].filter(building => !HIDDEN_BUILDING_IDS.has(building.id));
