@@ -133,14 +133,14 @@ export default function RootLayout() {
     checkAuth();
   }, []);
 
-  if (loading || !isAnimationFinished) {
-    return (
-      <StartupAnimation onFinish={() => setIsAnimationFinished(true)} />
-    );
-  }
-
   return (
     <>
+      {(!isAnimationFinished || loading) && (
+        <StartupAnimation
+          isAppReady={!loading}
+          onFinish={() => setIsAnimationFinished(true)}
+        />
+      )}
       <LoginPromptProvider>
         <NotificationProvider>
           <Stack
