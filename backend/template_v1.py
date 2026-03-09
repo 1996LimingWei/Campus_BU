@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from io import BytesIO
 import json
+import math
 import os
 import re
 from urllib import error as urllib_error
@@ -184,12 +185,143 @@ def _infer_grid(image: Image.Image) -> tuple[list[int], list[int]]:
     vertical_boundaries = _find_vertical_boundaries(image)
     horizontal_boundaries = _find_horizontal_boundaries(image)
 
-    if len(vertical_boundaries) < 8:
-        raise ValueError(f"Expected at least 8 vertical boundaries, got {len(vertical_boundaries)}")
-    if len(horizontal_boundaries) < 15:
-        raise ValueError(f"Expected at least 15 horizontal boundaries, got {len(horizontal_boundaries)}")
+    vertical_boundaries = _select_regular_boundaries(
+        vertical_boundaries,
+        expected_count=8,
+        min_span=max(int(image.size[0] * 0.55), 320),
+        min_mean_gap=max(int(image.size[0] * 0.07), 55),
+    )
+    horizontal_boundaries = _normalize_horizontal_grid_boundaries(
+        horizontal_boundaries,
+        image_height=image.size[1],
+    )
 
-    return vertical_boundaries[:8], horizontal_boundaries[:15]
+    return vertical_boundaries, horizontal_boundaries
+
+
+def _select_regular_boundaries(
+    boundaries: list[int],
+    expected_count: int,
+    min_span: int,
+    min_mean_gap: int,
+    start_bias_weight: float = 0.0,
+) -> list[int]:
+    if len(boundaries) < expected_count:
+        raise ValueError(f"Expected at least {expected_count} boundaries, got {len(boundaries)}")
+    if len(boundaries) == expected_count:
+        return boundaries
+
+    best_subset: list[int] | None = None
+    best_score: float | None = None
+
+    for start_index in range(0, len(boundaries) - expected_count + 1):
+        subset = boundaries[start_index:start_index + expected_count]
+        gaps = [subset[idx + 1] - subset[idx] for idx in range(len(subset) - 1)]
+        if any(gap <= 0 for gap in gaps):
+            continue
+
+        span = subset[-1] - subset[0]
+        mean_gap = sum(gaps) / len(gaps)
+        if span < min_span or mean_gap < min_mean_gap:
+            continue
+
+        variance = sum((gap - mean_gap) ** 2 for gap in gaps) / len(gaps)
+        rel_std = math.sqrt(variance) / mean_gap if mean_gap else float("inf")
+
+        center_bias = abs(((subset[0] + subset[-1]) / 2) - ((boundaries[0] + boundaries[-1]) / 2))
+        score = rel_std * 1000 - span * 0.05 + center_bias * 0.01 + subset[0] * start_bias_weight
+        if best_score is None or score < best_score:
+            best_score = score
+            best_subset = subset
+
+    if best_subset is None:
+        raise ValueError(f"Could not find a regular subset of {expected_count} boundaries from {len(boundaries)} candidates")
+
+    return best_subset
+
+
+def _normalize_horizontal_grid_boundaries(boundaries: list[int], image_height: int) -> list[int]:
+    min_span = max(int(image_height * 0.45), 420)
+    min_mean_gap = max(int(image_height * 0.03), 26)
+
+    if len(boundaries) >= 15:
+        best_subset: list[int] | None = None
+        best_score: float | None = None
+
+        for start_index in range(0, len(boundaries) - 15 + 1):
+            subset = boundaries[start_index:start_index + 15]
+            gaps = [subset[idx + 1] - subset[idx] for idx in range(len(subset) - 1)]
+            if any(gap <= 0 for gap in gaps):
+                continue
+
+            span = subset[-1] - subset[0]
+            row_gaps = gaps[1:] if len(gaps) > 1 else gaps
+            mean_row_gap = sum(row_gaps) / len(row_gaps)
+            if span < min_span or mean_row_gap < min_mean_gap:
+                continue
+
+            variance = sum((gap - mean_row_gap) ** 2 for gap in row_gaps) / len(row_gaps)
+            rel_std = math.sqrt(variance) / mean_row_gap if mean_row_gap else float("inf")
+
+            first_gap = gaps[0]
+            header_ratio = first_gap / mean_row_gap if mean_row_gap else 1.0
+            header_penalty = abs(header_ratio - 0.42)
+            score = rel_std * 1000 + header_penalty * 30 - span * 0.05 + subset[0] * 0.02
+            if best_score is None or score < best_score:
+                best_score = score
+                best_subset = subset
+
+        if best_subset is not None:
+            return best_subset
+
+    subset = _select_regular_boundaries(
+        boundaries,
+        expected_count=14,
+        min_span=min_span,
+        min_mean_gap=min_mean_gap,
+        start_bias_weight=0.08,
+    )
+    return _ensure_top_grid_boundary(subset)
+
+
+def _ensure_top_grid_boundary(boundaries: list[int]) -> list[int]:
+    if len(boundaries) < 2:
+        return boundaries
+
+    gaps = [boundaries[idx + 1] - boundaries[idx] for idx in range(len(boundaries) - 1)]
+    if not gaps:
+        return boundaries
+
+    mean_row_gap = sum(gaps) / len(gaps)
+    inferred_header_height = max(18, min(32, int(round(mean_row_gap * 0.42))))
+
+    if len(boundaries) == 14:
+        inferred = max(boundaries[0] - inferred_header_height, 0)
+        return [inferred] + boundaries
+
+    first_gap = boundaries[1] - boundaries[0]
+    if first_gap >= mean_row_gap * 0.7:
+        inferred = max(boundaries[0] - inferred_header_height, 0)
+        return [inferred] + boundaries[:14]
+
+    return boundaries[:15]
+
+
+def _crop_to_grid_region(
+    image: Image.Image,
+    vertical_boundaries: list[int],
+    horizontal_boundaries: list[int],
+) -> tuple[Image.Image, int, int, list[int], list[int]]:
+    width, height = image.size
+    left = max(vertical_boundaries[0] - 1, 0)
+    top = max(horizontal_boundaries[0] - 1, 0)
+    right = min(vertical_boundaries[-1] + 1, width - 1)
+    bottom = min(horizontal_boundaries[-1] + 1, height - 1)
+
+    cropped = image.crop((left, top, right + 1, bottom + 1))
+    cropped_verticals = [value - left for value in vertical_boundaries]
+    cropped_horizontals = [value - top for value in horizontal_boundaries]
+    return cropped, left, top, cropped_verticals, cropped_horizontals
 
 
 def _normalize_confidence(block_width: int, block_height: int, column_width: int, row_height: int) -> float:
@@ -381,6 +513,11 @@ def _needs_review(course_code: str, room: str, source_text: str) -> bool:
 def detect_schedule_blocks(image_bytes: bytes) -> list[DetectedBlock]:
     image = Image.open(BytesIO(image_bytes)).convert("RGB")
     vertical_boundaries, horizontal_boundaries = _infer_grid(image)
+    image, offset_x, offset_y, vertical_boundaries, horizontal_boundaries = _crop_to_grid_region(
+        image,
+        vertical_boundaries,
+        horizontal_boundaries,
+    )
 
     time_column_right = vertical_boundaries[1]
     day_boundaries = vertical_boundaries[1:]
@@ -432,7 +569,7 @@ def detect_schedule_blocks(image_bytes: bytes) -> list[DetectedBlock]:
                 day_label=DAY_LABELS[day_index],
                 start_time=start_time,
                 end_time=end_time,
-                bbox=(min_x, min_y, max_x, max_y),
+                bbox=(min_x + offset_x, min_y + offset_y, max_x + offset_x, max_y + offset_y),
                 confidence=confidence,
                 source_text=source_text,
                 course_code=course_code,

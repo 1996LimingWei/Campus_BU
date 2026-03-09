@@ -20,7 +20,7 @@ steps:
     args:
       - build
       - -t
-      - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$COMMIT_SHA
+      - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$BUILD_ID
       - -t
       - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:latest
       - .
@@ -28,7 +28,7 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$COMMIT_SHA
+      - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$BUILD_ID
 
   - name: gcr.io/cloud-builders/docker
     args:
@@ -42,7 +42,7 @@ steps:
       - deploy
       - ${_SERVICE}
       - --image
-      - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$COMMIT_SHA
+      - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$BUILD_ID
       - --platform
       - managed
       - --region
@@ -66,5 +66,5 @@ steps:
       - OCR_SPACE_API_KEY=${_OCR_SPACE_API_KEY_SECRET}:${_OCR_SPACE_API_KEY_VERSION}
 
 images:
-  - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$COMMIT_SHA
+  - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:$BUILD_ID
   - asia-east1-docker.pkg.dev/$PROJECT_ID/hkcampus-ocr/${_SERVICE}:latest

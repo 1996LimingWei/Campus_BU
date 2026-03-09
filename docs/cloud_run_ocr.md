@@ -97,6 +97,8 @@ gcloud builds submit \
   --substitutions _SERVICE=hkcampus-ocr,_REGION=asia-east1,_OCR_SPACE_API_KEY_SECRET=OCR_SPACE_API_KEY,_OCR_SPACE_API_KEY_VERSION=latest
 ```
 
+The build config uses Cloud Build's `BUILD_ID` for the versioned image tag, so manual deploys do not need an extra `COMMIT_SHA` substitution.
+
 After deployment, copy the Cloud Run HTTPS URL into:
 
 ```env

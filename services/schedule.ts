@@ -57,6 +57,19 @@ export interface UserScheduleEntry {
     isActive: boolean;
 }
 
+export interface UpdateUserScheduleEntryInput {
+    title: string;
+    courseCode?: string;
+    teacherName?: string;
+    room?: string;
+    dayOfWeek: number;
+    startTime?: string;
+    endTime?: string;
+    startPeriod?: number;
+    endPeriod?: number;
+    weekText?: string;
+}
+
 const inferContentType = (uri: string): string => {
     const lower = uri.toLowerCase();
     if (lower.endsWith('.png')) return 'image/png';
@@ -426,4 +439,108 @@ export const ignoreImportItem = async (userId: string, item: ScheduleImportItemR
 
     if (error) throw error;
     await updateImportJobCounts(item.importJobId);
+};
+
+export const updateUserScheduleEntry = async (params: {
+    userId: string;
+    entryId: string;
+    updates: UpdateUserScheduleEntryInput;
+}): Promise<UserScheduleEntry> => {
+    const { userId, entryId, updates } = params;
+
+    if (!updates.title.trim()) {
+        throw new Error('Missing course title.');
+    }
+
+    const hasTime = Boolean(updates.startTime && updates.endTime);
+    const hasPeriod = Boolean(updates.startPeriod && updates.endPeriod);
+    const hasWeekText = Boolean(updates.weekText);
+    if (!hasTime && !hasPeriod && !hasWeekText) {
+        throw new Error('Missing extracted class time.');
+    }
+
+    const payload = {
+        title: updates.title.trim(),
+        course_code: updates.courseCode?.trim() || null,
+        teacher_name: updates.teacherName?.trim() || null,
+        room: updates.room?.trim() || null,
+        day_of_week: updates.dayOfWeek,
+        start_time: updates.startTime?.trim() || null,
+        end_time: updates.endTime?.trim() || null,
+        start_period: updates.startPeriod || null,
+        end_period: updates.endPeriod || null,
+        week_text: updates.weekText?.trim() || null,
+        updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+        .from('user_schedule_entries')
+        .update(payload)
+        .eq('id', entryId)
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .select('*')
+        .single();
+
+    if (error) throw error;
+    return mapEntryRow(data);
+};
+
+export const deleteUserScheduleEntry = async (params: {
+    userId: string;
+    entryId: string;
+}): Promise<void> => {
+    const { userId, entryId } = params;
+
+    const { error } = await supabase
+        .from('user_schedule_entries')
+        .update({
+            is_active: false,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', entryId)
+        .eq('user_id', userId)
+        .eq('is_active', true);
+
+    if (error) throw error;
+};
+
+export const createManualScheduleEntry = async (params: {
+    userId: string;
+    entry: UpdateUserScheduleEntryInput;
+}): Promise<UserScheduleEntry> => {
+    const { userId, entry } = params;
+
+    if (!entry.title.trim()) {
+        throw new Error('Missing course title.');
+    }
+
+    const hasTime = Boolean(entry.startTime && entry.endTime);
+    const hasPeriod = Boolean(entry.startPeriod && entry.endPeriod);
+    const hasWeekText = Boolean(entry.weekText);
+    if (!hasTime && !hasPeriod && !hasWeekText) {
+        throw new Error('Missing extracted class time.');
+    }
+
+    const { data, error } = await supabase
+        .from('user_schedule_entries')
+        .insert({
+            user_id: userId,
+            source: 'manual_custom',
+            title: entry.title.trim(),
+            course_code: entry.courseCode?.trim() || null,
+            teacher_name: entry.teacherName?.trim() || null,
+            room: entry.room?.trim() || null,
+            day_of_week: entry.dayOfWeek,
+            start_time: entry.startTime?.trim() || null,
+            end_time: entry.endTime?.trim() || null,
+            start_period: entry.startPeriod || null,
+            end_period: entry.endPeriod || null,
+            week_text: entry.weekText?.trim() || null,
+        })
+        .select('*')
+        .single();
+
+    if (error) throw error;
+    return mapEntryRow(data);
 };
