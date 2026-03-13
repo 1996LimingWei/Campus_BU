@@ -47,7 +47,12 @@ const initI18n = async () => {
     });
 };
 
-initI18n();
+// Export the initialization promise so we can wait for it if needed
+export let i18nInitialized = false;
+export const i18nPromise = (async () => {
+    await initI18n();
+    i18nInitialized = true;
+})();
 
 /**
  * Switch language and persist the choice

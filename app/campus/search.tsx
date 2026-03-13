@@ -213,6 +213,10 @@ export default function CampusSearchScreen() {
                                         onPress={() => handlePostPress(post.id)}
                                         onLike={() => handleLike(post.id)}
                                         currentUserId={currentUser?.uid}
+                                        onAuthorPress={(authorId) => {
+                                            if (authorId === currentUser?.uid) return;
+                                            router.push(`/profile/${authorId}` as any);
+                                        }}
                                     />
                                 )}
                             />
@@ -226,6 +230,10 @@ export default function CampusSearchScreen() {
                             <ForumPostRow
                                 post={item}
                                 onPress={() => router.push(`/forum/${item.id}` as any)}
+                                onAuthorPress={(authorId) => {
+                                    if (authorId === currentUser?.uid) return;
+                                    router.push(`/profile/${authorId}` as any);
+                                }}
                             />
                         )}
                         ListEmptyComponent={renderEmptyState()}

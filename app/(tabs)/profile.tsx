@@ -3,7 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Bell, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminBadge } from '../../components/common/AdminBadge';
 import { EduBadge } from '../../components/common/EduBadge';
 import MyScheduleCard from '../../components/profile/MyScheduleCard';
@@ -13,9 +13,13 @@ import storage from '../../lib/storage';
 import { createUserProfile, getCurrentUser, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
 import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
 import { supabase } from '../../services/supabase';
-import { SOCIAL_TAGS, User as UserProfile } from '../../types';
-import { isAdmin, isHKBUEmail } from '../../utils/userUtils';
 import { changeLanguage } from '../i18n/i18n';
+import { ProfileHeader } from '../../components/profile/ProfileHeader';
+import { ProfilePostFeed } from '../../components/profile/ProfilePostFeed';
+import { ProfileTabs, ProfileTabType } from '../../components/profile/ProfileTabs';
+import { fetchLikedPosts, fetchPostsByAuthor, togglePostLike } from '../../services/campus';
+import { Post, SOCIAL_TAGS, User as UserProfile } from '../../types';
+import { isAdmin, isHKBUEmail } from '../../utils/userUtils';
 const DEMO_MODE_KEY = 'hkcampus_demo_mode';
 
 // Helper to check if avatar URL is valid (not a local file path)
@@ -71,7 +75,10 @@ export default function ProfileScreen() {
                 // Load Profile
                 const userProfile = await getUserProfile(user.uid);
                 if (userProfile) {
-                    setProfile(userProfile);
+                    setProfile({
+                        ...userProfile,
+                        email: userProfile.email || user.email || '',
+                    });
                     setSelectedTags(userProfile.socialTags || []);
                 }
             } else {
@@ -391,191 +398,287 @@ export default function ProfileScreen() {
         return notification.title;
     };
 
+    const [activeTab, setActiveTab] = useState<ProfileTabType>('posts');
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [likedPosts, setLikedPosts] = useState<Post[]>([]);
+
+    const loadUserPosts = async (uid: string) => {
+        try {
+            const data = await fetchPostsByAuthor(uid, uid);
+            setPosts(data);
+        } catch (error) {
+            console.error('Error loading user posts:', error);
+        }
+    };
+
+    const loadLikedPosts = async (uid: string) => {
+        try {
+            const data = await fetchLikedPosts(uid, uid);
+            setLikedPosts(data);
+        } catch (error) {
+            console.error('Error loading liked posts:', error);
+        }
+    };
+
+    const handleLikePost = async (postId: string) => {
+        if (!userId) return;
+        try {
+            await togglePostLike(postId, userId);
+            await Promise.all([loadUserPosts(userId), loadLikedPosts(userId)]);
+        } catch (error) {
+            console.error('Error toggling like in profile:', error);
+        }
+    };
+
+    useEffect(() => {
+        if (userId) {
+            Promise.all([loadUserPosts(userId), loadLikedPosts(userId)]);
+        } else {
+            setPosts([]);
+            setLikedPosts([]);
+        }
+    }, [userId]);
+
+    const [profileMode, setProfileMode] = useState<'overview' | 'content'>('overview');
+    const pagerRef = React.useRef<ScrollView>(null);
+    const scrollX = React.useRef(new Animated.Value(0)).current;
+    const { width: SCREEN_W } = Dimensions.get('window');
+
+    const scrollToMode = (mode: 'overview' | 'content') => {
+        const index = mode === 'overview' ? 0 : 1;
+        pagerRef.current?.scrollTo({ x: index * SCREEN_W, animated: true });
+        setProfileMode(mode);
+    };
+
+    const onPagerScroll = (e: any) => {
+        const x = e.nativeEvent.contentOffset.x;
+        const newMode = x > SCREEN_W / 2 ? 'content' : 'overview';
+        if (newMode !== profileMode) setProfileMode(newMode);
+    };
+
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>{t('profile.title')}</Text>
+        <View style={styles.container}>
+            {/* Blue Top Header Bar */}
+            <View style={styles.blueHeader}>
+                <Text style={styles.blueHeaderTitle}>个人中心</Text>
             </View>
 
-            {/* Profile Card */}
-            <View style={styles.profileCard}>
-                <TouchableOpacity style={styles.avatarContainer} onPress={handleAvatarPress} disabled={uploadingAvatar}>
-                    <View style={styles.avatar}>
-                        {uploadingAvatar ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                        ) : isValidAvatarUrl(profile?.avatarUrl) ? (
-                            <Image source={{ uri: profile!.avatarUrl }} style={styles.avatarImage} />
-                        ) : (
-                            <Text style={styles.avatarText}>{profile?.displayName?.charAt(0) || t('profile.guest_name').charAt(0)}</Text>
-                        )}
-                    </View>
-                    <View style={styles.avatarCameraIcon}>
-                        <Camera size={12} color="#fff" />
-                    </View>
-                </TouchableOpacity>
-                <View style={styles.profileInfo}>
-                    <View style={styles.profileNameRow}>
-                        <Text style={styles.profileName}>{profile?.displayName || (loadingProfile ? '...' : t('profile.guest_name'))}</Text>
-                        <AdminBadge shouldShow={isAdminUser} size="medium" />
-                        <EduBadge shouldShow={isHKBUEmail(userEmail)} size="medium" />
-                    </View>
-                    <Text style={styles.profileMajor}>{profile?.major || (loadingProfile ? '...' : t('profile.guest_major'))}</Text>
-                </View>
-                <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => {
-                        if (checkLogin(userId)) {
-                            router.push('/(auth)/setup');
-                        }
-                    }}
+            {/* Profile Header Card */}
+            <ProfileHeader 
+                user={profile}
+                isCurrentUser={true}
+                onEditPress={() => router.push('/(auth)/setup')}
+                onSettingsPress={() => {}} 
+            />
+
+            {/* Premium Tab Switcher */}
+            <View style={styles.pageTabContainer}>
+                <TouchableOpacity 
+                    style={styles.pageTab}
+                    onPress={() => scrollToMode('overview')}
                 >
-                    <Edit3 size={20} color={userId ? "#1E3A8A" : "#9CA3AF"} />
+                    <Text style={[styles.pageTabText, profileMode === 'overview' && styles.pageTabTextActive]}>
+                        概览
+                    </Text>
+                    {profileMode === 'overview' && <View style={styles.pageTabIndicator} />}
+                </TouchableOpacity>
+                <TouchableOpacity 
+                    style={styles.pageTab}
+                    onPress={() => scrollToMode('content')}
+                >
+                    <Text style={[styles.pageTabText, profileMode === 'content' && styles.pageTabTextActive]}>
+                        作品
+                    </Text>
+                    {profileMode === 'content' && <View style={styles.pageTabIndicator} />}
                 </TouchableOpacity>
             </View>
 
-            <MyScheduleCard userId={userId} />
+            <Animated.ScrollView
+                ref={pagerRef as any}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={1}
+                onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: false },
+                )}
+                onMomentumScrollEnd={onPagerScroll}
+                style={{ flex: 1 }}
+            >
+                {/* Page 0: Overview */}
+                <ScrollView 
+                    style={{ width: SCREEN_W }} 
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollContentPager}
+                >
+                    <MyScheduleCard userId={userId} />
 
-            {/* Notifications Section */}
-            <View style={styles.section}>
-                <View style={[styles.sectionHeader, { marginBottom: 16 }]}>
-                    <View style={styles.settingLeft}>
-                        <Bell size={20} color="#1E3A8A" />
-                        <Text style={[styles.sectionTitle, { marginLeft: 12, marginBottom: 0 }]}>{t('profile.notifications')}</Text>
-                        {unreadCount > 0 && (
-                            <View style={styles.countBadgeInline}>
-                                <Text style={styles.countTextInline}>{unreadCount}</Text>
+                    {/* Notifications Section */}
+                    <View style={styles.section}>
+                        <View style={[styles.sectionHeader, { marginBottom: 12 }]}>
+                            <View style={styles.settingLeft}>
+                                <Bell size={18} color="#1E3A8A" />
+                                <Text style={[styles.sectionTitle, { marginLeft: 10, marginBottom: 0 }]}>{t('profile.notifications')}</Text>
+                                {unreadCount > 0 && (
+                                    <View style={styles.countBadgeInline}>
+                                        <Text style={styles.countTextInline}>{unreadCount}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <TouchableOpacity onPress={() => {
+                                if (checkLogin(userId)) setShowNotifications(true);
+                            }}>
+                                <Text style={styles.seeAllText}>{t('profile.see_all')}</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {loadingNotifications ? (
+                            <ActivityIndicator color="#1E3A8A" />
+                        ) : !userId ? (
+                            <TouchableOpacity onPress={() => checkLogin(userId)}>
+                                <Text style={styles.emptyText}>{t('profile.login_view_notifications', 'Login to view notifications')}</Text>
+                            </TouchableOpacity>
+                        ) : notifications.length === 0 ? (
+                            <Text style={styles.emptyText}>{t('profile.no_notifications')}</Text>
+                        ) : (
+                            <View style={styles.notificationPreviewList}>
+                                {notifications.slice(0, 2).map((notif) => (
+                                    <TouchableOpacity
+                                        key={notif.id}
+                                        style={[styles.notifPreviewItem, !notif.is_read && styles.notifUnread]}
+                                        onPress={() => handleNotificationPress(notif)}
+                                    >
+                                        <View style={[styles.notifPreviewIcon, {
+                                            backgroundColor: notif.type === 'comment' ? '#DBEAFE' :
+                                                notif.type === 'like' ? '#FEE2E2' : '#F5F3FF'
+                                        }]}>
+                                            {notif.type === 'comment' ? <MessageSquare size={14} color="#2563EB" /> :
+                                                notif.type === 'like' ? <HeartIcon size={14} color="#EF4444" /> :
+                                                    <Sparkles size={14} color="#8B5CF6" />}
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.notifPreviewTitle} numberOfLines={1}>
+                                                {renderNotificationTitle(notif)}
+                                            </Text>
+                                            <Text style={styles.notifPreviewContent} numberOfLines={1}>
+                                                {renderNotificationContent(notif)}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
                             </View>
                         )}
                     </View>
-                    <TouchableOpacity onPress={() => {
-                        if (checkLogin(userId)) setShowNotifications(true);
-                    }}>
-                        <Text style={styles.seeAllText}>{t('profile.see_all')}</Text>
-                    </TouchableOpacity>
-                </View>
 
-                {loadingNotifications ? (
-                    <ActivityIndicator color="#1E3A8A" />
-                ) : !userId ? (
-                    <TouchableOpacity onPress={() => checkLogin(userId)}>
-                        <Text style={styles.emptyText}>{t('profile.login_view_notifications', 'Login to view notifications')}</Text>
-                    </TouchableOpacity>
-                ) : notifications.length === 0 ? (
-                    <Text style={styles.emptyText}>{t('profile.no_notifications')}</Text>
-                ) : (
-                    <View style={styles.notificationPreviewList}>
-                        {notifications.slice(0, 2).map((notif) => (
-                            <TouchableOpacity
-                                key={notif.id}
-                                style={[styles.notifPreviewItem, !notif.is_read && styles.notifUnread]}
-                                onPress={() => handleNotificationPress(notif)}
-                            >
-                                <View style={[styles.notifPreviewIcon, {
-                                    backgroundColor: notif.type === 'comment' ? '#DBEAFE' :
-                                        notif.type === 'like' ? '#FEE2E2' : '#F5F3FF'
-                                }]}>
-                                    {notif.type === 'comment' ? <MessageSquare size={14} color="#2563EB" /> :
-                                        notif.type === 'like' ? <HeartIcon size={14} color="#EF4444" /> :
-                                            <Sparkles size={14} color="#8B5CF6" />}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.notifPreviewTitle} numberOfLines={1}>
-                                        {renderNotificationTitle(notif)}
+                    {/* Social Tags */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>{t('profile.social_tags')}</Text>
+                        <Text style={styles.sectionSubtitle}>{t('profile.select_tags')}</Text>
+                        <View style={styles.tagsGrid}>
+                            {SOCIAL_TAGS.map((tag) => (
+                                <TouchableOpacity
+                                    key={tag}
+                                    style={[
+                                        styles.tagButton,
+                                        selectedTags.includes(tag) && styles.tagButtonActive
+                                    ]}
+                                    onPress={() => toggleTag(tag)}
+                                >
+                                    <Text style={[
+                                        styles.tagText,
+                                        selectedTags.includes(tag) && styles.tagTextActive
+                                    ]}>
+                                        {tag}
                                     </Text>
-                                    <Text style={styles.notifPreviewContent} numberOfLines={1}>
-                                        {renderNotificationContent(notif)}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+
+
+                    {/* Language Switcher */}
+                    <View style={styles.section}>
+                        <View style={styles.settingRow}>
+                            <View style={styles.settingLeft}>
+                                <Globe size={20} color="#1E3A8A" />
+                                <Text style={styles.settingLabel}>{t('profile.language')}</Text>
+                            </View>
+                        </View>
+                        <Text style={styles.settingHint}>{t('profile.language_hint')}</Text>
+                        <View style={styles.langSwitcher}>
+                            {LANGUAGE_OPTIONS.map(opt => (
+                                <TouchableOpacity
+                                    key={opt.key}
+                                    style={[
+                                        styles.langBtn,
+                                        currentLang === opt.key && styles.langBtnActive
+                                    ]}
+                                    onPress={() => handleLanguageChange(opt.key)}
+                                >
+                                    <Text style={[
+                                        styles.langBtnText,
+                                        currentLang === opt.key && styles.langBtnTextActive
+                                    ]}>
+                                        {opt.label}
                                     </Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
-                )}
-            </View>
 
-            {/* Social Tags */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{t('profile.social_tags')}</Text>
-                <Text style={styles.sectionSubtitle}>{t('profile.select_tags')}</Text>
-                <View style={styles.tagsGrid}>
-                    {SOCIAL_TAGS.map((tag) => (
+                    {/* Settings */}
+                    <View style={styles.section}>
                         <TouchableOpacity
-                            key={tag}
-                            style={[
-                                styles.tagButton,
-                                selectedTags.includes(tag) && styles.tagButtonActive
-                            ]}
-                            onPress={() => toggleTag(tag)}
+                            style={styles.menuItem}
+                            onPress={() => setShowHelp(true)}
                         >
-                            <Text style={[
-                                styles.tagText,
-                                selectedTags.includes(tag) && styles.tagTextActive
-                            ]}>
-                                {tag}
-                            </Text>
+                            <HelpCircle size={20} color="#6B7280" />
+                            <Text style={styles.menuText}>{t('profile.help')}</Text>
+                            <ChevronRight size={20} color="#9CA3AF" />
                         </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-
-
-            {/* Language Switcher */}
-            <View style={styles.section}>
-                <View style={styles.settingRow}>
-                    <View style={styles.settingLeft}>
-                        <Globe size={20} color="#1E3A8A" />
-                        <Text style={styles.settingLabel}>{t('profile.language')}</Text>
                     </View>
-                </View>
-                <Text style={styles.settingHint}>{t('profile.language_hint')}</Text>
-                <View style={styles.langSwitcher}>
-                    {LANGUAGE_OPTIONS.map(opt => (
-                        <TouchableOpacity
-                            key={opt.key}
-                            style={[
-                                styles.langBtn,
-                                currentLang === opt.key && styles.langBtnActive
-                            ]}
-                            onPress={() => handleLanguageChange(opt.key)}
-                        >
-                            <Text style={[
-                                styles.langBtnText,
-                                currentLang === opt.key && styles.langBtnTextActive
-                            ]}>
-                                {opt.label}
-                            </Text>
+
+                    {/* Sign Out / Sign In */}
+                    {userId ? (
+                        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+                            <LogOut size={20} color="#EF4444" />
+                            <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
                         </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
+                    ) : (
+                        <TouchableOpacity
+                            style={[styles.signOutButton, { borderColor: '#1E3A8A' }]}
+                            onPress={() => router.replace('/(auth)/login')}
+                        >
+                            <ChevronRight size={20} color="#1E3A8A" />
+                            <Text style={[styles.signOutText, { color: '#1E3A8A' }]}>{t('profile.login_signup')}</Text>
+                        </TouchableOpacity>
+                    )}
+                    <View style={{ height: 100 }} />
+                </ScrollView>
 
-            {/* Settings */}
-            <View style={styles.section}>
-                <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={() => setShowHelp(true)}
+                {/* Page 1: My Content */}
+                <ScrollView 
+                    style={{ width: SCREEN_W }} 
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollContentPager}
                 >
-                    <HelpCircle size={20} color="#6B7280" />
-                    <Text style={styles.menuText}>{t('profile.help')}</Text>
-                    <ChevronRight size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-            </View>
-
-            {/* Sign Out / Sign In */}
-            {userId ? (
-                <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-                    <LogOut size={20} color="#EF4444" />
-                    <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
-                </TouchableOpacity>
-            ) : (
-                <TouchableOpacity
-                    style={[styles.signOutButton, { borderColor: '#1E3A8A' }]}
-                    onPress={() => router.replace('/(auth)/login')}
-                >
-                    <ChevronRight size={20} color="#1E3A8A" />
-                    <Text style={[styles.signOutText, { color: '#1E3A8A' }]}>{t('profile.login_signup')}</Text>
-                </TouchableOpacity>
-            )}
+                    <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
+                    <ProfilePostFeed 
+                        activeTab={activeTab}
+                        posts={posts}
+                        likedPosts={likedPosts}
+                        onPostPress={(postId: string) => router.push(`/campus/${postId}` as any)}
+                        onLikePost={handleLikePost}
+                        currentUserId={userId || undefined}
+                        onAuthorPress={(authorId) => {
+                            if (!userId || authorId === userId) return;
+                            router.push(`/profile/${authorId}` as any);
+                        }}
+                    />
+                    <View style={{ height: 100 }} />
+                </ScrollView>
+            </Animated.ScrollView>
 
             <View style={{ height: 100 }} />
 
@@ -701,7 +804,7 @@ export default function ProfileScreen() {
                     </View>
                 </TouchableOpacity>
             </Modal>
-        </ScrollView>
+        </View>
     );
 }
 
@@ -712,6 +815,61 @@ const styles = StyleSheet.create({
     },
     content: {
         paddingBottom: 40,
+    },
+    divider: {
+        height: 8,
+        backgroundColor: '#F3F4F6',
+        marginVertical: 16,
+    },
+    pageTabContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#fff',
+        height: 48,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    pageTab: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+    },
+    pageTabIndicator: {
+        position: 'absolute',
+        bottom: 8,
+        width: 16,
+        height: 3,
+        backgroundColor: '#1E3A8A',
+        borderRadius: 2,
+    },
+    pageTabText: {
+        fontSize: 15,
+        color: '#9CA3AF',
+        fontWeight: '500',
+    },
+    pageTabTextActive: {
+        color: '#111827',
+        fontWeight: '700',
+    },
+    scrollContentPager: {
+        paddingBottom: 40,
+    },
+    blueHeader: {
+        backgroundColor: '#1E3A8A',
+        height: 160,
+        paddingTop: 60,
+        paddingHorizontal: 20,
+    },
+    blueHeaderTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    headerPlaceholder: {
+        backgroundColor: '#1E3A8A',
+        height: 160,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     header: {
         paddingTop: 56,
@@ -800,6 +958,11 @@ const styles = StyleSheet.create({
         marginTop: 16,
         padding: 16,
         borderRadius: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -808,8 +971,7 @@ const styles = StyleSheet.create({
     },
     seeAllText: {
         fontSize: 14,
-        color: '#1E3A8A',
-        fontWeight: '600',
+        color: '#6B7280',
     },
     countBadgeInline: {
         backgroundColor: '#EF4444',

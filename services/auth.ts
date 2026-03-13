@@ -172,6 +172,7 @@ export const createUserProfile = async (
         displayName,
         socialTags,
         major,
+        email,
         avatarUrl,
         createdAt: new Date(), // Supabase handles timestamp, but we keep structure
     };
@@ -218,6 +219,7 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
         uid: data.id,
         displayName: data.display_name || data.displayName, // Fallback
         major: data.major,
+        email: data.email,
         avatarUrl: data.avatar_url || data.avatarUrl,
         socialTags: data.social_tags || data.socialTags || [],
         createdAt: data.created_at ? new Date(data.created_at) : new Date(),

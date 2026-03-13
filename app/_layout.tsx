@@ -11,6 +11,7 @@ import '../global.css';
 import { getUserProfile, isDemoMode, onAuthChange, shouldSkipAuthRedirect } from '../services/auth';
 import { registerForPushNotificationsAsync, savePushToken } from '../services/push_notifications';
 import './i18n/i18n'; // Initialize i18n
+import { i18nPromise } from './i18n/i18n';
 
 const DEMO_MODE_KEY = 'hkcampus_demo_mode';
 
@@ -52,6 +53,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     const checkAuth = async () => {
+      // Ensure i18n is initialized
+      await i18nPromise;
+
       // Check for demo mode first
       const demoMode = await isDemoMode();
       if (demoMode) {

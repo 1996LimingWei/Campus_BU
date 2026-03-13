@@ -93,6 +93,12 @@ export default function ForumPostDetailScreen() {
     });
     const [replyTarget, setReplyTarget] = useState<ForumComment | null>(null);
 
+    const openPublicProfile = (authorId?: string) => {
+        if (!authorId) return;
+        if (authorId === user?.uid) return;
+        router.push(`/profile/${authorId}` as any);
+    };
+
     useEffect(() => {
         const load = async () => {
             if (!id) return;
@@ -294,13 +300,17 @@ export default function ForumPostDetailScreen() {
 
                 {/* Author row */}
                 <View style={styles.authorRow}>
-                    <View style={styles.avatar}>
+                    <TouchableOpacity
+                        style={styles.avatar}
+                        onPress={() => openPublicProfile(post.authorId)}
+                        activeOpacity={0.7}
+                    >
                         {isValidUrl(post.authorAvatar) ? (
                             <Image source={{ uri: post.authorAvatar }} style={styles.avatarImg} />
                         ) : (
                             <Text style={styles.avatarLetter}>{post.authorName.charAt(0).toUpperCase()}</Text>
                         )}
-                    </View>
+                    </TouchableOpacity>
                     <Text style={styles.authorName}>{post.authorName}</Text>
                     <EduBadge shouldShow={isHKBUEmail(post.authorEmail)} size="small" />
                 </View>
@@ -359,13 +369,17 @@ export default function ForumPostDetailScreen() {
                 {organizedComments.map(c => (
                     <View key={c.id} style={styles.commentContainer}>
                         <View style={styles.commentItem}>
-                            <View style={styles.commentAvatar}>
+                            <TouchableOpacity
+                                style={styles.commentAvatar}
+                                onPress={() => openPublicProfile(c.authorId)}
+                                activeOpacity={0.7}
+                            >
                                 {isValidUrl(c.authorAvatar) ? (
                                     <Image source={{ uri: c.authorAvatar! }} style={styles.avatarImg} />
                                 ) : (
                                     <Text style={styles.avatarLetter}>{c.authorName.charAt(0).toUpperCase()}</Text>
                                 )}
-                            </View>
+                            </TouchableOpacity>
                             <View style={styles.commentBody}>
                                 <View style={styles.commentHeader}>
                                     <Text style={styles.commentAuthor}>{c.authorName}</Text>
@@ -402,13 +416,17 @@ export default function ForumPostDetailScreen() {
                             <View style={styles.repliesList}>
                                 {c.replies.map((reply: ForumComment) => (
                                     <View key={reply.id} style={styles.replyItem}>
-                                        <View style={styles.commentAvatarSmall}>
+                                        <TouchableOpacity
+                                            style={styles.commentAvatarSmall}
+                                            onPress={() => openPublicProfile(reply.authorId)}
+                                            activeOpacity={0.7}
+                                        >
                                             {isValidUrl(reply.authorAvatar) ? (
                                                 <Image source={{ uri: reply.authorAvatar! }} style={styles.avatarImg} />
                                             ) : (
                                                 <Text style={styles.avatarLetterSmall}>{reply.authorName.charAt(0).toUpperCase()}</Text>
                                             )}
-                                        </View>
+                                        </TouchableOpacity>
                                         <View style={styles.commentBody}>
                                             <View style={styles.commentHeader}>
                                                 <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>

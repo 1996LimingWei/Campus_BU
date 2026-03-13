@@ -1,4 +1,5 @@
 import { ForumCategory, ForumComment, ForumPost, ForumSort } from '../types';
+import { getFollowingUserIds } from './follows';
 import { supabase } from './supabase';
 
 const FORUM_POSTS = 'forum_posts';
@@ -29,6 +30,18 @@ const mapRow = (row: any): ForumPost => {
         lastReplyAt: new Date(row.last_reply_at),
         createdAt: new Date(row.created_at),
     };
+};
+
+const markFollowingAuthors = async (posts: ForumPost[], currentUserId?: string) => {
+    if (!currentUserId || posts.length === 0) return;
+
+    const followingIds = await getFollowingUserIds(currentUserId);
+    if (followingIds.length === 0) return;
+
+    const followingSet = new Set(followingIds);
+    posts.forEach(p => {
+        p.isFollowingAuthor = followingSet.has(p.authorId);
+    });
 };
 
 // ── Fetch list ────────────────────────────────────────────────────────────────
@@ -65,6 +78,8 @@ export const fetchForumPosts = async (
         }
     }
 
+    await markFollowingAuthors(posts, currentUserId);
+
     return posts;
 };
 
@@ -98,6 +113,8 @@ export const searchForumPosts = async (
         }
     }
 
+    await markFollowingAuthors(posts, currentUserId);
+
     return posts;
 };
 
@@ -124,6 +141,8 @@ export const fetchForumPostById = async (
             .eq('user_id', currentUserId)
             .maybeSingle();
         post.isUpvoted = !!upvote;
+        const followingIds = await getFollowingUserIds(currentUserId);
+        post.isFollowingAuthor = followingIds.includes(post.authorId);
     }
 
     return post;

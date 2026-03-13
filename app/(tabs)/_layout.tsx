@@ -19,7 +19,7 @@ const AgentTabIcon = ({ color, focused }: { color: string; focused: boolean }) =
 );
 
 export default function TabLayout() {
-  const { t } = useTranslation();
+  const { t } = useTranslation('translation', { keyPrefix: 'tabs' });
   const scrollX = useRef(new Animated.Value(0)).current;
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -135,7 +135,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="campus"
         options={{
-          tabBarLabel: t('navigation.home'),
+          tabBarLabel: t('home'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={CalendarIcon} />
           ),
@@ -144,7 +144,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="map"
         options={{
-          tabBarLabel: t('navigation.map'),
+          tabBarLabel: t('map'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={MapIcon} />
           ),
@@ -159,7 +159,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="agent"
         options={{
-          tabBarLabel: t('navigation.agent'),
+          tabBarLabel: t('agent'),
           tabBarIcon: ({ color, focused }) => (
             <AgentTabIcon color={color} focused={focused} />
           ),
@@ -168,7 +168,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="course"
         options={{
-          tabBarLabel: t('navigation.course'),
+          tabBarLabel: t('course'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={GraduationCap} />
           ),
@@ -183,7 +183,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarLabel: t('navigation.me'),
+          tabBarLabel: t('me'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={UserIcon} />
           ),

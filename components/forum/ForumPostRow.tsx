@@ -13,6 +13,7 @@ import { isHKBUEmail, isAdminSync } from '../../utils/userUtils';
 interface ForumPostRowProps {
     post: ForumPost;
     onPress: () => void;
+    onAuthorPress?: (authorId: string) => void;
 }
 
 const categoryColor: Record<string, string> = {
@@ -41,7 +42,7 @@ const RightThumb: React.FC<{ uri: string }> = ({ uri }) => {
     );
 };
 
-export const ForumPostRow: React.FC<ForumPostRowProps> = React.memo(({ post, onPress }) => {
+export const ForumPostRow: React.FC<ForumPostRowProps> = React.memo(({ post, onPress, onAuthorPress }) => {
     const { t } = useTranslation();
     const pressed = useSharedValue(1);
 
@@ -79,7 +80,12 @@ export const ForumPostRow: React.FC<ForumPostRowProps> = React.memo(({ post, onP
                 {/* Left: text content */}
                 <View style={styles.left}>
                     {/* Author + category badge */}
-                    <View style={styles.authorLine}>
+                    <TouchableOpacity
+                        style={styles.authorLine}
+                        onPress={() => onAuthorPress?.(post.authorId)}
+                        disabled={!onAuthorPress}
+                        activeOpacity={onAuthorPress ? 0.7 : 1}
+                    >
                         <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
                         <AdminBadge shouldShow={isAdminSync(post.authorId)} size="small" />
                         <EduBadge shouldShow={isHKBUEmail(post.authorEmail)} size="small" />
@@ -88,7 +94,13 @@ export const ForumPostRow: React.FC<ForumPostRowProps> = React.memo(({ post, onP
                                 {t(`forum.compose.category_label.${post.category}`)}
                             </Text>
                         </View>
-                    </View>
+                        {post.isFollowingAuthor && (
+                            <View style={styles.followingBadge}>
+                                <View style={styles.followingBadgeDot} />
+                                <Text style={styles.followingBadgeText}>你的关注</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
 
                     {/* Title */}
                     <Text style={styles.title} numberOfLines={hasImage ? 2 : 3}>{post.title}</Text>
@@ -150,6 +162,28 @@ const styles = StyleSheet.create({
     catText: {
         fontSize: 10,
         fontWeight: '700',
+    },
+    followingBadge: {
+        backgroundColor: '#EFF6FF',
+        borderColor: '#BFDBFE',
+        borderWidth: 1,
+        paddingHorizontal: 7,
+        paddingVertical: 2,
+        borderRadius: 999,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    followingBadgeDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        backgroundColor: '#1D4ED8',
+    },
+    followingBadgeText: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: '#1D4ED8',
     },
     title: {
         fontSize: 15,

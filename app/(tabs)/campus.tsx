@@ -479,15 +479,20 @@ export default function CampusScreen() {
                   columnGap={8}
                   columnPadding={12}
                   keyExtractor={(post: Post) => post.id}
-                  renderItem={(post: Post, index: number) => (
-                    <MasonryPostCard
-                      key={post.id}
-                      post={post}
-                      onPress={() => handlePostPress(post.id)}
-                      onLike={() => handleLike(post.id)}
-                      currentUserId={currentUser?.uid}
-                    />
-                  )}
+                    renderItem={(post: Post, index: number) => (
+                      <MasonryPostCard
+                        key={post.id}
+                        post={post}
+                        onPress={() => handlePostPress(post.id)}
+                        onLike={() => handleLike(post.id)}
+                        currentUserId={currentUser?.uid}
+                        onAuthorPress={(authorId) => {
+                          if (!post.isAnonymous) {
+                            router.push(`/profile/${authorId}` as any);
+                          }
+                        }}
+                      />
+                    )}
                 />
                 {!currentUser && sortedPosts.length > 4 && (
                   <View style={styles.guestFooter}>
@@ -564,6 +569,10 @@ export default function CampusScreen() {
                 <ForumPostRow
                   post={item}
                   onPress={() => router.push(`/forum/${item.id}` as any)}
+                  onAuthorPress={(authorId) => {
+                    if (authorId === currentUser?.uid) return;
+                    router.push(`/profile/${authorId}` as any);
+                  }}
                 />
               )}
               refreshControl={

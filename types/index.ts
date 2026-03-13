@@ -5,14 +5,28 @@ export interface GeoPoint {
 }
 
 // User Types
+export type FollowState = 'none' | 'following' | 'follower' | 'both';
+
+export interface ProfileStats {
+    postsCount: number;
+    followersCount: number;
+    followingCount: number;
+    appreciationCount: number; // Likes + Favorites
+}
+
 export interface User {
     uid: string;
     displayName: string;
     socialTags: string[];
     major: string;
+    email?: string;
     avatarUrl: string;
     location?: GeoPoint;
     createdAt: Date;
+    stats?: ProfileStats;
+    isFollowing?: boolean; // For viewing others
+    followsYou?: boolean; // For viewing others
+    bio?: string;
 }
 
 // Social Tags Options
@@ -72,6 +86,7 @@ export interface Post {
     isLiked?: boolean;
     comments: number;
     isAnonymous: boolean;
+    isFollowingAuthor?: boolean; // Xiaohongshu badge requirement
 }
 
 // Forum Types (独立于发现板块)
@@ -93,6 +108,7 @@ export interface ForumPost {
     isUpvoted?: boolean;
     lastReplyAt: Date;
     createdAt: Date;
+    isFollowingAuthor?: boolean; // Xiaohongshu badge requirement
 }
 
 export interface ForumComment {
