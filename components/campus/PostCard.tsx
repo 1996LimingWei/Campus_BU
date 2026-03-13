@@ -14,10 +14,11 @@ import Animated, {
     useSharedValue,
     withSpring
 } from 'react-native-reanimated';
+import { AdminBadge } from '../common/AdminBadge';
+import { EduBadge } from '../common/EduBadge';
 import { blockUser, reportContent, ReportReason } from '../../services/moderation';
 import { Post } from '../../types';
-import { isHKBUEmail } from '../../utils/userUtils';
-import { EduBadge } from '../common/EduBadge';
+import { isHKBUEmail, isAdminSync } from '../../utils/userUtils';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -189,6 +190,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onLike, onC
                             <Text style={styles.authorName}>
                                 {post.isAnonymous ? t('teachers.anonymous_student') : post.authorName}
                             </Text>
+                            <AdminBadge shouldShow={!post.isAnonymous && isAdminSync(post.authorId)} size="small" />
                             <EduBadge shouldShow={!post.isAnonymous && isHKBUEmail(post.authorEmail)} size="small" />
                         </View>
                         <Text style={styles.timeText}>{timeAgo}</Text>

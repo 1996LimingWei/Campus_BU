@@ -5,9 +5,10 @@ import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { ForumPost } from '../../types';
-import { isHKBUEmail } from '../../utils/userUtils';
+import { AdminBadge } from '../common/AdminBadge';
 import { EduBadge } from '../common/EduBadge';
+import { ForumPost } from '../../types';
+import { isHKBUEmail, isAdminSync } from '../../utils/userUtils';
 
 interface ForumPostRowProps {
     post: ForumPost;
@@ -80,6 +81,7 @@ export const ForumPostRow: React.FC<ForumPostRowProps> = React.memo(({ post, onP
                     {/* Author + category badge */}
                     <View style={styles.authorLine}>
                         <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
+                        <AdminBadge shouldShow={isAdminSync(post.authorId)} size="small" />
                         <EduBadge shouldShow={isHKBUEmail(post.authorEmail)} size="small" />
                         <View style={[styles.catBadge, { backgroundColor: categoryColor[post.category] + '1A' }]}>
                             <Text style={[styles.catText, { color: categoryColor[post.category] }]}>
