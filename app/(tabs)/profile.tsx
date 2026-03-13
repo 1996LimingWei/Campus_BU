@@ -4,6 +4,7 @@ import { Bell, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, Hel
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AdminBadge } from '../../components/common/AdminBadge';
 import { EduBadge } from '../../components/common/EduBadge';
 import MyScheduleCard from '../../components/profile/MyScheduleCard';
 import { useNotifications } from '../../context/NotificationContext';
@@ -13,7 +14,7 @@ import { createUserProfile, getCurrentUser, getUserProfile, signOut, uploadAndUp
 import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
 import { supabase } from '../../services/supabase';
 import { SOCIAL_TAGS, User as UserProfile } from '../../types';
-import { isHKBUEmail } from '../../utils/userUtils';
+import { isAdmin, isHKBUEmail } from '../../utils/userUtils';
 import { changeLanguage } from '../i18n/i18n';
 const DEMO_MODE_KEY = 'hkcampus_demo_mode';
 
@@ -43,6 +44,7 @@ export default function ProfileScreen() {
     const [userId, setUserId] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState('');
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [isAdminUser, setIsAdminUser] = useState(false);
     const { checkLogin } = useLoginPrompt();
 
     const { unreadCount: globalUnreadCount, refreshCount: refreshGlobalCount } = useNotifications();
@@ -51,9 +53,16 @@ export default function ProfileScreen() {
     const loadData = async () => {
         try {
             const user = await getCurrentUser();
+            console.log('[Profile] Current user:', user);
+
             if (user) {
                 setUserId(user.uid);
                 setUserEmail(user.email || '');
+
+                // Check admin status
+                const adminStatus = await isAdmin(user.uid);
+                console.log('[Profile] Admin status result:', adminStatus);
+                setIsAdminUser(adminStatus);
 
                 // Load Notifications
                 const notifData = await fetchNotifications(user.uid);
@@ -65,6 +74,8 @@ export default function ProfileScreen() {
                     setProfile(userProfile);
                     setSelectedTags(userProfile.socialTags || []);
                 }
+            } else {
+                console.log('[Profile] No user found');
             }
         } catch (error) {
             console.error('[Profile] Error loading data:', error);
@@ -406,6 +417,7 @@ export default function ProfileScreen() {
                 <View style={styles.profileInfo}>
                     <View style={styles.profileNameRow}>
                         <Text style={styles.profileName}>{profile?.displayName || (loadingProfile ? '...' : t('profile.guest_name'))}</Text>
+                        <AdminBadge shouldShow={isAdminUser} size="medium" />
                         <EduBadge shouldShow={isHKBUEmail(userEmail)} size="medium" />
                     </View>
                     <Text style={styles.profileMajor}>{profile?.major || (loadingProfile ? '...' : t('profile.guest_major'))}</Text>
