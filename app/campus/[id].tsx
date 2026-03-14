@@ -109,7 +109,9 @@ export default function PostDetailScreen() {
     const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
     const [settingsSheetVisible, setSettingsSheetVisible] = useState(false);
     const [adminDeletionModalVisible, setAdminDeletionModalVisible] = useState(false);
+    const [userDeletionConfirmVisible, setUserDeletionConfirmVisible] = useState(false);
     const [isAdminUser, setIsAdminUser] = useState(false);
+    const [isOwnPost, setIsOwnPost] = useState(false);
 
     // Debug logging for settings sheet
     React.useEffect(() => {
@@ -130,6 +132,22 @@ export default function PostDetailScreen() {
         };
         checkAdminStatus();
     }, [currentUser?.uid]);
+
+    // Check if current user owns the post
+    React.useEffect(() => {
+        if (post && currentUser?.uid) {
+            const ownsPost = post.authorId === currentUser.uid;
+            console.log('[PostDetail] Post ownership check:', { 
+                postAuthorId: post.authorId, 
+                currentUserId: currentUser.uid, 
+                isOwnPost: ownsPost 
+            });
+            setIsOwnPost(ownsPost);
+        } else {
+            setIsOwnPost(false);
+        }
+    }, [post, currentUser?.uid]);
+
     const [toast, setToast] = useState<{ visible: boolean; message: string; type: ToastType }>({
         visible: false,
         message: '',
@@ -365,6 +383,66 @@ export default function PostDetailScreen() {
     const handleAdminDeleteCancel = () => {
         console.log('[PostDetail] Admin delete cancelled');
         setAdminDeletionModalVisible(false);
+    };
+
+    // User deletion handlers (for own posts)
+    const handleUserDeletePress = () => {
+        console.log('[PostDetail] User delete pressed for own post');
+        setSettingsSheetVisible(false);
+        setTimeout(() => {
+            setUserDeletionConfirmVisible(true);
+        }, 300);
+    };
+
+    const handleUserDeleteConfirm = async () => {
+        console.log('[PostDetail] User delete confirmed for own post');
+        
+        if (!post) {
+            console.error('[PostDetail] No post to delete');
+            return;
+        }
+
+        try {
+            setUserDeletionConfirmVisible(false);
+            setLoading(true);
+
+            // Call the delete function
+            await deletePost(post.id);
+
+            console.log('[PostDetail] Post deleted successfully (user deletion)');
+
+            // Show success toast
+            setToast({
+                visible: true,
+                message: '帖子已删除',
+                type: 'success'
+            });
+
+            // Global sync for deletion
+            DeviceEventEmitter.emit('campus_post_updated', {
+                id: post.id,
+                deleted: true,
+                deletionReason: 'user_requested'
+            });
+
+            // Navigate back after short delay
+            setTimeout(() => {
+                router.back();
+            }, 1500);
+        } catch (error) {
+            console.error('[PostDetail] Error deleting post (user deletion):', error);
+            setToast({
+                visible: true,
+                message: '删除失败，请重试',
+                type: 'error'
+            });
+            setLoading(false);
+        }
+    };
+
+    const handleUserDeleteCancel = () => {
+        console.log('[PostDetail] User delete cancelled');
+        setUserDeletionConfirmVisible(false);
     };
 
     // Helper function to get display text for reason
@@ -755,8 +833,8 @@ export default function PostDetailScreen() {
                     visible={settingsSheetVisible}
                     onClose={() => setSettingsSheetVisible(false)}
                 >
-                    {/* Admin-only delete option */}
-                    {isAdminUser && (
+                    {/* Admin-only delete option (for admin viewing others' posts) */}
+                    {isAdminUser && !isOwnPost && (
                         <TouchableOpacity
                             style={styles.adminDeleteOption}
                             onPress={handleAdminDeletePress}
@@ -768,13 +846,50 @@ export default function PostDetailScreen() {
                             <Text style={styles.adminDeleteText}>管理员删除</Text>
                         </TouchableOpacity>
                     )}
-                    {/* Empty content for non-admin users or future features */}
-                    {!isAdminUser && <View style={{ flex: 1 }} />}
+                    
+                    {/* User delete option (for own posts - normal users and admins) */}
+                    {isOwnPost && (
+                        <TouchableOpacity
+                            style={styles.adminDeleteOption}
+                            onPress={handleUserDeletePress}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.adminDeleteIconContainer}>
+                                <Trash2 size={20} color="#111827" />
+                            </View>
+                            <Text style={[styles.adminDeleteText, { color: '#111827' }]}>删除帖子</Text>
+                        </TouchableOpacity>
+                    )}
+                    
+                    {/* Admin viewing own post: show both options (user + admin) */}
+                    {isAdminUser && isOwnPost && (
+                        <TouchableOpacity
+                            style={styles.adminDeleteOption}
+                            onPress={handleAdminDeletePress}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.adminDeleteIconContainer}>
+                                <Trash2 size={20} color="#DC2626" />
+                            </View>
+                            <Text style={styles.adminDeleteText}>管理员删除</Text>
+                        </TouchableOpacity>
+                    )}
+                    
+                    {/* Empty content for non-admin users viewing others' posts */}
+                    {!isAdminUser && !isOwnPost && <View style={{ flex: 1 }} />}
                 </BottomSheet>
                 <AdminDeletionModal
                     visible={adminDeletionModalVisible}
                     onConfirm={handleAdminDeleteConfirm}
                     onCancel={handleAdminDeleteCancel}
+                />
+                <ActionModal
+                    visible={userDeletionConfirmVisible}
+                    title="删除帖子"
+                    message="确定删除你的帖子吗？此操作不可撤销。"
+                    onConfirm={handleUserDeleteConfirm}
+                    onCancel={handleUserDeleteCancel}
+                    confirmText="删除"
                 />
                 <ActionModal
                     visible={deleteModalVisible}
