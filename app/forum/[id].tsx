@@ -1,17 +1,15 @@
 import { formatDistanceToNow } from 'date-fns';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, MessageCircle, MoreHorizontal, Send, ThumbsUp, Trash2, X } from 'lucide-react-native';
+import { ChevronLeft, MessageCircle, MoreHorizontal, Send, ThumbsUp, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     DeviceEventEmitter,
     Dimensions,
-    FlatList,
     Image,
     Keyboard,
     KeyboardAvoidingView,
-    Modal,
     Platform,
     ScrollView,
     StatusBar,
@@ -25,6 +23,7 @@ import { ActionModal } from '../../components/campus/ActionModal';
 import { Toast, ToastType } from '../../components/campus/Toast';
 import { EduBadge } from '../../components/common/EduBadge';
 import { TranslatableText } from '../../components/common/TranslatableText';
+import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { getCurrentUser } from '../../services/auth';
 import {
@@ -40,28 +39,7 @@ import { isHKBUEmail } from '../../utils/userUtils';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CONTENT_W = SCREEN_W - 32; // 16px padding each side
-const IMG_MULTI_SIZE = Math.round((CONTENT_W - 12) / 3); // 3-col grid
-
-/** Renders a single image at its natural aspect ratio */
-const AutoHeightImage: React.FC<{ uri: string; style?: object }> = ({ uri, style }) => {
-    const [size, setSize] = React.useState<{ width: number; height: number } | null>(null);
-    React.useEffect(() => {
-        Image.getSize(
-            uri,
-            (w, h) => setSize({ width: w, height: h }),
-            (err) => console.warn('getSize error:', err),
-        );
-    }, [uri]);
-    const displayHeight = size ? Math.round(CONTENT_W * size.height / size.width) : CONTENT_W;
-    return (
-        <Image
-            source={{ uri }}
-            style={[{ width: CONTENT_W, height: displayHeight, borderRadius: 12, backgroundColor: '#F3F4F6' }, style]}
-            resizeMode="contain"
-            onError={(e) => console.warn('Image load error:', e.nativeEvent.error)}
-        />
-    );
-};
+const FORUM_IMAGE_HEIGHT = CONTENT_W;
 
 const isValidUrl = (url?: string) =>
     !!url && (url.startsWith('http://') || url.startsWith('https://'));
@@ -79,15 +57,14 @@ export default function ForumPostDetailScreen() {
     const [post, setPost] = useState<ForumPost | null>(null);
     const [comments, setComments] = useState<ForumComment[]>([]);
     const [loading, setLoading] = useState(true);
+    const [imageZoomed, setImageZoomed] = useState(false);
     const [commentText, setCommentText] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [user, setUser] = useState<any>(null);
-    const flatListRef = useRef<FlatList>(null);
     const inputRef = useRef<TextInput>(null);
     const [deleteModal, setDeleteModal] = useState(false);
     const [deleteType, setDeleteType] = useState<'post' | 'comment'>('post');
     const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
-    const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [toast, setToast] = useState<{ visible: boolean; message: string; type: ToastType }>({
         visible: false, message: '', type: 'success',
     });
@@ -284,6 +261,7 @@ export default function ForumPostDetailScreen() {
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
+                scrollEnabled={!imageZoomed}
             >
                 {/* Category + meta */}
                 <View style={styles.metaRow}>
@@ -320,27 +298,16 @@ export default function ForumPostDetailScreen() {
                     <TranslatableText style={styles.bodyText} text={post.content} />
                 )}
 
-                {/* Images – original aspect ratio */}
+                {/* Images – inline pinch zoom + swipe */}
                 {images.length > 0 && (
-                    <View style={styles.imageGrid}>
-                        {images.length === 1 ? (
-                            // Single image: natural aspect ratio at full width
-                            <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImage(images[0])}>
-                                <AutoHeightImage uri={images[0]} />
-                            </TouchableOpacity>
-                        ) : (
-                            // Multiple images: square grid thumbnails
-                            images.map((uri, i) => (
-                                <TouchableOpacity key={i} activeOpacity={0.8} onPress={() => setPreviewImage(uri)}>
-                                    <Image
-                                        source={{ uri }}
-                                        style={{ width: IMG_MULTI_SIZE, height: IMG_MULTI_SIZE, borderRadius: 8, backgroundColor: '#F3F4F6' }}
-                                        resizeMode="cover"
-                                        onError={(e) => console.warn('Image load error:', e.nativeEvent.error)}
-                                    />
-                                </TouchableOpacity>
-                            ))
-                        )}
+                    <View style={styles.imageCarouselWrap}>
+                        <ZoomableImageCarousel
+                            images={images}
+                            width={CONTENT_W}
+                            height={FORUM_IMAGE_HEIGHT}
+                            contentFit="contain"
+                            onZoomStateChange={setImageZoomed}
+                        />
                     </View>
                 )}
 
@@ -533,34 +500,6 @@ export default function ForumPostDetailScreen() {
                 onHide={() => setToast(p => ({ ...p, visible: false }))}
             />
 
-            {/* Image Preview Modal */}
-            <Modal
-                visible={!!previewImage}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setPreviewImage(null)}
-            >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setPreviewImage(null)}
-                >
-                    <StatusBar barStyle="light-content" backgroundColor="#000" />
-                    {previewImage && (
-                        <Image
-                            source={{ uri: previewImage }}
-                            style={styles.fullImage}
-                            resizeMode="contain"
-                        />
-                    )}
-                    <TouchableOpacity
-                        style={styles.modalCloseBtn}
-                        onPress={() => setPreviewImage(null)}
-                    >
-                        <X size={28} color="#fff" />
-                    </TouchableOpacity>
-                </TouchableOpacity>
-            </Modal>
         </KeyboardAvoidingView>
     );
 }
@@ -605,7 +544,14 @@ const styles = StyleSheet.create({
 
     bodyText: { fontSize: 16, lineHeight: 26, color: '#374151', marginBottom: 16 },
 
-    imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
+    imageCarouselWrap: {
+        width: CONTENT_W,
+        height: FORUM_IMAGE_HEIGHT,
+        borderRadius: 12,
+        overflow: 'hidden',
+        marginBottom: 16,
+        backgroundColor: '#F3F4F6',
+    },
 
     upvoteRow: { flexDirection: 'row', marginBottom: 16 },
     upvoteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 },
@@ -691,22 +637,4 @@ const styles = StyleSheet.create({
     },
     actionBtn: { alignItems: 'center', gap: 2 },
     actionCount: { fontSize: 11, color: '#6B7280', fontWeight: '600' },
-
-    // Modal
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.9)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    fullImage: {
-        width: '100%',
-        height: '80%',
-    },
-    modalCloseBtn: {
-        position: 'absolute',
-        top: Platform.OS === 'ios' ? 60 : 30,
-        right: 20,
-        padding: 5,
-    },
 });

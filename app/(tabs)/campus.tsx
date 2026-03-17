@@ -2,7 +2,7 @@ import { Image as ExpoImageLib } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Check, X as CloseIcon, Globe, Plus, Search } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Animated,
@@ -90,16 +90,21 @@ export default function CampusScreen() {
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'latest' | 'top'>('latest');
 
-  // Derived sorted list — pure client-side, no server round-trip
-  const sortedPosts = useMemo(() => {
-    const copy = [...posts];
+  // Discover category/sort should feel immediate, so keep one in-memory list
+  // and derive the visible result locally instead of refetching on every tap.
+  const filteredPosts = useMemo(() => {
+    const byCategory = activeCategory === 'All'
+      ? posts
+      : posts.filter(post => post.category === activeCategory);
+
+    const copy = [...byCategory];
     if (sortOrder === 'latest') {
       copy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } else {
       copy.sort((a, b) => b.likes - a.likes);
     }
     return copy;
-  }, [posts, sortOrder]);
+  }, [posts, activeCategory, sortOrder]);
 
   // ── Forum state ─────────────────────────────────────────────────────
   const FORUM_TABS: { id: ForumCategory | 'all'; label: string }[] = [
@@ -179,12 +184,12 @@ export default function CampusScreen() {
   const isValidCoverUrl = (url?: string) =>
     !!url && (url.startsWith('http://') || url.startsWith('https://'));
 
-  const loadPosts = async (isSilent = false) => {
+  const loadPosts = useCallback(async (isSilent = false) => {
     try {
-      if (!isSilent && posts.length === 0) setLoading(true);
+      if (!isSilent) setLoading(true);
       const user = await getCurrentUser();
       setCurrentUser(user);
-      const data = await fetchPosts(activeCategory, user?.uid);
+      const data = await fetchPosts('All', user?.uid);
       setPosts(data);
       // Pre-warm expo-image's own disk+memory cache (must use expo-image's prefetch, not RN's)
       data.forEach(post => {
@@ -198,7 +203,7 @@ export default function CampusScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const checkEULA = async () => {
@@ -214,7 +219,7 @@ export default function CampusScreen() {
 
     const unsubscribe = subscribeToPosts(() => loadPosts(true));
     return () => unsubscribe();
-  }, [activeCategory]);
+  }, [loadPosts]);
 
   const handleAcceptEULA = async () => {
     try {
@@ -229,7 +234,7 @@ export default function CampusScreen() {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadPosts(true);
-  }, [activeCategory]);
+  }, [loadPosts]);
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -417,7 +422,11 @@ export default function CampusScreen() {
                     styles.filterButton,
                     activeCategory === item.id && styles.filterButtonActive,
                   ]}
-                  onPress={() => setActiveCategory(item.id)}
+                  onPress={() => {
+                    startTransition(() => {
+                      setActiveCategory(item.id);
+                    });
+                  }}
                 >
                   <Text
                     style={[
@@ -436,7 +445,11 @@ export default function CampusScreen() {
           <View style={styles.sortStrip}>
             <TouchableOpacity
               style={[styles.sortBtn, sortOrder === 'latest' && styles.sortBtnActive]}
-              onPress={() => setSortOrder('latest')}
+              onPress={() => {
+                startTransition(() => {
+                  setSortOrder('latest');
+                });
+              }}
             >
               <Text style={[styles.sortBtnText, sortOrder === 'latest' && styles.sortBtnTextActive]}>
                 {t('campus.sort.latest_post')}
@@ -444,7 +457,11 @@ export default function CampusScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.sortBtn, sortOrder === 'top' && styles.sortBtnActive]}
-              onPress={() => setSortOrder('top')}
+              onPress={() => {
+                startTransition(() => {
+                  setSortOrder('top');
+                });
+              }}
             >
               <Text style={[styles.sortBtnText, sortOrder === 'top' && styles.sortBtnTextActive]}>
                 {t('campus.sort.most_liked')}
@@ -475,7 +492,7 @@ export default function CampusScreen() {
             ) : (
               <View>
                 <MasonryGrid
-                  data={currentUser ? sortedPosts : sortedPosts.slice(0, 4)}
+                  data={currentUser ? filteredPosts : filteredPosts.slice(0, 4)}
                   columnGap={8}
                   columnPadding={12}
                   keyExtractor={(post: Post) => post.id}
@@ -494,7 +511,7 @@ export default function CampusScreen() {
                       />
                     )}
                 />
-                {!currentUser && sortedPosts.length > 4 && (
+                {!currentUser && filteredPosts.length > 4 && (
                   <View style={styles.guestFooter}>
                     <Text style={styles.guestFooterText}>{t('campus.guest_more_posts', 'Log in to discover more updates')}</Text>
                     <TouchableOpacity style={styles.guestFooterButton} onPress={() => checkLogin(currentUser)}>

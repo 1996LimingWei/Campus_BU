@@ -1,5 +1,4 @@
 import { formatDistanceToNow } from 'date-fns';
-import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
     ChevronLeft,
@@ -16,7 +15,6 @@ import {
     Animated,
     DeviceEventEmitter,
     Dimensions,
-    FlatList,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -35,6 +33,7 @@ import { BottomSheet } from '../../components/campus/BottomSheet';
 import { Toast, ToastType } from '../../components/campus/Toast';
 import { EduBadge } from '../../components/common/EduBadge';
 import { TranslatableText } from '../../components/common/TranslatableText';
+import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { getCurrentUser } from '../../services/auth';
 import {
@@ -100,9 +99,9 @@ export default function PostDetailScreen() {
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
     const [loading, setLoading] = useState(true);
+    const [imageZoomed, setImageZoomed] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
-    const [imgIndex, setImgIndex] = useState(0);
 
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [deleteType, setDeleteType] = useState<'post' | 'comment'>('post');
@@ -521,6 +520,7 @@ export default function PostDetailScreen() {
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
+                    scrollEnabled={!imageZoomed}
                 >
                     {/* ══ COVER AREA ══════════════════════════════════════════════ */}
                     {isTextOnly ? (
@@ -543,49 +543,21 @@ export default function PostDetailScreen() {
                         </View>
                     ) : images.length === 1 ? (
                         /* Single image — renders immediately from cache */
-                        <View style={styles.singleImageWrapper}>
-                            <ExpoImage
-                                source={{ uri: images[0] }}
-                                style={styles.singleImage}
-                                contentFit="cover"
-                                cachePolicy="memory-disk"
-                                transition={150}
-                            />
-                        </View>
+                        <ZoomableImageCarousel
+                            images={images}
+                            width={SCREEN_W}
+                            height={COVER_HEIGHT}
+                            contentFit="cover"
+                            onZoomStateChange={setImageZoomed}
+                        />
                     ) : images.length > 1 ? (
-                        /* Multi-image carousel */
-                        <View>
-                            <FlatList
-                                data={images}
-                                horizontal
-                                pagingEnabled
-                                showsHorizontalScrollIndicator={false}
-                                keyExtractor={(_, i) => String(i)}
-                                onMomentumScrollEnd={e => {
-                                    setImgIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W));
-                                }}
-                                renderItem={({ item }) => (
-                                    <View style={styles.singleImageWrapper}>
-                                        <ExpoImage
-                                            source={{ uri: item }}
-                                            style={styles.singleImage}
-                                            contentFit="cover"
-                                            cachePolicy="memory-disk"
-                                            transition={150}
-                                        />
-                                    </View>
-                                )}
-                            />
-                            {/* Dot indicator */}
-                            <View style={styles.dotRow}>
-                                {images.map((_, i) => (
-                                    <View
-                                        key={i}
-                                        style={[styles.dot, i === imgIndex && styles.dotActive]}
-                                    />
-                                ))}
-                            </View>
-                        </View>
+                        <ZoomableImageCarousel
+                            images={images}
+                            width={SCREEN_W}
+                            height={COVER_HEIGHT}
+                            contentFit="cover"
+                            onZoomStateChange={setImageZoomed}
+                        />
                     ) : (
                         /* No image yet — gray placeholder that matches card bg */
                         <View style={[styles.singleImageWrapper, { backgroundColor: '#F3F4F6' }]} />
@@ -972,27 +944,6 @@ const styles = StyleSheet.create({
         width: SCREEN_W,
         height: COVER_HEIGHT,
         backgroundColor: '#F3F4F6',
-    },
-    singleImage: {
-        width: '100%',
-        height: '100%',
-    },
-    dotRow: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 6,
-        marginTop: 10,
-        marginBottom: 4,
-    },
-    dot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: '#D1D5DB',
-    },
-    dotActive: {
-        backgroundColor: '#1E3A8A',
-        width: 16,
     },
 
     // Top navigation bar

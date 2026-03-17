@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 import { StartupAnimation } from '../components/common/StartupAnimation';
 import { LoginPromptProvider } from '../context/LoginPromptContext';
@@ -138,7 +139,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       {(!isAnimationFinished || loading) && (
         <StartupAnimation
           isAppReady={!loading}
@@ -157,6 +158,6 @@ export default function RootLayout() {
           <StatusBar style="auto" />
         </NotificationProvider>
       </LoginPromptProvider>
-    </>
+    </GestureHandlerRootView>
   );
 }
