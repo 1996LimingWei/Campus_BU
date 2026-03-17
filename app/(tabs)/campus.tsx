@@ -505,7 +505,7 @@ export default function CampusScreen() {
                         currentUserId={currentUser?.uid}
                         onAuthorPress={(authorId) => {
                           if (!post.isAnonymous) {
-                            router.push(`/profile/${authorId}` as any);
+                            router.push({ pathname: '/profile/[id]' as any, params: { id: authorId } });
                           }
                         }}
                       />
@@ -588,7 +588,7 @@ export default function CampusScreen() {
                   onPress={() => router.push(`/forum/${item.id}` as any)}
                   onAuthorPress={(authorId) => {
                     if (authorId === currentUser?.uid) return;
-                    router.push(`/profile/${authorId}` as any);
+                    router.push({ pathname: '/profile/[id]' as any, params: { id: authorId } });
                   }}
                 />
               )}

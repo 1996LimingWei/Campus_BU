@@ -5,6 +5,7 @@
         "course": "Course",
         "agent": "Agent",
         "classroom": "Classroom",
+        "messages": "Messages",
         "me": "Me"
     },
     "common": {
@@ -57,6 +58,14 @@
         "notifications": "Notifications",
         "see_all": "See All",
         "no_notifications": "No new notifications",
+        "guest_hint": "Login to unlock more features",
+        "user_not_found": "User not found",
+        "follow_loading": "Processing...",
+        "followed": "Followed",
+        "follow": "Follow",
+        "tabs_overview": "Overview",
+        "tabs_messages": "Messages",
+        "tabs_works": "Works",
         "social_tags": "Social Tags",
         "select_tags": "Select up to 3 tags",
         "my_activity": "My Activity",
@@ -191,6 +200,18 @@
         "teaming_like": "Someone liked your {{course}} teaming request!",
         "review_like": "Someone liked your review for {{course}}!"
     },
+    "messages": {
+        "title": "Messages",
+        "no_messages": "No messages yet",
+        "say_hi": "Say hi to your peer! 👋",
+        "input_placeholder": "Type a message...",
+        "send": "Send",
+        "online": "Online",
+        "offline": "Offline",
+        "just_now": "Just now",
+        "minutes_ago": "{{count}}m ago",
+        "hours_ago": "{{count}}h ago"
+    },
     "map": {
         "title": "Map",
         "filters": {
@@ -252,6 +273,7 @@
     "campus": {
         "title": "Campus Circle",
         "campus_filter": "Campus",
+        "following_badge": "Following",
         "tabs": {
             "discover": "Discover",
             "forum": "Forum"

@@ -147,6 +147,17 @@ export default function PostDetailScreen() {
         }
     }, [post, currentUser?.uid]);
 
+    const openUserProfile = (authorId?: string, anonymous?: boolean) => {
+        if (!authorId || anonymous) return;
+
+        if (authorId === currentUser?.uid) {
+            router.push('/(tabs)/profile');
+            return;
+        }
+
+        router.push({ pathname: '/profile/[id]' as any, params: { id: authorId } });
+    };
+
     const [toast, setToast] = useState<{ visible: boolean; message: string; type: ToastType }>({
         visible: false,
         message: '',
@@ -564,7 +575,12 @@ export default function PostDetailScreen() {
                     )}
 
                     {/* ══ AUTHOR INFO ═════════════════════════════════════════════ */}
-                    <View style={styles.authorSection}>
+                    <TouchableOpacity
+                        style={styles.authorSection}
+                        onPress={() => openUserProfile(post?.authorId, post?.isAnonymous)}
+                        disabled={!post?.authorId || post?.isAnonymous}
+                        activeOpacity={post?.isAnonymous ? 1 : 0.7}
+                    >
                         <View style={styles.authorAvatar}>
                             {post && !post.isAnonymous && isValidUrl(post.authorAvatar) ? (
                                 <Image source={{ uri: post.authorAvatar }} style={styles.avatarImg} />
@@ -601,7 +617,7 @@ export default function PostDetailScreen() {
                                 </Text>
                             </View>
                         )}
-                    </View>
+                    </TouchableOpacity>
 
                     {/* ══ CONTENT ═════════════════════════════════════════════════ */}
                     <View style={styles.contentSection}>
@@ -638,7 +654,11 @@ export default function PostDetailScreen() {
                         {!loading && organizedComments.map(comment => (
                             <View key={comment.id} style={styles.commentContainer}>
                                 <View style={styles.commentItem}>
-                                    <View style={styles.commentAvatar}>
+                                    <TouchableOpacity
+                                        style={styles.commentAvatar}
+                                        onPress={() => openUserProfile(comment.authorId)}
+                                        activeOpacity={0.7}
+                                    >
                                         {comment.authorAvatar && isValidUrl(comment.authorAvatar) ? (
                                             <Image source={{ uri: comment.authorAvatar }} style={styles.avatarImg} />
                                         ) : (
@@ -646,10 +666,12 @@ export default function PostDetailScreen() {
                                                 {comment.authorName?.charAt(0).toUpperCase() ?? '?'}
                                             </Text>
                                         )}
-                                    </View>
+                                    </TouchableOpacity>
                                     <View style={styles.commentBody}>
                                         <View style={styles.commentHeader}>
-                                            <Text style={styles.commentAuthor}>{comment.authorName}</Text>
+                                            <TouchableOpacity onPress={() => openUserProfile(comment.authorId)} activeOpacity={0.7}>
+                                                <Text style={styles.commentAuthor}>{comment.authorName}</Text>
+                                            </TouchableOpacity>
                                             <EduBadge shouldShow={isHKBUEmail(comment.authorEmail)} size="small" />
                                             <View style={{ flex: 1 }} />
                                             {currentUser?.uid === comment.authorId && (
@@ -684,7 +706,11 @@ export default function PostDetailScreen() {
                                     <View style={styles.repliesList}>
                                         {comment.replies.map((reply: PostComment) => (
                                             <View key={reply.id} style={styles.replyItem}>
-                                                <View style={styles.commentAvatarSmall}>
+                                                <TouchableOpacity
+                                                    style={styles.commentAvatarSmall}
+                                                    onPress={() => openUserProfile(reply.authorId)}
+                                                    activeOpacity={0.7}
+                                                >
                                                     {reply.authorAvatar && isValidUrl(reply.authorAvatar) ? (
                                                         <Image source={{ uri: reply.authorAvatar }} style={styles.avatarImg} />
                                                     ) : (
@@ -692,10 +718,12 @@ export default function PostDetailScreen() {
                                                             {reply.authorName?.charAt(0).toUpperCase() ?? '?'}
                                                         </Text>
                                                     )}
-                                                </View>
+                                                </TouchableOpacity>
                                                 <View style={styles.commentBody}>
                                                     <View style={styles.commentHeader}>
-                                                        <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
+                                                        <TouchableOpacity onPress={() => openUserProfile(reply.authorId)} activeOpacity={0.7}>
+                                                            <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
+                                                        </TouchableOpacity>
                                                         {reply.replyToName && (
                                                             <Text style={styles.replyToText}>
                                                                 {' '}▶ {reply.replyToName}

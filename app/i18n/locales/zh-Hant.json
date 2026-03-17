@@ -57,6 +57,14 @@
         "notifications": "通知",
         "see_all": "查看全部",
         "no_notifications": "暫無新通知",
+        "guest_hint": "登錄後開啟更多精彩功能",
+        "user_not_found": "未找到該用戶",
+        "follow_loading": "處理中...",
+        "followed": "已關注",
+        "follow": "關注",
+        "tabs_overview": "概覽",
+        "tabs_messages": "消息",
+        "tabs_works": "作品",
         "social_tags": "社交標籤",
         "select_tags": "最多選擇 3 個標籤",
         "my_activity": "我的動態",
@@ -220,12 +228,24 @@
         "title_like": "獲讚",
         "post_comment": "{{name}} 評論了您的貼文。",
         "post_reply": "{{name}} 回覆了您的評論。",
-        "post_like": "有人點讚了您的貼文: \"{{content}}...\"",
+        "post_like": "有人點讚了您的貼文: {{content}}...",
         "exchange_comment": "{{name}} 評論了你的 {{course}} 換課申請。",
         "exchange_like": "有人贊了你的 {{course}} 換課申請！",
         "teaming_comment": "{{name}} 評論了你的 {{course}} 組隊需求。",
         "teaming_like": "有人贊了你的 {{course}} 组隊需求！",
         "review_like": "有人贊了你對 {{course}} 的課程評價！"
+    },
+    "messages": {
+        "title": "訊息",
+        "no_messages": "暫無訊息",
+        "say_hi": "和感興趣的同學打個招呼吧 👋",
+        "input_placeholder": "輸入訊息...",
+        "send": "發送",
+        "online": "在線",
+        "offline": "離線",
+        "just_now": "剛剛",
+        "minutes_ago": "{{count}} 分鐘前",
+        "hours_ago": "{{count}} 小時前"
     },
     "map": {
         "title": "校園地圖",
@@ -288,6 +308,7 @@
     "campus": {
         "title": "校園圈",
         "campus_filter": "校園",
+        "following_badge": "你的關注",
         "tabs": {
             "discover": "發現",
             "forum": "論壇"

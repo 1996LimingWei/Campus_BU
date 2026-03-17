@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { ProfileHeader } from '../../components/profile/ProfileHeader';
@@ -10,6 +11,7 @@ import { followUser, getFollowCounts, isFollowingUser, unfollowUser } from '../.
 import { User, Post } from '../../types';
 
 export default function UserProfileScreen() {
+    const { t } = useTranslation();
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const [user, setUser] = useState<User | null>(null);
@@ -156,9 +158,9 @@ export default function UserProfileScreen() {
     if (!user) {
         return (
             <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>未找到该用户</Text>
+                <Text style={styles.errorText}>{t('profile.user_not_found')}</Text>
                 <TouchableOpacity onPress={() => router.back()}>
-                    <Text style={styles.backText}>返回</Text>
+                    <Text style={styles.backText}>{t('common.back')}</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -188,12 +190,12 @@ export default function UserProfileScreen() {
                     onEditPress={currentUserId === id ? () => router.push('/(auth)/setup') : undefined}
                     onFollowPress={currentUserId && currentUserId !== id ? handleFollowToggle : undefined}
                     followLoading={followLoading}
-                    onMessagePress={() => {}}
+                    onMessagePress={() => router.push({ pathname: '/messages/[id]' as any, params: { id: id! } })}
                 />
 
                 <View style={styles.pageTabContainer}>
                     <View style={styles.pageTab}>
-                        <Text style={[styles.pageTabText, styles.pageTabTextActive]}>作品</Text>
+                        <Text style={[styles.pageTabText, styles.pageTabTextActive]}>{t('profile.tabs_works')}</Text>
                         <View style={styles.pageTabIndicator} />
                     </View>
                 </View>
@@ -202,12 +204,12 @@ export default function UserProfileScreen() {
                     activeTab="posts"
                     posts={posts}
                     likedPosts={[]} // Placeholder
-                    onPostPress={(postId) => router.push(`/campus/${postId}` as any)}
+                    onPostPress={(postId) => router.push({ pathname: '/campus/[id]', params: { id: postId } })}
                     onLikePost={handleLikePost}
                     currentUserId={currentUserId}
                     onAuthorPress={(authorId) => {
                         if (authorId === id || authorId === currentUserId) return;
-                        router.push(`/profile/${authorId}` as any);
+                        router.push({ pathname: '/profile/[id]' as any, params: { id: authorId } });
                     }}
                 />
                 <View style={{ height: 100 }} />

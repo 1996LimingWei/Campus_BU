@@ -1,4 +1,3 @@
-import { formatDistanceToNow } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { Heart, MessageCircle } from 'lucide-react-native';
@@ -69,7 +68,7 @@ const isValidUrl = (url?: string) =>
     !!url && (url.startsWith('http://') || url.startsWith('https://'));
 
 export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
-    ({ post, onPress, onLike, currentUserId, onAuthorPress }) => {
+    ({ post, onPress, onLike, currentUserId: _currentUserId, onAuthorPress }) => {
         const { t } = useTranslation();
         const pressed = useSharedValue(1);
 
@@ -83,8 +82,6 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
         const isTextOnly = !coverImage;
 
         const palette = isTextOnly ? getPalette(post.id) : null;
-        const timeAgo = formatDistanceToNow(post.createdAt, { addSuffix: true });
-
         const onPressIn = useCallback(() => {
             pressed.value = withSpring(0.97, { damping: 20, stiffness: 120 });
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -102,104 +99,114 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
 
         return (
             <Animated.View style={[styles.cardWrapper, animatedStyle]}>
-                <TouchableOpacity
-                    style={styles.card}
-                    onPress={onPress}
-                    onPressIn={onPressIn}
-                    onPressOut={onPressOut}
-                    activeOpacity={1}
-                >
-                    {/* ── Cover area ── */}
-                    {coverImage ? (
-                        /* Real image cover */
-                        <View style={styles.imageWrapper}>
-                            <Image
-                                source={{ uri: coverImage }}
-                                style={styles.coverImage}
-                                contentFit="cover"
-                                cachePolicy="memory-disk"
-                                recyclingKey={coverImage}
-                            />
-                            {post.category && post.category !== 'All' && (
+                <View style={styles.card}>
+                    <TouchableOpacity
+                        onPress={onPress}
+                        onPressIn={onPressIn}
+                        onPressOut={onPressOut}
+                        activeOpacity={1}
+                    >
+                        {/* ── Cover area ── */}
+                        {coverImage ? (
+                            /* Real image cover */
+                            <View style={styles.imageWrapper}>
+                                <Image
+                                    source={{ uri: coverImage }}
+                                    style={styles.coverImage}
+                                    contentFit="cover"
+                                    cachePolicy="memory-disk"
+                                    recyclingKey={coverImage}
+                                />
+                                {post.category && post.category !== 'All' && (
+                                    <View
+                                        style={[
+                                            styles.categoryBadge,
+                                            { backgroundColor: categoryColors[post.category] || '#6B7280' },
+                                        ]}
+                                    >
+                                        <Text style={styles.categoryBadgeText}>
+                                            {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
+                                        </Text>
+                                    </View>
+                                )}
+                                {post.isFollowingAuthor && (
+                                    <View style={styles.followingBadgeTextCover}>
+                                        <View style={styles.followingBadgeContent}>
+                                            <View style={[styles.followingBadgeDot, styles.followingBadgeDotOnCover]} />
+                                            <Text style={styles.followingBadgeTextOnCover}>{t('campus.following_badge')}</Text>
+                                        </View>
+                                    </View>
+                                )}
+                            </View>
+                        ) : (
+                            /* Text-cover card (XHS style) */
+                            <View style={[styles.textCover, { backgroundColor: palette!.bg }]}>
+                                {/* Decorative accent blobs */}
                                 <View
                                     style={[
-                                        styles.categoryBadge,
-                                        { backgroundColor: categoryColors[post.category] || '#6B7280' },
+                                        styles.blob,
+                                        styles.blobTopRight,
+                                        { backgroundColor: palette!.accent + '55' },
                                     ]}
-                                >
-                                    <Text style={styles.categoryBadgeText}>
-                                        {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                    ) : (
-                        /* Text-cover card (XHS style) */
-                        <View style={[styles.textCover, { backgroundColor: palette!.bg }]}>
-                            {/* Decorative accent blobs */}
-                            <View
-                                style={[
-                                    styles.blob,
-                                    styles.blobTopRight,
-                                    { backgroundColor: palette!.accent + '55' },
-                                ]}
-                            />
-                            <View
-                                style={[
-                                    styles.blob,
-                                    styles.blobBottomLeft,
-                                    { backgroundColor: palette!.accent + '33' },
-                                ]}
-                            />
+                                />
+                                <View
+                                    style={[
+                                        styles.blob,
+                                        styles.blobBottomLeft,
+                                        { backgroundColor: palette!.accent + '33' },
+                                    ]}
+                                />
 
-                            {/* Category pill */}
-                            {post.category && post.category !== 'All' && (
-                                <View style={styles.textCoverCategory}>
-                                    <Text style={styles.textCoverCategoryText}>
-                                        {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
-                                    </Text>
-                                </View>
-                            )}
-
-                            {/* Following badge on cover */}
-                            {post.isFollowingAuthor && (
-                                <View style={styles.followingBadgeTextCover}>
-                                    <View style={styles.followingBadgeContent}>
-                                        <View style={[styles.followingBadgeDot, styles.followingBadgeDotOnCover]} />
-                                        <Text style={styles.followingBadgeTextOnCover}>你的关注</Text>
+                                {/* Category pill */}
+                                {post.category && post.category !== 'All' && (
+                                    <View style={styles.textCoverCategory}>
+                                        <Text style={styles.textCoverCategoryText}>
+                                            {categoryKeyMap[post.category] ? t(`campus.categories.${categoryKeyMap[post.category]}`) : post.category}
+                                        </Text>
                                     </View>
-                                </View>
+                                )}
+
+                                {/* Following badge on cover - keep it as is for text cards as it's safe there */}
+                                {post.isFollowingAuthor && (
+                                    <View style={styles.followingBadgeTextCover}>
+                                        <View style={styles.followingBadgeContent}>
+                                            <View style={[styles.followingBadgeDot, styles.followingBadgeDotOnCover]} />
+                                            <Text style={styles.followingBadgeTextOnCover}>{t('campus.following_badge')}</Text>
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Main text */}
+                                <Text
+                                    style={[styles.textCoverContent, { color: palette!.text }]}
+                                    numberOfLines={7}
+                                >
+                                    {post.content}
+                                </Text>
+
+                                {/* Fade-out hint at bottom */}
+                                <View style={styles.textCoverFade} />
+                            </View>
+                        )}
+
+                        <View style={styles.bodyPrimary}>
+                            {/* Text-card: single-line title from content */}
+                            {isTextOnly && (
+                                <Text style={styles.textTitle} numberOfLines={1}>
+                                    {post.content}
+                                </Text>
                             )}
 
-                            {/* Main text */}
-                            <Text
-                                style={[styles.textCoverContent, { color: palette!.text }]}
-                                numberOfLines={7}
-                            >
-                                {post.content}
-                            </Text>
-
-                            {/* Fade-out hint at bottom */}
-                            <View style={styles.textCoverFade} />
+                            {/* Image card: one-line content preview above author */}
+                            {!isTextOnly && !!post.content && (
+                                <Text style={styles.contentPreview} numberOfLines={1}>
+                                    {post.content}
+                                </Text>
+                            )}
                         </View>
-                    )}
+                    </TouchableOpacity>
 
-                    {/* ── Card body: content preview + author + counts ── */}
-                    <View style={styles.body}>
-                        {/* Text-card: single-line title from content */}
-                        {isTextOnly && (
-                            <Text style={styles.textTitle} numberOfLines={1}>
-                                {post.content}
-                            </Text>
-                        )}
-
-                        {/* Image card: one-line content preview above author */}
-                        {!isTextOnly && !!post.content && (
-                            <Text style={styles.contentPreview} numberOfLines={1}>
-                                {post.content}
-                            </Text>
-                        )}
-
+                    <View style={styles.bodyFooter}>
                         {/* Author row */}
                         <TouchableOpacity
                             style={styles.authorRow}
@@ -210,6 +217,7 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                             }}
                             disabled={!canOpenAuthor}
                             activeOpacity={canOpenAuthor ? 0.7 : 1}
+                            hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}
                         >
                             <View style={styles.avatarSmall}>
                                 {!post.isAnonymous && isValidUrl(post.authorAvatar) ? (
@@ -232,23 +240,14 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                             />
                         </TouchableOpacity>
 
-                        {/* Following badge for image cards */}
-                        {post.isFollowingAuthor && !isTextOnly && (
-                            <View style={styles.followingBadge}>
-                                <View style={styles.followingBadgeContent}>
-                                    <View style={styles.followingBadgeDot} />
-                                    <Text style={styles.followingBadgeText}>你的关注</Text>
-                                </View>
-                            </View>
-                        )}
 
                         {/* Counts */}
                         <View style={styles.countRow}>
-                            <View style={styles.countItem}>
+                            <TouchableOpacity style={styles.countItem} onPress={onPress} activeOpacity={0.7}>
                                 <MessageCircle size={12} color="#9CA3AF" />
                                 <Text style={styles.countText}>{post.comments}</Text>
-                            </View>
-                            <TouchableOpacity style={styles.countItem} onPress={onLike}>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.countItem} onPress={onLike} activeOpacity={0.7}>
                                 <Heart
                                     size={12}
                                     color={post.isLiked ? '#EF4444' : '#9CA3AF'}
@@ -260,7 +259,7 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                             </TouchableOpacity>
                         </View>
                     </View>
-                </TouchableOpacity>
+                </View>
             </Animated.View>
         );
     }
@@ -361,8 +360,14 @@ const styles = StyleSheet.create({
     },
 
     // ── Card body ─────────────────────────────────────────────────────────────
-    body: {
-        padding: 10,
+    bodyPrimary: {
+        paddingHorizontal: 10,
+        paddingTop: 10,
+        paddingBottom: 4,
+    },
+    bodyFooter: {
+        paddingHorizontal: 10,
+        paddingBottom: 10,
     },
     textTitle: {
         fontSize: 13,
@@ -425,21 +430,11 @@ const styles = StyleSheet.create({
         color: '#EF4444',
         fontWeight: '600',
     },
-    followingBadge: {
-        position: 'absolute',
-        bottom: 10,
-        left: 10,
-        backgroundColor: 'rgba(255,255,255,0.95)',
-        paddingHorizontal: 9,
-        paddingVertical: 5,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: '#FFFFFF',
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.16,
-        shadowRadius: 8,
-        elevation: 3,
+    followingBadgeInline: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginBottom: 6,
     },
     followingBadgeContent: {
         flexDirection: 'row',
@@ -461,21 +456,26 @@ const styles = StyleSheet.create({
     followingBadgeTextOnCover: {
         fontSize: 10,
         fontWeight: '700',
-        color: '#fff',
+        color: '#1E3A8A',
         letterSpacing: 0.1,
     },
     followingBadgeTextCover: {
         position: 'absolute',
         bottom: 10,
         left: 10,
-        backgroundColor: 'rgba(15,23,42,0.45)',
+        backgroundColor: '#FFFFFF',
         paddingHorizontal: 9,
         paddingVertical: 5,
         borderRadius: 999,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.22)',
+        borderColor: '#E5E7EB',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
     followingBadgeDotOnCover: {
-        backgroundColor: '#93C5FD',
+        backgroundColor: '#1E3A8A',
     },
 });

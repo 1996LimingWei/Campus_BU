@@ -41,8 +41,33 @@ export const MOCK_USERS: Omit<User, 'createdAt'>[] = [
 ];
 
 // Get users for discovery (excluding current user)
-export const getDiscoverableUsers = (currentUserId: string): Omit<User, 'createdAt'>[] => {
-    return MOCK_USERS.filter(user => user.uid !== currentUserId);
+export const getDiscoverableUsers = async (currentUserId: string): Promise<Omit<User, 'createdAt'>[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('id, display_name, avatar_url, major, social_tags, email')
+            .neq('id', currentUserId)
+            .limit(50);
+
+        if (error) {
+            console.warn('Falling back to mock discoverable users:', error.message);
+            return MOCK_USERS.filter(user => user.uid !== currentUserId);
+        }
+
+        return (data || [])
+            .filter((row: any) => row?.id)
+            .map((row: any) => ({
+                uid: row.id,
+                displayName: row.display_name || 'Anonymous',
+                socialTags: Array.isArray(row.social_tags) ? row.social_tags : [],
+                major: row.major || 'Student',
+                avatarUrl: row.avatar_url || '',
+                email: row.email || undefined,
+            }));
+    } catch (error) {
+        console.warn('Failed to load discoverable users, using mock fallback:', error);
+        return MOCK_USERS.filter(user => user.uid !== currentUserId);
+    }
 };
 
 export type InteractionType = 'poke' | 'wave' | 'coffee';

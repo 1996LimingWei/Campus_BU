@@ -15,6 +15,7 @@ import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeT
 import { supabase } from '../../services/supabase';
 import { changeLanguage } from '../i18n/i18n';
 import { ProfileHeader } from '../../components/profile/ProfileHeader';
+import { ProfileMessages } from '../../components/profile/ProfileMessages';
 import { ProfilePostFeed } from '../../components/profile/ProfilePostFeed';
 import { ProfileTabs, ProfileTabType } from '../../components/profile/ProfileTabs';
 import { fetchLikedPosts, fetchPostsByAuthor, togglePostLike } from '../../services/campus';
@@ -439,20 +440,21 @@ export default function ProfileScreen() {
         }
     }, [userId]);
 
-    const [profileMode, setProfileMode] = useState<'overview' | 'content'>('overview');
+    const [profileMode, setProfileMode] = useState<'overview' | 'messages' | 'content'>('overview');
     const pagerRef = React.useRef<ScrollView>(null);
     const scrollX = React.useRef(new Animated.Value(0)).current;
     const { width: SCREEN_W } = Dimensions.get('window');
 
-    const scrollToMode = (mode: 'overview' | 'content') => {
-        const index = mode === 'overview' ? 0 : 1;
+    const scrollToMode = (mode: 'overview' | 'messages' | 'content') => {
+        const index = mode === 'overview' ? 0 : mode === 'messages' ? 1 : 2;
         pagerRef.current?.scrollTo({ x: index * SCREEN_W, animated: true });
         setProfileMode(mode);
     };
 
     const onPagerScroll = (e: any) => {
         const x = e.nativeEvent.contentOffset.x;
-        const newMode = x > SCREEN_W / 2 ? 'content' : 'overview';
+        const index = Math.round(x / SCREEN_W);
+        const newMode = index === 0 ? 'overview' : index === 1 ? 'messages' : 'content';
         if (newMode !== profileMode) setProfileMode(newMode);
     };
 
@@ -460,7 +462,7 @@ export default function ProfileScreen() {
         <View style={styles.container}>
             {/* Blue Top Header Bar */}
             <View style={styles.blueHeader}>
-                <Text style={styles.blueHeaderTitle}>个人中心</Text>
+                <Text style={styles.blueHeaderTitle}>{t('profile.title')}</Text>
             </View>
 
             {/* Profile Header Card */}
@@ -478,16 +480,25 @@ export default function ProfileScreen() {
                     onPress={() => scrollToMode('overview')}
                 >
                     <Text style={[styles.pageTabText, profileMode === 'overview' && styles.pageTabTextActive]}>
-                        概览
+                        {t('profile.tabs_overview')}
                     </Text>
                     {profileMode === 'overview' && <View style={styles.pageTabIndicator} />}
+                </TouchableOpacity>
+                <TouchableOpacity 
+                    style={styles.pageTab}
+                    onPress={() => scrollToMode('messages')}
+                >
+                    <Text style={[styles.pageTabText, profileMode === 'messages' && styles.pageTabTextActive]}>
+                        {t('profile.tabs_messages')}
+                    </Text>
+                    {profileMode === 'messages' && <View style={styles.pageTabIndicator} />}
                 </TouchableOpacity>
                 <TouchableOpacity 
                     style={styles.pageTab}
                     onPress={() => scrollToMode('content')}
                 >
                     <Text style={[styles.pageTabText, profileMode === 'content' && styles.pageTabTextActive]}>
-                        作品
+                        {t('profile.tabs_works')}
                     </Text>
                     {profileMode === 'content' && <View style={styles.pageTabIndicator} />}
                 </TouchableOpacity>
@@ -657,7 +668,12 @@ export default function ProfileScreen() {
                     <View style={{ height: 100 }} />
                 </ScrollView>
 
-                {/* Page 1: My Content */}
+                {/* Page 1: Messages */}
+                <View style={{ width: SCREEN_W }}>
+                    <ProfileMessages />
+                </View>
+
+                {/* Page 2: My Content */}
                 <ScrollView 
                     style={{ width: SCREEN_W }} 
                     showsVerticalScrollIndicator={false}

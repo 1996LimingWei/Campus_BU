@@ -5,6 +5,7 @@
         "course": "点评",
         "agent": "Agent",
         "classroom": "教室",
+        "messages": "消息",
         "me": "我的"
     },
     "common": {
@@ -57,6 +58,14 @@
         "notifications": "通知",
         "see_all": "查看全部",
         "no_notifications": "暂无新通知",
+        "guest_hint": "登录后开启更多精彩功能",
+        "user_not_found": "未找到该用户",
+        "follow_loading": "处理中...",
+        "followed": "已关注",
+        "follow": "关注",
+        "tabs_overview": "概览",
+        "tabs_messages": "消息",
+        "tabs_works": "作品",
         "social_tags": "社交标签",
         "select_tags": "最多选择 3 个标签",
         "my_activity": "我的动态",
@@ -191,6 +200,18 @@
         "teaming_like": "有人赞了你的 {{course}} 组队需求！",
         "review_like": "有人赞了你对 {{course}} 的课程评价！"
     },
+    "messages": {
+        "title": "消息",
+        "no_messages": "暂无消息",
+        "say_hi": "给心仪的同学打个招呼吧 👋",
+        "input_placeholder": "输入消息...",
+        "send": "发送",
+        "online": "在线",
+        "offline": "离线",
+        "just_now": "刚刚",
+        "minutes_ago": "{{count}} 分钟前",
+        "hours_ago": "{{count}} 小时前"
+    },
     "map": {
         "title": "校园地图",
         "filters": {
@@ -252,6 +273,7 @@
     "campus": {
         "title": "校园圈",
         "campus_filter": "校园",
+        "following_badge": "你的关注",
         "tabs": {
             "discover": "发现",
             "forum": "论坛"

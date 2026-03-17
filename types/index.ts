@@ -157,6 +157,33 @@ export interface Message {
     read: boolean;
 }
 
+export interface DirectMessagePeer {
+    id: string;
+    name: string;
+    avatar: string;
+    major: string;
+}
+
+export interface DirectConversationSummary {
+    id: string;
+    user: DirectMessagePeer;
+    lastMessage: string;
+    timestamp: Date;
+    unreadCount: number;
+}
+
+export interface DirectMessage {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    receiverId: string;
+    content: string;
+    createdAt: Date;
+    readAt?: Date | null;
+    senderName: string;
+    senderAvatar: string;
+}
+
 // Course Reviews Types
 export interface Course {
     id: string;

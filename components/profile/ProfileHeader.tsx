@@ -1,6 +1,7 @@
-import { Camera, Edit3, User as UserIcon } from 'lucide-react-native';
+import { Camera, Edit3, MessageCircle, User as UserIcon } from 'lucide-react-native';
 import React from 'react';
-import { Image, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { User } from '../../types';
 import { isAdminSync, isHKBUEmail } from '../../utils/userUtils';
 import { AdminBadge } from '../common/AdminBadge';
@@ -25,28 +26,18 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     onMessagePress,
     followLoading = false,
 }) => {
-    const handleShare = async () => {
-        if (!user) return;
-        try {
-            await Share.share({
-                message: `来看看 ${user.displayName} 的 HKCampus 主页！`,
-                url: `https://hkcampus.app/profile/${user.uid}`,
-            });
-        } catch (error) {
-            console.error('Error sharing:', error);
-        }
-    };
-
-    const displayName = user?.displayName || '访客';
+    const { t } = useTranslation();
+    const displayName = user?.displayName || t('profile.guest_name');
     const isGuest = !user;
     const subtitle = isGuest
-        ? '登录后开启更多精彩功能'
+        ? t('profile.guest_hint')
         : (user.major || user.bio || '');
     const showEditAction = !isGuest && isCurrentUser && !!onEditPress;
     const showFollowAction = !isGuest && !isCurrentUser && !!onFollowPress;
+    const showMessageAction = !isCurrentUser && !isGuest && !!onMessagePress;
     const followLabel = followLoading
-        ? '处理中...'
-        : (user?.isFollowing ? '已关注' : '关注');
+        ? t('profile.follow_loading')
+        : (user?.isFollowing ? t('profile.followed') : t('profile.follow'));
 
     return (
         <View style={styles.cardContainer}>
@@ -66,47 +57,68 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                     )}
                 </View>
 
-                <View style={styles.infoSection}>
-                    <View style={styles.nameRow}>
-                        <Text style={styles.name}>{displayName}</Text>
-                        {!isGuest && <EduBadge shouldShow={isHKBUEmail(user.email)} size="small" />}
-                        {!isGuest && <AdminBadge shouldShow={isAdminSync(user.uid)} size="small" />}
+                <View style={styles.contentSection}>
+                    <View style={styles.topRow}>
+                        <View style={styles.infoSection}>
+                            <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+                            {!isGuest && (
+                                <View style={styles.badgeRow}>
+                                    <EduBadge shouldShow={isHKBUEmail(user.email)} size="small" />
+                                    <AdminBadge shouldShow={isAdminSync(user.uid)} size="small" />
+                                </View>
+                            )}
+                            <Text style={styles.bio} numberOfLines={1}>{subtitle}</Text>
+                            {!isGuest && user?.stats && (
+                                <Text style={styles.metaText}>
+                                    {user.stats.followersCount || 0} 粉丝 · {user.stats.followingCount || 0} 关注
+                                </Text>
+                            )}
+                        </View>
+
+                        {showEditAction && (
+                            <TouchableOpacity style={styles.editIconBtn} onPress={onEditPress}>
+                                <Edit3 size={20} color="#1E3A8A" />
+                            </TouchableOpacity>
+                        )}
                     </View>
-                    <Text style={styles.bio} numberOfLines={1}>{subtitle}</Text>
-                    {!isGuest && user?.stats && (
-                        <Text style={styles.metaText}>
-                            {user.stats.followersCount || 0} 粉丝 · {user.stats.followingCount || 0} 关注
-                        </Text>
+
+                    {(showFollowAction || showMessageAction) && (
+                        <View style={styles.actionRow}>
+                            {showFollowAction && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.followBtn,
+                                        showMessageAction && styles.followBtnFlex,
+                                        user?.isFollowing && styles.followBtnFollowing,
+                                        followLoading && styles.followBtnDisabled,
+                                    ]}
+                                    onPress={onFollowPress}
+                                    disabled={followLoading}
+                                    activeOpacity={0.85}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.followBtnText,
+                                            user?.isFollowing && styles.followBtnTextFollowing,
+                                        ]}
+                                    >
+                                        {followLabel}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {showMessageAction && (
+                                <TouchableOpacity
+                                    style={styles.messageIconBtn}
+                                    onPress={onMessagePress}
+                                    activeOpacity={0.7}
+                                >
+                                    <MessageCircle size={20} color="#1E3A8A" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     )}
                 </View>
-
-                {showEditAction && (
-                    <TouchableOpacity style={styles.editIconBtn} onPress={onEditPress}>
-                        <Edit3 size={20} color="#1E3A8A" />
-                    </TouchableOpacity>
-                )}
-
-                {showFollowAction && (
-                    <TouchableOpacity
-                        style={[
-                            styles.followBtn,
-                            user?.isFollowing && styles.followBtnFollowing,
-                            followLoading && styles.followBtnDisabled,
-                        ]}
-                        onPress={onFollowPress}
-                        disabled={followLoading}
-                        activeOpacity={0.85}
-                    >
-                        <Text
-                            style={[
-                                styles.followBtnText,
-                                user?.isFollowing && styles.followBtnTextFollowing,
-                            ]}
-                        >
-                            {followLabel}
-                        </Text>
-                    </TouchableOpacity>
-                )}
             </View>
         </View>
     );
@@ -127,7 +139,7 @@ const styles = StyleSheet.create({
     },
     avatarSection: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
     },
     avatarWrapper: {
         position: 'relative',
@@ -157,37 +169,49 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#fff',
     },
+    contentSection: {
+        flex: 1,
+        minWidth: 0,
+    },
+    topRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
     infoSection: {
         flex: 1,
+        minWidth: 0,
     },
-    nameRow: {
+    badgeRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 4,
+        flexWrap: 'wrap',
+        marginTop: 6,
+        marginLeft: -4,
     },
     name: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#111827',
-        marginRight: 8,
     },
     bio: {
         fontSize: 14,
         color: '#6B7280',
+        marginTop: 6,
     },
     metaText: {
         fontSize: 12,
         color: '#9CA3AF',
-        marginTop: 4,
+        marginTop: 6,
     },
     editIconBtn: {
+        marginLeft: 12,
         padding: 8,
     },
     followBtn: {
-        minWidth: 78,
+        minWidth: 96,
         paddingHorizontal: 16,
-        height: 36,
-        borderRadius: 18,
+        height: 38,
+        borderRadius: 19,
         backgroundColor: '#1E3A8A',
         borderWidth: 1,
         borderColor: '#1E3A8A',
@@ -198,6 +222,9 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 6,
         elevation: 2,
+    },
+    followBtnFlex: {
+        flex: 1,
     },
     followBtnFollowing: {
         backgroundColor: '#FFFFFF',
@@ -216,5 +243,21 @@ const styles = StyleSheet.create({
     },
     followBtnTextFollowing: {
         color: '#4B5563',
+    },
+    actionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginTop: 14,
+    },
+    messageIconBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#F3F4F6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
     },
 });
