@@ -87,12 +87,12 @@ export const getDirectMessagePreviewText = (content?: string | null): string => 
         return '';
     }
 
-    if (isDirectImageContent(content)) {
-        return '[Image]';
+    if (content.startsWith(DIRECT_IMAGE_PREFIX)) {
+        return '[图片]';
     }
 
-    if (isDirectFileContent(content)) {
-        return '[File]';
+    if (content.startsWith(DIRECT_FILE_PREFIX)) {
+        return '[文件]';
     }
 
     return content;

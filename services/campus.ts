@@ -22,6 +22,32 @@ const TYPE_TO_CATEGORY: Record<string, PostCategory> = {
     'lost_found': 'Lost & Found'
 };
 
+const ANONYMOUS_POST_AUTHOR_NAME = '匿名用户';
+
+const mapCommentRow = (
+    row: any,
+    anonymousPostAuthorId?: string,
+): PostComment => {
+    const isAnonymous = !!anonymousPostAuthorId && row.author_id === anonymousPostAuthorId;
+    const author = row.author;
+
+    return {
+        id: row.id,
+        postId: row.post_id,
+        authorId: row.author_id,
+        authorName: isAnonymous
+            ? ANONYMOUS_POST_AUTHOR_NAME
+            : (author ? (author.display_name || author.displayName) : row.author_name),
+        authorEmail: isAnonymous ? undefined : row.author_email,
+        authorAvatar: isAnonymous ? undefined : row.author_avatar,
+        isAnonymous,
+        content: row.content,
+        parentCommentId: row.parent_comment_id,
+        replyToName: row.reply_to_name,
+        createdAt: new Date(row.created_at),
+    };
+};
+
 /**
  * Map Supabase row to Post type
  */
@@ -144,7 +170,9 @@ export const fetchPostsByAuthor = async (authorId: string, currentUserId?: strin
         throw error;
     }
 
-    let posts = (data || []).map(mapSupabaseToPost);
+    let posts = (data || [])
+        .map(mapSupabaseToPost)
+        .filter(post => !post.isAnonymous);
 
     // Filter out posts from blocked users
     if (currentUserId) {
@@ -157,6 +185,54 @@ export const fetchPostsByAuthor = async (authorId: string, currentUserId?: strin
 
     // Mark current user's like state on these posts
     if (currentUserId && posts.length > 0) {
+        const postIds = posts.map(p => p.id);
+        const { data: likes } = await supabase
+            .from(LIKES_TABLE)
+            .select('post_id')
+            .eq('user_id', currentUserId)
+            .in('post_id', postIds);
+
+        if (likes) {
+            const likedPostIds = new Set(likes.map(l => l.post_id));
+            posts.forEach(p => {
+                p.isLiked = likedPostIds.has(p.id);
+            });
+        }
+    }
+
+    await markFollowingAuthors(posts, currentUserId);
+    return posts;
+};
+
+/**
+ * Fetch anonymous posts created by the current author for private self view.
+ */
+export const fetchAnonymousPostsByAuthor = async (authorId: string, currentUserId?: string): Promise<Post[]> => {
+    if (!currentUserId || currentUserId !== authorId) {
+        return [];
+    }
+
+    const { data, error } = await supabase
+        .from(POSTS_TABLE)
+        .select('*, author:users!author_id(*)')
+        .eq('author_id', authorId)
+        .eq('is_anonymous', true)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching anonymous posts by author:', error);
+        throw error;
+    }
+
+    let posts = (data || []).map(mapSupabaseToPost);
+
+    const blockedIds = await getBlockedUserIds(currentUserId);
+    if (blockedIds.length > 0) {
+        const blockedSet = new Set(blockedIds);
+        posts = posts.filter(p => !blockedSet.has(p.authorId));
+    }
+
+    if (posts.length > 0) {
         const postIds = posts.map(p => p.id);
         const { data: likes } = await supabase
             .from(LIKES_TABLE)
@@ -480,25 +556,24 @@ export const togglePostLike = async (postId: string, userId: string) => {
  * Fetch comments for a post
  */
 export const fetchPostComments = async (postId: string): Promise<PostComment[]> => {
-    const { data, error } = await supabase
-        .from(COMMENTS_TABLE)
-        .select('*, author:users!author_id(*)')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: true });
+    const [{ data, error }, { data: postMeta, error: postError }] = await Promise.all([
+        supabase
+            .from(COMMENTS_TABLE)
+            .select('*, author:users!author_id(*)')
+            .eq('post_id', postId)
+            .order('created_at', { ascending: true }),
+        supabase
+            .from(POSTS_TABLE)
+            .select('author_id, is_anonymous')
+            .eq('id', postId)
+            .maybeSingle(),
+    ]);
 
     if (error) throw error;
-    return (data || []).map(row => ({
-        id: row.id,
-        postId: row.post_id,
-        authorId: row.author_id,
-        authorName: row.author ? (row.author.display_name || row.author.displayName) : row.author_name,
-        authorEmail: row.author_email,
-        authorAvatar: row.author_avatar,
-        content: row.content,
-        parentCommentId: row.parent_comment_id,
-        replyToName: row.reply_to_name,
-        createdAt: new Date(row.created_at),
-    }));
+    if (postError) throw postError;
+
+    const anonymousPostAuthorId = postMeta?.is_anonymous ? postMeta.author_id : undefined;
+    return (data || []).map(row => mapCommentRow(row, anonymousPostAuthorId));
 };
 
 /**
@@ -514,14 +589,24 @@ export const addPostComment = async (commentData: {
     parentCommentId?: string;
     replyToName?: string;
 }): Promise<PostComment> => {
+    const { data: post, error: postError } = await supabase
+        .from(POSTS_TABLE)
+        .select('author_id, content, is_anonymous')
+        .eq('id', commentData.postId)
+        .single();
+
+    if (postError) throw postError;
+
+    const isAnonymous = !!post?.is_anonymous && post.author_id === commentData.authorId;
+
     const { data, error } = await supabase
         .from(COMMENTS_TABLE)
         .insert([{
             post_id: commentData.postId,
             author_id: commentData.authorId,
-            author_name: commentData.authorName,
-            author_email: commentData.authorEmail,
-            author_avatar: commentData.authorAvatar,
+            author_name: isAnonymous ? ANONYMOUS_POST_AUTHOR_NAME : commentData.authorName,
+            author_email: isAnonymous ? null : commentData.authorEmail,
+            author_avatar: isAnonymous ? null : commentData.authorAvatar,
             content: commentData.content,
             parent_comment_id: commentData.parentCommentId,
             reply_to_name: commentData.replyToName,
@@ -532,7 +617,6 @@ export const addPostComment = async (commentData: {
     if (error) throw error;
 
     // Trigger notification
-    const { data: post } = await supabase.from(POSTS_TABLE).select('author_id, content').eq('id', commentData.postId).single();
     if (post && post.author_id !== commentData.authorId) {
         const { createNotification } = await import('./notifications');
 
@@ -552,16 +636,8 @@ export const addPostComment = async (commentData: {
     }
 
     return {
-        id: data.id,
-        postId: data.post_id,
-        authorId: data.author_id,
-        authorName: data.author_name,
-        authorEmail: data.author_email,
-        authorAvatar: data.author_avatar,
-        content: data.content,
-        parentCommentId: data.parent_comment_id,
-        replyToName: data.reply_to_name,
-        createdAt: new Date(data.created_at),
+        ...mapCommentRow(data, isAnonymous ? commentData.authorId : undefined),
+        isAnonymous,
     };
 };
 

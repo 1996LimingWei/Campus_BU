@@ -96,7 +96,7 @@ export default function PostDetailScreen() {
     const animOpacity = useRef(new Animated.Value(0)).current;
 
     const [post, setPost] = useState<Post | null>(null);
-    const [comments, setComments] = useState<any[]>([]);
+    const [comments, setComments] = useState<PostComment[]>([]);
     const [commentText, setCommentText] = useState('');
     const [loading, setLoading] = useState(true);
     const [imageZoomed, setImageZoomed] = useState(false);
@@ -164,7 +164,9 @@ export default function PostDetailScreen() {
         type: 'success',
     });
     const [replyTarget, setReplyTarget] = useState<PostComment | null>(null);
+    const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
     const commentInputRef = useRef<TextInput>(null);
+    const commentFlashAnim = useRef(new Animated.Value(0)).current;
 
     // Fire zoom animation immediately on mount
     useEffect(() => {
@@ -223,6 +225,28 @@ export default function PostDetailScreen() {
     useEffect(() => {
         loadData();
     }, [id]);
+
+    const triggerReply = (comment: PostComment) => {
+        setReplyTarget(comment);
+        setHighlightedCommentId(comment.id);
+        commentFlashAnim.stopAnimation();
+        commentFlashAnim.setValue(0);
+        Animated.sequence([
+            Animated.timing(commentFlashAnim, {
+                toValue: 1,
+                duration: 140,
+                useNativeDriver: false,
+            }),
+            Animated.timing(commentFlashAnim, {
+                toValue: 0,
+                duration: 260,
+                useNativeDriver: false,
+            }),
+        ]).start(() => {
+            setHighlightedCommentId(current => (current === comment.id ? null : current));
+        });
+        setTimeout(() => commentInputRef.current?.focus(), 100);
+    };
 
     const handleLike = async () => {
         if (!checkLogin(currentUser)) return;
@@ -653,11 +677,24 @@ export default function PostDetailScreen() {
 
                         {!loading && organizedComments.map(comment => (
                             <View key={comment.id} style={styles.commentContainer}>
-                                <View style={styles.commentItem}>
+                                <Animated.View
+                                    style={[
+                                        styles.commentItem,
+                                        highlightedCommentId === comment.id
+                                            ? {
+                                                backgroundColor: commentFlashAnim.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: ['rgba(30, 58, 138, 0)', 'rgba(30, 58, 138, 0.10)'],
+                                                }),
+                                            }
+                                            : null,
+                                    ]}
+                                >
                                     <TouchableOpacity
                                         style={styles.commentAvatar}
-                                        onPress={() => openUserProfile(comment.authorId)}
-                                        activeOpacity={0.7}
+                                        onPress={() => openUserProfile(comment.authorId, comment.isAnonymous)}
+                                        disabled={comment.isAnonymous}
+                                        activeOpacity={comment.isAnonymous ? 1 : 0.7}
                                     >
                                         {comment.authorAvatar && isValidUrl(comment.authorAvatar) ? (
                                             <Image source={{ uri: comment.authorAvatar }} style={styles.avatarImg} />
@@ -667,12 +704,14 @@ export default function PostDetailScreen() {
                                             </Text>
                                         )}
                                     </TouchableOpacity>
-                                    <View style={styles.commentBody}>
+                                    <TouchableOpacity
+                                        style={styles.commentBody}
+                                        activeOpacity={0.75}
+                                        onPress={() => triggerReply(comment)}
+                                    >
                                         <View style={styles.commentHeader}>
-                                            <TouchableOpacity onPress={() => openUserProfile(comment.authorId)} activeOpacity={0.7}>
-                                                <Text style={styles.commentAuthor}>{comment.authorName}</Text>
-                                            </TouchableOpacity>
-                                            <EduBadge shouldShow={isHKBUEmail(comment.authorEmail)} size="small" />
+                                            <Text style={styles.commentAuthor}>{comment.authorName}</Text>
+                                            <EduBadge shouldShow={!comment.isAnonymous && isHKBUEmail(comment.authorEmail)} size="small" />
                                             <View style={{ flex: 1 }} />
                                             {currentUser?.uid === comment.authorId && (
                                                 <TouchableOpacity
@@ -690,26 +729,37 @@ export default function PostDetailScreen() {
                                             </Text>
                                             <TouchableOpacity
                                                 style={styles.replyBtn}
-                                                onPress={() => {
-                                                    setReplyTarget(comment);
-                                                    setTimeout(() => commentInputRef.current?.focus(), 100);
-                                                }}
+                                                onPress={() => triggerReply(comment)}
                                             >
                                                 <Text style={styles.replyBtnText}>回复</Text>
                                             </TouchableOpacity>
                                         </View>
-                                    </View>
-                                </View>
+                                    </TouchableOpacity>
+                                </Animated.View>
 
                                 {/* Nested Replies */}
                                 {comment.replies && comment.replies.length > 0 && (
                                     <View style={styles.repliesList}>
                                         {comment.replies.map((reply: PostComment) => (
-                                            <View key={reply.id} style={styles.replyItem}>
+                                            <Animated.View
+                                                key={reply.id}
+                                                style={[
+                                                    styles.replyItem,
+                                                    highlightedCommentId === reply.id
+                                                        ? {
+                                                            backgroundColor: commentFlashAnim.interpolate({
+                                                                inputRange: [0, 1],
+                                                                outputRange: ['rgba(30, 58, 138, 0)', 'rgba(30, 58, 138, 0.10)'],
+                                                            }),
+                                                        }
+                                                        : null,
+                                                ]}
+                                            >
                                                 <TouchableOpacity
                                                     style={styles.commentAvatarSmall}
-                                                    onPress={() => openUserProfile(reply.authorId)}
-                                                    activeOpacity={0.7}
+                                                    onPress={() => openUserProfile(reply.authorId, reply.isAnonymous)}
+                                                    disabled={reply.isAnonymous}
+                                                    activeOpacity={reply.isAnonymous ? 1 : 0.7}
                                                 >
                                                     {reply.authorAvatar && isValidUrl(reply.authorAvatar) ? (
                                                         <Image source={{ uri: reply.authorAvatar }} style={styles.avatarImg} />
@@ -719,17 +769,19 @@ export default function PostDetailScreen() {
                                                         </Text>
                                                     )}
                                                 </TouchableOpacity>
-                                                <View style={styles.commentBody}>
+                                                <TouchableOpacity
+                                                    style={styles.commentBody}
+                                                    activeOpacity={0.75}
+                                                    onPress={() => triggerReply(reply)}
+                                                >
                                                     <View style={styles.commentHeader}>
-                                                        <TouchableOpacity onPress={() => openUserProfile(reply.authorId)} activeOpacity={0.7}>
-                                                            <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
-                                                        </TouchableOpacity>
+                                                        <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
                                                         {reply.replyToName && (
                                                             <Text style={styles.replyToText}>
                                                                 {' '}▶ {reply.replyToName}
                                                             </Text>
                                                         )}
-                                                        <EduBadge shouldShow={isHKBUEmail(reply.authorEmail)} size="small" />
+                                                        <EduBadge shouldShow={!reply.isAnonymous && isHKBUEmail(reply.authorEmail)} size="small" />
                                                         <View style={{ flex: 1 }} />
                                                         {currentUser?.uid === reply.authorId && (
                                                             <TouchableOpacity
@@ -747,16 +799,13 @@ export default function PostDetailScreen() {
                                                         </Text>
                                                         <TouchableOpacity
                                                             style={styles.replyBtn}
-                                                            onPress={() => {
-                                                                setReplyTarget(reply);
-                                                                setTimeout(() => commentInputRef.current?.focus(), 100);
-                                                            }}
+                                                            onPress={() => triggerReply(reply)}
                                                         >
                                                             <Text style={styles.replyBtnTextSmall}>回复</Text>
                                                         </TouchableOpacity>
                                                     </View>
-                                                </View>
-                                            </View>
+                                                </TouchableOpacity>
+                                            </Animated.View>
                                         ))}
                                     </View>
                                 )}
@@ -1111,6 +1160,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         marginBottom: 20,
         gap: 10,
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
     },
     commentAvatar: {
         width: 34,
@@ -1177,6 +1229,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         marginBottom: 12,
         gap: 8,
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 6,
     },
     commentAvatarSmall: {
         width: 24,

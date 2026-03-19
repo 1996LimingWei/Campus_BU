@@ -2,6 +2,7 @@ import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Course } from '../types';
 import { ExtractedScheduleItem, scanScheduleFromImage } from './ai-ocr';
+import { ensureCourseFavoriteForSchedule } from './favorites';
 import { supabase } from './supabase';
 
 const SCHEDULE_SCREENSHOT_BUCKET = 'schedule-screenshots';
@@ -130,6 +131,19 @@ const applyNullableFilter = (query: any, column: string, value: string | number 
         return query.is(column, null);
     }
     return query.eq(column, value);
+};
+
+const tryAutoFavoriteScheduleCourse = async (params: {
+    userId: string;
+    matchedCourseId?: string | null;
+    courseCode?: string;
+    courseName?: string;
+}) => {
+    try {
+        await ensureCourseFavoriteForSchedule(params);
+    } catch (error) {
+        console.warn('Failed to auto-favorite schedule course:', error);
+    }
 };
 
 const updateImportItemAsConfirmed = async (params: {
@@ -382,6 +396,12 @@ export const saveImportItemToSchedule = async (params: {
     const existingEntry = await findExistingActiveEntry({ userId, item, matchedCourse, title });
     if (existingEntry) {
         await updateImportItemAsConfirmed({ userId, item, matchedCourse });
+        await tryAutoFavoriteScheduleCourse({
+            userId,
+            matchedCourseId: matchedCourse?.id || item.matchedCourseId || existingEntry.matchedCourseId || null,
+            courseCode: matchedCourse?.code || item.extractedCourseCode || existingEntry.courseCode,
+            courseName: matchedCourse?.name || title || existingEntry.title,
+        });
         return existingEntry;
     }
 
@@ -422,6 +442,12 @@ export const saveImportItemToSchedule = async (params: {
     }
 
     await updateImportItemAsConfirmed({ userId, item, matchedCourse });
+    await tryAutoFavoriteScheduleCourse({
+        userId,
+        matchedCourseId: matchedCourse?.id || item.matchedCourseId || entryRow.matched_course_id || null,
+        courseCode: matchedCourse?.code || item.extractedCourseCode || entryRow.course_code || undefined,
+        courseName: matchedCourse?.name || title || entryRow.title,
+    });
 
     return mapEntryRow(entryRow);
 };
@@ -483,6 +509,12 @@ export const updateUserScheduleEntry = async (params: {
         .single();
 
     if (error) throw error;
+    await tryAutoFavoriteScheduleCourse({
+        userId,
+        matchedCourseId: data.matched_course_id || null,
+        courseCode: data.course_code || updates.courseCode,
+        courseName: data.title || updates.title,
+    });
     return mapEntryRow(data);
 };
 
@@ -542,5 +574,11 @@ export const createManualScheduleEntry = async (params: {
         .single();
 
     if (error) throw error;
+    await tryAutoFavoriteScheduleCourse({
+        userId,
+        matchedCourseId: data.matched_course_id || null,
+        courseCode: data.course_code || entry.courseCode,
+        courseName: data.title || entry.title,
+    });
     return mapEntryRow(data);
 };

@@ -18,7 +18,7 @@ import { ProfileHeader } from '../../components/profile/ProfileHeader';
 import { ProfileMessages } from '../../components/profile/ProfileMessages';
 import { ProfilePostFeed } from '../../components/profile/ProfilePostFeed';
 import { ProfileTabs, ProfileTabType } from '../../components/profile/ProfileTabs';
-import { fetchLikedPosts, fetchPostsByAuthor, togglePostLike } from '../../services/campus';
+import { fetchAnonymousPostsByAuthor, fetchLikedPosts, fetchPostsByAuthor, togglePostLike } from '../../services/campus';
 import { Post, SOCIAL_TAGS, User as UserProfile } from '../../types';
 import { isAdmin, isHKBUEmail } from '../../utils/userUtils';
 const DEMO_MODE_KEY = 'hkcampus_demo_mode';
@@ -401,6 +401,7 @@ export default function ProfileScreen() {
 
     const [activeTab, setActiveTab] = useState<ProfileTabType>('posts');
     const [posts, setPosts] = useState<Post[]>([]);
+    const [privatePosts, setPrivatePosts] = useState<Post[]>([]);
     const [likedPosts, setLikedPosts] = useState<Post[]>([]);
 
     const loadUserPosts = async (uid: string) => {
@@ -421,11 +422,20 @@ export default function ProfileScreen() {
         }
     };
 
+    const loadPrivatePosts = async (uid: string) => {
+        try {
+            const data = await fetchAnonymousPostsByAuthor(uid, uid);
+            setPrivatePosts(data);
+        } catch (error) {
+            console.error('Error loading private posts:', error);
+        }
+    };
+
     const handleLikePost = async (postId: string) => {
         if (!userId) return;
         try {
             await togglePostLike(postId, userId);
-            await Promise.all([loadUserPosts(userId), loadLikedPosts(userId)]);
+            await Promise.all([loadUserPosts(userId), loadPrivatePosts(userId), loadLikedPosts(userId)]);
         } catch (error) {
             console.error('Error toggling like in profile:', error);
         }
@@ -433,9 +443,10 @@ export default function ProfileScreen() {
 
     useEffect(() => {
         if (userId) {
-            Promise.all([loadUserPosts(userId), loadLikedPosts(userId)]);
+            Promise.all([loadUserPosts(userId), loadPrivatePosts(userId), loadLikedPosts(userId)]);
         } else {
             setPosts([]);
+            setPrivatePosts([]);
             setLikedPosts([]);
         }
     }, [userId]);
@@ -692,6 +703,7 @@ export default function ProfileScreen() {
                     <ProfilePostFeed 
                         activeTab={activeTab}
                         posts={posts}
+                        privatePosts={privatePosts}
                         likedPosts={likedPosts}
                         onPostPress={(postId: string) => router.push(`/campus/${postId}` as any)}
                         onLikePost={handleLikePost}
