@@ -1,10 +1,8 @@
-import { X } from 'lucide-react-native';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Dimensions,
     FlatList,
-    Image,
     Modal,
     NativeScrollEvent,
     NativeSyntheticEvent,
@@ -30,6 +28,9 @@ interface ZoomableImageCarouselProps {
     height: number;
     contentFit?: 'cover' | 'contain';
     onZoomStateChange?: (zoomed: boolean) => void;
+    previewMode?: 'carousel' | 'none' | 'standalone';
+    externalViewerIndex?: number | null;
+    onViewerRequestClose?: () => void;
 }
 
 interface PreviewImageItemProps {
@@ -176,8 +177,10 @@ const FullscreenImageItem: React.FC<FullscreenImageItemProps> = ({
             savedTranslateX.value = translateX.value;
             savedTranslateY.value = translateY.value;
         })
-        // Allow FlatList to take over horizontal swipes
-        .activeOffsetX([-20, 20]);
+        // Prefer vertical pull-to-dismiss when not zoomed, but let the FlatList
+        // keep handling horizontal swipes between images.
+        .activeOffsetY([-10, 10])
+        .failOffsetX([-20, 20]);
 
     const doubleTap = Gesture.Tap()
         .numberOfTaps(2)
@@ -226,18 +229,30 @@ export const ZoomableImageCarousel: React.FC<ZoomableImageCarouselProps> = ({
     height,
     contentFit = 'cover',
     onZoomStateChange,
+    previewMode = 'carousel',
+    externalViewerIndex = null,
+    onViewerRequestClose,
 }) => {
     const imageList = useMemo(() => images.filter(Boolean), [images]);
+    const viewerListRef = useRef<FlatList<string>>(null);
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(0);
     const [isZoomed, setIsZoomed] = useState(false);
     const [inlineIndex, setInlineIndex] = useState(0);
 
     const backdropOpacity = useSharedValue(0);
+    const viewerScale = useSharedValue(0.96);
+    const isExternallyControlled = previewMode === 'none' || previewMode === 'standalone';
+    const renderStandaloneViewer = previewMode === 'standalone';
+    const modalVisible = renderStandaloneViewer
+        ? externalViewerIndex !== null && externalViewerIndex !== undefined && !!imageList[externalViewerIndex]
+        : viewerVisible;
 
     const openViewer = (index: number) => {
         setViewerIndex(index);
+        viewerScale.value = 0.96;
         backdropOpacity.value = withTiming(1, { duration: 150 });
+        viewerScale.value = withTiming(1, { duration: 180 });
         setViewerVisible(true);
         onZoomStateChange?.(true);
     };
@@ -245,10 +260,48 @@ export const ZoomableImageCarousel: React.FC<ZoomableImageCarouselProps> = ({
     const closeViewer = () => {
         setIsZoomed(false);
         onZoomStateChange?.(false);
+        onViewerRequestClose?.();
+        viewerScale.value = withTiming(0.96, { duration: 120 });
         backdropOpacity.value = withTiming(0, { duration: 150 }, () => {
             runOnJS(setViewerVisible)(false);
         });
     };
+
+    useEffect(() => {
+        if (!isExternallyControlled) {
+            return;
+        }
+
+        if (externalViewerIndex === null || externalViewerIndex === undefined) {
+            setIsZoomed(false);
+            backdropOpacity.value = 0;
+            viewerScale.value = 0.96;
+            if (!renderStandaloneViewer) {
+                setViewerVisible(false);
+            }
+            return;
+        }
+
+        if (!imageList[externalViewerIndex]) {
+            return;
+        }
+
+        setViewerIndex(externalViewerIndex);
+        if (!renderStandaloneViewer) {
+            setViewerVisible(true);
+        }
+        viewerScale.value = 0.96;
+        onZoomStateChange?.(true);
+        backdropOpacity.value = withTiming(1, { duration: 150 });
+        viewerScale.value = withTiming(1, { duration: 180 });
+
+        requestAnimationFrame(() => {
+            viewerListRef.current?.scrollToIndex({
+                index: externalViewerIndex,
+                animated: false,
+            });
+        });
+    }, [backdropOpacity, externalViewerIndex, imageList, isExternallyControlled, onZoomStateChange, renderStandaloneViewer, viewerScale]);
 
     const handleInlineScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
         const index = Math.round(event.nativeEvent.contentOffset.x / width);
@@ -260,68 +313,77 @@ export const ZoomableImageCarousel: React.FC<ZoomableImageCarouselProps> = ({
         backgroundColor: '#000',
     }));
 
-    return (
-        <View style={[styles.container, { width, height }]}>
-            <FlatList
-                data={imageList}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item, index) => `${item}-${index}`}
-                onMomentumScrollEnd={handleInlineScroll}
-                initialNumToRender={1}
-                maxToRenderPerBatch={2}
-                windowSize={3}
-                renderItem={({ item, index }) => (
-                    <PreviewImageItem
-                        uri={item}
-                        width={width}
-                        height={height}
-                        contentFit={contentFit}
-                        onPress={() => openViewer(index)}
-                    />
-                )}
-            />
-            {imageList.length > 1 && (
-                <View style={styles.dotRow}>
-                    {imageList.map((_, i) => (
-                        <View key={i} style={[styles.dot, i === inlineIndex && styles.dotActive]} />
-                    ))}
-                </View>
-            )}
+    const viewerContainerStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: viewerScale.value }],
+    }));
 
-            <Modal visible={viewerVisible} transparent animationType="none" onRequestClose={closeViewer}>
-                <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
-                    <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]} />
+    return (
+        <>
+            {previewMode === 'carousel' && (
+                <View style={[styles.container, { width, height }]}>
                     <FlatList
                         data={imageList}
                         horizontal
                         pagingEnabled
-                        scrollEnabled={!isZoomed}
-                        initialScrollIndex={viewerIndex}
-                        getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
-                        keyExtractor={(item, index) => `v-${item}-${index}`}
-                        removeClippedSubviews={true}
+                        showsHorizontalScrollIndicator={false}
+                        keyExtractor={(item, index) => `${item}-${index}`}
+                        onMomentumScrollEnd={handleInlineScroll}
                         initialNumToRender={1}
                         maxToRenderPerBatch={2}
                         windowSize={3}
                         renderItem={({ item, index }) => (
-                            <FullscreenImageItem
+                            <PreviewImageItem
                                 uri={item}
-                                width={SCREEN_WIDTH}
-                                height={SCREEN_HEIGHT}
-                                active={viewerVisible && viewerIndex === index}
-                                backdropOpacity={backdropOpacity}
-                                onZoomStateChange={setIsZoomed}
-                                onClose={closeViewer}
+                                width={width}
+                                height={height}
+                                contentFit={contentFit}
+                                onPress={() => openViewer(index)}
                             />
                         )}
-                        onMomentumScrollEnd={(e) => {
-                            const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-                            setViewerIndex(idx);
-                        }}
                     />
-                    
+                    {imageList.length > 1 && (
+                        <View style={styles.dotRow}>
+                            {imageList.map((_, i) => (
+                                <View key={i} style={[styles.dot, i === inlineIndex && styles.dotActive]} />
+                            ))}
+                        </View>
+                    )}
+                </View>
+            )}
+            {renderStandaloneViewer ? (
+                <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+                    <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]} />
+                    <Animated.View style={[styles.viewerLayer, viewerContainerStyle]}>
+                        <FlatList
+                            ref={viewerListRef}
+                            data={imageList}
+                            horizontal
+                            pagingEnabled
+                            scrollEnabled={!isZoomed}
+                            initialScrollIndex={viewerIndex}
+                            getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+                            keyExtractor={(item, index) => `v-${item}-${index}`}
+                            removeClippedSubviews={true}
+                            initialNumToRender={1}
+                            maxToRenderPerBatch={2}
+                            windowSize={3}
+                            renderItem={({ item, index }) => (
+                                <FullscreenImageItem
+                                    uri={item}
+                                    width={SCREEN_WIDTH}
+                                    height={SCREEN_HEIGHT}
+                                    active={modalVisible && viewerIndex === index}
+                                    backdropOpacity={backdropOpacity}
+                                    onZoomStateChange={setIsZoomed}
+                                    onClose={closeViewer}
+                                />
+                            )}
+                            onMomentumScrollEnd={(e) => {
+                                const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                                setViewerIndex(idx);
+                            }}
+                        />
+                    </Animated.View>
                     {!isZoomed && imageList.length > 1 && (
                         <View style={[styles.dotRow, { bottom: 40 }]}>
                             {imageList.map((_, i) => (
@@ -329,15 +391,53 @@ export const ZoomableImageCarousel: React.FC<ZoomableImageCarouselProps> = ({
                             ))}
                         </View>
                     )}
-
-                    {!isZoomed && (
-                        <TouchableOpacity style={styles.closeBtn} onPress={closeViewer}>
-                            <X size={24} color="#fff" />
-                        </TouchableOpacity>
-                    )}
                 </GestureHandlerRootView>
-            </Modal>
-        </View>
+            ) : (
+                <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeViewer}>
+                    <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+                        <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]} />
+                        <Animated.View style={[styles.viewerLayer, viewerContainerStyle]}>
+                            <FlatList
+                                ref={viewerListRef}
+                                data={imageList}
+                                horizontal
+                                pagingEnabled
+                                scrollEnabled={!isZoomed}
+                                initialScrollIndex={viewerIndex}
+                                getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+                                keyExtractor={(item, index) => `v-${item}-${index}`}
+                                removeClippedSubviews={true}
+                                initialNumToRender={1}
+                                maxToRenderPerBatch={2}
+                                windowSize={3}
+                                renderItem={({ item, index }) => (
+                                    <FullscreenImageItem
+                                        uri={item}
+                                        width={SCREEN_WIDTH}
+                                        height={SCREEN_HEIGHT}
+                                        active={modalVisible && viewerIndex === index}
+                                        backdropOpacity={backdropOpacity}
+                                        onZoomStateChange={setIsZoomed}
+                                        onClose={closeViewer}
+                                    />
+                                )}
+                                onMomentumScrollEnd={(e) => {
+                                    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                                    setViewerIndex(idx);
+                                }}
+                            />
+                        </Animated.View>
+                        {!isZoomed && imageList.length > 1 && (
+                            <View style={[styles.dotRow, { bottom: 40 }]}>
+                                {imageList.map((_, i) => (
+                                    <View key={i} style={[styles.dot, i === viewerIndex && styles.dotActive]} />
+                                ))}
+                            </View>
+                        )}
+                    </GestureHandlerRootView>
+                </Modal>
+            )}
+        </>
     );
 };
 
@@ -358,6 +458,9 @@ const styles = StyleSheet.create({
     blackBackdrop: {
         backgroundColor: '#000',
     },
+    viewerLayer: {
+        flex: 1,
+    },
     dotRow: {
         position: 'absolute',
         bottom: 12,
@@ -376,16 +479,5 @@ const styles = StyleSheet.create({
     },
     dotActive: {
         backgroundColor: '#fff',
-    },
-    closeBtn: {
-        position: 'absolute',
-        top: 50,
-        right: 20,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        justifyContent: 'center',
-        alignItems: 'center',
     },
 });
