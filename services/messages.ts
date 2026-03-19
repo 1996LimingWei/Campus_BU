@@ -5,6 +5,8 @@ const CONVERSATIONS_TABLE = 'direct_conversations';
 const MESSAGES_TABLE = 'direct_messages';
 const USERS_TABLE = 'users';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DIRECT_IMAGE_PREFIX = '[image]';
+const DIRECT_FILE_PREFIX = '[file]';
 
 type ConversationRow = {
     id: string;
@@ -43,6 +45,64 @@ const sortParticipantIds = (userA: string, userB: string): [string, string] =>
     userA < userB ? [userA, userB] : [userB, userA];
 
 const isUuid = (value?: string | null): value is string => !!value && UUID_PATTERN.test(value);
+
+export const isDirectImageContent = (content?: string | null): boolean =>
+    !!content && content.startsWith(DIRECT_IMAGE_PREFIX);
+
+export const getDirectMessageImageUrl = (content?: string | null): string =>
+    isDirectImageContent(content) ? content!.slice(DIRECT_IMAGE_PREFIX.length).trim() : '';
+
+type DirectFilePayload = {
+    name: string;
+    url: string;
+};
+
+const parseDirectFilePayload = (content?: string | null): DirectFilePayload | null => {
+    if (!content || !content.startsWith(DIRECT_FILE_PREFIX)) {
+        return null;
+    }
+
+    try {
+        const payload = JSON.parse(content.slice(DIRECT_FILE_PREFIX.length)) as DirectFilePayload;
+        if (!payload?.url) {
+            return null;
+        }
+        return {
+            name: payload.name || 'File',
+            url: payload.url,
+        };
+    } catch {
+        return null;
+    }
+};
+
+export const isDirectFileContent = (content?: string | null): boolean =>
+    !!parseDirectFilePayload(content);
+
+export const getDirectMessageFilePayload = (content?: string | null): DirectFilePayload | null =>
+    parseDirectFilePayload(content);
+
+export const getDirectMessagePreviewText = (content?: string | null): string => {
+    if (!content) {
+        return '';
+    }
+
+    if (isDirectImageContent(content)) {
+        return '[Image]';
+    }
+
+    if (isDirectFileContent(content)) {
+        return '[File]';
+    }
+
+    return content;
+};
+
+export const createDirectImageMessageContent = (imageUrl: string): string =>
+    `${DIRECT_IMAGE_PREFIX}${imageUrl}`;
+
+export const createDirectFileMessageContent = (payload: DirectFilePayload): string =>
+    `${DIRECT_FILE_PREFIX}${JSON.stringify(payload)}`;
 
 const buildPeerMap = (profiles: UserRow[] | null | undefined): Map<string, DirectMessagePeer> => {
     const map = new Map<string, DirectMessagePeer>();
@@ -164,7 +224,7 @@ export const fetchDirectConversations = async (
             return {
                 id: conversation.id,
                 user: peer,
-                lastMessage: conversation.last_message_preview || '',
+                lastMessage: getDirectMessagePreviewText(conversation.last_message_preview),
                 timestamp: new Date(conversation.last_message_at || conversation.created_at),
                 unreadCount: unreadCountMap.get(conversation.id) || 0,
             };
@@ -350,6 +410,68 @@ export const sendDirectMessage = async (
     return {
         conversationId,
         messageId: data.id,
+    };
+};
+
+export const uploadDirectMessageImage = async (uri: string): Promise<string> => {
+    const arrayBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => resolve(xhr.response);
+        xhr.onerror = () => reject(new TypeError('Network request failed'));
+        xhr.responseType = 'arraybuffer';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+    });
+
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+    const filePath = `direct-messages/${fileName}`;
+
+    const { error } = await supabase.storage
+        .from('campus')
+        .upload(filePath, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+
+    if (error) {
+        console.error('Error uploading direct message image:', error);
+        throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('campus').getPublicUrl(filePath);
+    return publicUrl;
+};
+
+export const uploadDirectMessageFile = async (
+    uri: string,
+    fileName?: string,
+    mimeType?: string,
+): Promise<DirectFilePayload> => {
+    const arrayBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => resolve(xhr.response);
+        xhr.onerror = () => reject(new TypeError('Network request failed'));
+        xhr.responseType = 'arraybuffer';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+    });
+
+    const safeName = (fileName || `file-${Date.now()}`).replace(/[^\w.\-]+/g, '-');
+    const filePath = `direct-files/${Date.now()}-${safeName}`;
+
+    const { error } = await supabase.storage
+        .from('campus')
+        .upload(filePath, arrayBuffer, {
+            contentType: mimeType || 'application/octet-stream',
+            upsert: true,
+        });
+
+    if (error) {
+        console.error('Error uploading direct message file:', error);
+        throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('campus').getPublicUrl(filePath);
+    return {
+        name: fileName || 'File',
+        url: publicUrl,
     };
 };
 
