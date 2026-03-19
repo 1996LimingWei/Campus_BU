@@ -1169,7 +1169,7 @@ const styles = StyleSheet.create({
     repliesList: {
         marginLeft: 44,
         marginTop: 12,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: '#fff',
         borderRadius: 8,
         padding: 8,
     },

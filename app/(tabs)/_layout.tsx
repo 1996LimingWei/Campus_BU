@@ -25,7 +25,7 @@ export default function TabLayout() {
 
   // Custom TabBar Component to handle the sliding indicator
   const CustomTabBar = ({ state, descriptors, navigation }: any) => {
-    const { unreadCount, hasUnread } = useNotifications();
+    const { hasAnyUnread, totalUnreadCount } = useNotifications();
     // Filter out tabs that should be hidden (href: null) OR don't have an icon
     const visibleRoutes = state.routes.filter((r: any) => {
       const { options } = descriptors[r.key];
@@ -104,7 +104,7 @@ export default function TabLayout() {
                   color: isFocused ? '#1E3A8A' : '#8E8E93',
                   focused: isFocused
                 })}
-                {route.name === 'profile' && (hasUnread || unreadCount > 0) && (
+                {route.name === 'profile' && (hasAnyUnread || totalUnreadCount > 0) && (
                   <View style={styles.unreadDot} />
                 )}
                 <Text style={[styles.tabLabel, { color: isFocused ? '#1E3A8A' : '#8E8E93' }]}>

@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react-native';
 import { DirectConversationSummary } from '../../types';
@@ -36,6 +36,31 @@ export const ProfileMessages: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [conversations, setConversations] = useState<DirectConversationSummary[]>([]);
+
+    const loadConversations = useCallback(async (silent = false) => {
+        try {
+            if (!silent) {
+                setLoading(true);
+            }
+
+            const user = await getCurrentUser();
+            setCurrentUserId(user?.uid || null);
+            if (!user?.uid) {
+                setConversations([]);
+                return;
+            }
+
+            const data = await fetchDirectConversations(user.uid);
+            setConversations(data);
+        } catch (error) {
+            console.error('Error loading conversations:', error);
+            setConversations([]);
+        } finally {
+            if (!silent) {
+                setLoading(false);
+            }
+        }
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -86,6 +111,12 @@ export const ProfileMessages: React.FC = () => {
         };
     }, []);
 
+    useFocusEffect(
+        useCallback(() => {
+            loadConversations(true);
+        }, [loadConversations])
+    );
+
     const filteredConversations = useMemo(() => {
         const keyword = search.trim().toLowerCase();
         if (!keyword) {
@@ -100,10 +131,19 @@ export const ProfileMessages: React.FC = () => {
         });
     }, [conversations, search]);
 
+    const handleOpenConversation = useCallback((item: DirectConversationSummary) => {
+        setConversations((previous) => previous.map((conversation) => (
+            conversation.id === item.id
+                ? { ...conversation, unreadCount: 0 }
+                : conversation
+        )));
+        router.push({ pathname: '/messages/[id]' as any, params: { id: item.user.id } });
+    }, [router]);
+
     const renderItem = ({ item }: { item: DirectConversationSummary }) => (
         <TouchableOpacity
             style={styles.conversationItem}
-            onPress={() => router.push({ pathname: '/messages/[id]' as any, params: { id: item.user.id } })}
+            onPress={() => handleOpenConversation(item)}
             activeOpacity={0.7}
         >
             <View style={styles.avatarContainer}>

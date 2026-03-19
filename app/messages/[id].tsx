@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DirectMessage, DirectMessagePeer } from '../../types';
 import { getCurrentUser } from '../../services/auth';
+import { useNotifications } from '../../context/NotificationContext';
 import {
     fetchDirectMessages,
     markConversationAsRead,
@@ -37,6 +38,7 @@ export default function ChatScreen() {
     const { t } = useTranslation();
     const router = useRouter();
     const flatListRef = useRef<FlatList>(null);
+    const { refreshCount } = useNotifications();
 
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
@@ -77,6 +79,11 @@ export default function ChatScreen() {
 
             if (thread.conversationId && hasUnreadIncoming) {
                 await markConversationAsRead(thread.conversationId, user.uid);
+                try {
+                    await refreshCount();
+                } catch (error) {
+                    console.error('Error refreshing unread counts after marking conversation read:', error);
+                }
                 const now = new Date();
                 setMessages(thread.messages.map((message) => (
                     message.receiverId === user.uid && !message.readAt

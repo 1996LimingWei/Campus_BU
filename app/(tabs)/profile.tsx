@@ -52,7 +52,7 @@ export default function ProfileScreen() {
     const [isAdminUser, setIsAdminUser] = useState(false);
     const { checkLogin } = useLoginPrompt();
 
-    const { unreadCount: globalUnreadCount, refreshCount: refreshGlobalCount } = useNotifications();
+    const { unreadCount: globalUnreadCount, messageUnreadCount, refreshCount: refreshGlobalCount } = useNotifications();
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     const loadData = async () => {
@@ -488,9 +488,18 @@ export default function ProfileScreen() {
                     style={styles.pageTab}
                     onPress={() => scrollToMode('messages')}
                 >
-                    <Text style={[styles.pageTabText, profileMode === 'messages' && styles.pageTabTextActive]}>
-                        {t('profile.tabs_messages')}
-                    </Text>
+                    <View style={styles.pageTabLabelRow}>
+                        <Text style={[styles.pageTabText, profileMode === 'messages' && styles.pageTabTextActive]}>
+                            {t('profile.tabs_messages')}
+                        </Text>
+                        {messageUnreadCount > 0 && (
+                            <View style={styles.pageTabBadge}>
+                                <Text style={styles.pageTabBadgeText}>
+                                    {messageUnreadCount > 99 ? '99+' : messageUnreadCount}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
                     {profileMode === 'messages' && <View style={styles.pageTabIndicator} />}
                 </TouchableOpacity>
                 <TouchableOpacity 
@@ -850,6 +859,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         position: 'relative',
     },
+    pageTabLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
     pageTabIndicator: {
         position: 'absolute',
         bottom: 8,
@@ -865,6 +879,20 @@ const styles = StyleSheet.create({
     },
     pageTabTextActive: {
         color: '#111827',
+        fontWeight: '700',
+    },
+    pageTabBadge: {
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: '#EF4444',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 5,
+    },
+    pageTabBadgeText: {
+        color: '#fff',
+        fontSize: 10,
         fontWeight: '700',
     },
     scrollContentPager: {
