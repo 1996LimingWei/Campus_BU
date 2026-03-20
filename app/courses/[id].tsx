@@ -557,6 +557,7 @@ export default function CourseDetailScreen() {
                     id: item.id,
                     targetId: item.id,
                     targetType: 'comment',
+                    content: item.content,
                     authorId: item.isAnonymous ? undefined : item.authorId,
                     authorName: item.authorName,
                     isAnonymous: item.isAnonymous,
@@ -657,6 +658,7 @@ export default function CourseDetailScreen() {
                     id: item.id,
                     targetId: item.id,
                     targetType: 'post',
+                    content: [item.selfIntro, item.targetTeammate].filter(Boolean).join('\n'),
                     authorId: item.userId,
                     authorName: item.userName,
                 })}
@@ -1337,6 +1339,7 @@ export default function CourseDetailScreen() {
                                                         id: item.id,
                                                         targetId: item.id,
                                                         targetType: 'comment',
+                                                        content: item.content,
                                                         authorId: item.authorId,
                                                         authorName: item.authorName,
                                                     })}
@@ -1380,6 +1383,7 @@ export default function CourseDetailScreen() {
                                                                     id: reply.id,
                                                                     targetId: reply.id,
                                                                     targetType: 'comment',
+                                                                    content: reply.content,
                                                                     authorId: reply.authorId,
                                                                     authorName: reply.authorName,
                                                                 })}

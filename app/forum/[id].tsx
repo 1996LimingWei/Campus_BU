@@ -360,6 +360,7 @@ export default function ForumPostDetailScreen() {
                                     id: c.id,
                                     targetId: c.id,
                                     targetType: 'comment',
+                                    content: c.content,
                                     authorId: c.authorId,
                                     authorName: c.authorName,
                                 })}
@@ -417,6 +418,7 @@ export default function ForumPostDetailScreen() {
                                                 id: reply.id,
                                                 targetId: reply.id,
                                                 targetType: 'comment',
+                                                content: reply.content,
                                                 authorId: reply.authorId,
                                                 authorName: reply.authorName,
                                             })}

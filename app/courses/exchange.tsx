@@ -374,6 +374,7 @@ export default function ExchangeScreen() {
                     id: item.id,
                     targetId: item.id,
                     targetType: 'post',
+                    content: [item.haveCourse, ...item.wantCourses.map((want) => want.code), item.reason || ''].filter(Boolean).join('\n'),
                     authorId: item.userId,
                     authorName: item.userName,
                 })}
@@ -468,6 +469,7 @@ export default function ExchangeScreen() {
                     id: item.id,
                     targetId: item.id,
                     targetType: 'post',
+                    content: [item.haveCourse, ...item.wantCourses.map((want) => want.code), item.reason || ''].filter(Boolean).join('\n'),
                     authorId: item.userId,
                     authorName: item.userName,
                 })}
@@ -845,6 +847,7 @@ export default function ExchangeScreen() {
                                                         id: item.id,
                                                         targetId: item.id,
                                                         targetType: 'comment',
+                                                        content: item.content,
                                                         authorId: item.authorId,
                                                         authorName: item.authorName,
                                                     })}
@@ -876,6 +879,7 @@ export default function ExchangeScreen() {
                                                                     id: reply.id,
                                                                     targetId: reply.id,
                                                                     targetType: 'comment',
+                                                                    content: reply.content,
                                                                     authorId: reply.authorId,
                                                                     authorName: reply.authorName,
                                                                 })}

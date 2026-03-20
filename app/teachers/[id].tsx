@@ -277,6 +277,7 @@ export default function TeacherDetailScreen() {
                                             id: review.id,
                                             targetId: review.id,
                                             targetType: 'comment',
+                                            content: review.content,
                                             authorId: review.authorName === '匿名的同学' ? undefined : review.authorId,
                                             authorName: review.authorName,
                                             isAnonymous: review.authorName === '匿名的同学',

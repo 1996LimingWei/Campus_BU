@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
     Alert,
@@ -10,13 +11,14 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { MessageCircleWarning, Send, ShieldAlert } from 'lucide-react-native';
+import { Copy, MessageCircleWarning, Send, ShieldAlert } from 'lucide-react-native';
 import { reportContent, ReportReason } from '../services/moderation';
 
 export type UgcActionTarget = {
     id: string;
     targetId: string;
     targetType: 'post' | 'comment';
+    content?: string;
     authorId?: string;
     authorName?: string;
     isAnonymous?: boolean;
@@ -142,6 +144,23 @@ export function useUgcEntryActions(options: UseUgcEntryActionsOptions) {
         });
     }, [canMessage, closeActions, router, target?.authorId]);
 
+    const handleCopy = useCallback(async () => {
+        const content = target?.content?.trim();
+        if (!content) {
+            Alert.alert('无法复制', '这条内容暂无可复制文本。');
+            return;
+        }
+
+        try {
+            await Clipboard.setStringAsync(content);
+            closeActions();
+            Alert.alert('已复制', '内容已复制到剪贴板。');
+        } catch (error) {
+            console.error('Error copying UGC content:', error);
+            Alert.alert('复制失败', '请稍后再试。');
+        }
+    }, [closeActions, target?.content]);
+
     const getHighlightStyle = useCallback((id: string) => {
         if (highlightedId !== id || onFlash) {
             return null;
@@ -173,13 +192,19 @@ export function useUgcEntryActions(options: UseUgcEntryActionsOptions) {
                             <Text style={styles.actionText}>私信</Text>
                         </TouchableOpacity>
                     )}
+                    <TouchableOpacity style={styles.actionButton} activeOpacity={0.85} onPress={handleCopy}>
+                        <View style={[styles.iconWrap, styles.copyIconWrap]}>
+                            <Copy size={18} color="#0F766E" />
+                        </View>
+                        <Text style={styles.actionText}>复制</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.actionButton} activeOpacity={0.85} onPress={handleReport}>
                         <View style={[styles.iconWrap, styles.reportIconWrap]}>
                             <ShieldAlert size={18} color="#DC2626" />
                         </View>
                         <Text style={styles.actionText}>举报</Text>
                     </TouchableOpacity>
-                    {!canMessage && (
+                    {target?.isAnonymous && (
                         <View style={styles.hintRow}>
                             <MessageCircleWarning size={14} color="#94A3B8" />
                             <Text style={styles.hintText}>匿名内容仅支持举报</Text>
@@ -235,6 +260,9 @@ const styles = StyleSheet.create({
     },
     messageIconWrap: {
         backgroundColor: '#DBEAFE',
+    },
+    copyIconWrap: {
+        backgroundColor: '#DCFCE7',
     },
     reportIconWrap: {
         backgroundColor: '#FEE2E2',

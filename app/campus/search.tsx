@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     FlatList,
+    Image,
     Keyboard,
     ScrollView,
     StyleSheet,
@@ -17,12 +18,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MasonryGrid from '../../components/campus/MasonryGrid';
 import { MasonryPostCard } from '../../components/campus/MasonryPostCard';
 import { ForumPostRow } from '../../components/forum/ForumPostRow';
-import { getCurrentUser } from '../../services/auth';
+import { getCurrentUser, searchUserProfiles, UserSearchResult } from '../../services/auth';
 import { searchPosts, togglePostLike } from '../../services/campus';
 import { searchForumPosts } from '../../services/forum';
 import { ForumPost, Post } from '../../types';
 
-type SearchTab = 'discover' | 'forum';
+type SearchTab = 'discover' | 'forum' | 'users';
 
 export default function CampusSearchScreen() {
     const { t } = useTranslation();
@@ -35,6 +36,7 @@ export default function CampusSearchScreen() {
 
     const [campusPosts, setCampusPosts] = useState<Post[]>([]);
     const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
+    const [users, setUsers] = useState<UserSearchResult[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -53,9 +55,12 @@ export default function CampusSearchScreen() {
             if (activeTab === 'discover') {
                 const results = await searchPosts(query, currentUser?.uid);
                 setCampusPosts(results);
-            } else {
+            } else if (activeTab === 'forum') {
                 const results = await searchForumPosts(query, currentUser?.uid);
                 setForumPosts(results);
+            } else {
+                const results = await searchUserProfiles(query);
+                setUsers(results.filter((user) => user.uid !== currentUser?.uid));
             }
         } catch (error) {
             console.error('Search error:', error);
@@ -75,6 +80,7 @@ export default function CampusSearchScreen() {
         setQuery('');
         setCampusPosts([]);
         setForumPosts([]);
+        setUsers([]);
         setHasSearched(false);
     };
 
@@ -184,6 +190,15 @@ export default function CampusSearchScreen() {
                     </Text>
                     {activeTab === 'forum' && <View style={styles.tabIndicator} />}
                 </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tabButton, activeTab === 'users' && styles.tabButtonActive]}
+                    onPress={() => setActiveTab('users')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'users' && styles.tabTextActive]}>
+                        {t('campus.search.tabs.users', '用户')}
+                    </Text>
+                    {activeTab === 'users' && <View style={styles.tabIndicator} />}
+                </TouchableOpacity>
             </View>
 
             {/* Content */}
@@ -222,7 +237,7 @@ export default function CampusSearchScreen() {
                             />
                         )}
                     </ScrollView>
-                ) : (
+                ) : activeTab === 'forum' ? (
                     <FlatList
                         data={forumPosts}
                         keyExtractor={item => item.id}
@@ -238,6 +253,42 @@ export default function CampusSearchScreen() {
                         )}
                         ListEmptyComponent={renderEmptyState()}
                         contentContainerStyle={{ paddingBottom: 120 }}
+                    />
+                ) : (
+                    <FlatList
+                        data={users}
+                        keyExtractor={(item) => item.uid}
+                        renderItem={({ item }) => {
+                            const initial = item.displayName?.charAt(0)?.toUpperCase() || '?';
+                            const isAvatarUrl = item.avatarUrl?.startsWith('http://') || item.avatarUrl?.startsWith('https://');
+
+                            return (
+                                <TouchableOpacity
+                                    style={styles.userRow}
+                                    activeOpacity={0.85}
+                                    onPress={() => router.push(`/profile/${item.uid}` as any)}
+                                >
+                                    {isAvatarUrl ? (
+                                        <Image source={{ uri: item.avatarUrl }} style={styles.userAvatar} />
+                                    ) : (
+                                        <View style={styles.userAvatarFallback}>
+                                            <Text style={styles.userAvatarFallbackText}>{initial}</Text>
+                                        </View>
+                                    )}
+                                    <View style={styles.userMeta}>
+                                        <Text style={styles.userName} numberOfLines={1}>{item.displayName}</Text>
+                                        <Text style={styles.userMajor} numberOfLines={1}>
+                                            {item.major || item.email || t('common.anonymous', '匿名')}
+                                        </Text>
+                                        {!!item.email && (
+                                            <Text style={styles.userEmail} numberOfLines={1}>{item.email}</Text>
+                                        )}
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        }}
+                        ListEmptyComponent={renderEmptyState()}
+                        contentContainerStyle={styles.userListContent}
                     />
                 )}
             </View>
@@ -331,5 +382,61 @@ const styles = StyleSheet.create({
     emptyStateText: {
         fontSize: 15,
         color: '#6B7280',
+    },
+    userListContent: {
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 120,
+    },
+    userRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 18,
+        padding: 14,
+        marginBottom: 12,
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    userAvatar: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: '#E5E7EB',
+    },
+    userAvatarFallback: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: '#DBEAFE',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    userAvatarFallbackText: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#1E3A8A',
+    },
+    userMeta: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    userName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111827',
+    },
+    userMajor: {
+        fontSize: 13,
+        color: '#475569',
+        marginTop: 3,
+    },
+    userEmail: {
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 3,
     },
 });
