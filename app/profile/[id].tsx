@@ -203,6 +203,7 @@ export default function UserProfileScreen() {
                 <ProfilePostFeed 
                     activeTab="posts"
                     posts={posts}
+                    privatePosts={[]}
                     likedPosts={[]} // Placeholder
                     onPostPress={(postId) => router.push({ pathname: '/campus/[id]', params: { id: postId } })}
                     onLikePost={handleLikePost}

@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
+    Animated,
     DeviceEventEmitter,
     Dimensions,
     Image,
@@ -25,6 +26,7 @@ import { EduBadge } from '../../components/common/EduBadge';
 import { TranslatableText } from '../../components/common/TranslatableText';
 import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
+import { useUgcEntryActions } from '../../hooks/useUgcEntryActions';
 import { getCurrentUser } from '../../services/auth';
 import {
     addForumComment,
@@ -69,6 +71,10 @@ export default function ForumPostDetailScreen() {
         visible: false, message: '', type: 'success',
     });
     const [replyTarget, setReplyTarget] = useState<ForumComment | null>(null);
+    const ugcActions = useUgcEntryActions({
+        currentUserId: user?.uid,
+        ensureLoggedIn: () => !!checkLogin(user),
+    });
 
     const openPublicProfile = (authorId?: string) => {
         if (!authorId) return;
@@ -335,7 +341,7 @@ export default function ForumPostDetailScreen() {
 
                 {organizedComments.map(c => (
                     <View key={c.id} style={styles.commentContainer}>
-                        <View style={styles.commentItem}>
+                        <Animated.View style={[styles.commentItem, ugcActions.getHighlightStyle(c.id)]}>
                             <TouchableOpacity
                                 style={styles.commentAvatar}
                                 onPress={() => openPublicProfile(c.authorId)}
@@ -347,7 +353,18 @@ export default function ForumPostDetailScreen() {
                                     <Text style={styles.avatarLetter}>{c.authorName.charAt(0).toUpperCase()}</Text>
                                 )}
                             </TouchableOpacity>
-                            <View style={styles.commentBody}>
+                            <TouchableOpacity
+                                style={styles.commentBody}
+                                activeOpacity={0.95}
+                                onLongPress={() => ugcActions.openActions({
+                                    id: c.id,
+                                    targetId: c.id,
+                                    targetType: 'comment',
+                                    content: c.content,
+                                    authorId: c.authorId,
+                                    authorName: c.authorName,
+                                })}
+                            >
                                 <View style={styles.commentHeader}>
                                     <Text style={styles.commentAuthor}>{c.authorName}</Text>
                                     <EduBadge shouldShow={isHKBUEmail(c.authorEmail)} size="small" />
@@ -375,14 +392,14 @@ export default function ForumPostDetailScreen() {
                                         <Text style={styles.replyBtnText}>{t('forum.row.replies')}</Text>
                                     </TouchableOpacity>
                                 </View>
-                            </View>
-                        </View>
+                            </TouchableOpacity>
+                        </Animated.View>
 
                         {/* Nested Replies */}
                         {c.replies && c.replies.length > 0 && (
                             <View style={styles.repliesList}>
                                 {c.replies.map((reply: ForumComment) => (
-                                    <View key={reply.id} style={styles.replyItem}>
+                                    <Animated.View key={reply.id} style={[styles.replyItem, ugcActions.getHighlightStyle(reply.id)]}>
                                         <TouchableOpacity
                                             style={styles.commentAvatarSmall}
                                             onPress={() => openPublicProfile(reply.authorId)}
@@ -394,7 +411,18 @@ export default function ForumPostDetailScreen() {
                                                 <Text style={styles.avatarLetterSmall}>{reply.authorName.charAt(0).toUpperCase()}</Text>
                                             )}
                                         </TouchableOpacity>
-                                        <View style={styles.commentBody}>
+                                        <TouchableOpacity
+                                            style={styles.commentBody}
+                                            activeOpacity={0.95}
+                                            onLongPress={() => ugcActions.openActions({
+                                                id: reply.id,
+                                                targetId: reply.id,
+                                                targetType: 'comment',
+                                                content: reply.content,
+                                                authorId: reply.authorId,
+                                                authorName: reply.authorName,
+                                            })}
+                                        >
                                             <View style={styles.commentHeader}>
                                                 <Text style={styles.commentAuthorSmall}>{reply.authorName}</Text>
                                                 {reply.replyToName && (
@@ -425,8 +453,8 @@ export default function ForumPostDetailScreen() {
                                                     <Text style={styles.replyBtnTextSmall}>{t('forum.row.replies')}</Text>
                                                 </TouchableOpacity>
                                             </View>
-                                        </View>
-                                    </View>
+                                        </TouchableOpacity>
+                                    </Animated.View>
                                 ))}
                             </View>
                         )}
@@ -499,6 +527,7 @@ export default function ForumPostDetailScreen() {
                 type={toast.type}
                 onHide={() => setToast(p => ({ ...p, visible: false }))}
             />
+            {ugcActions.ActionSheet}
 
         </KeyboardAvoidingView>
     );

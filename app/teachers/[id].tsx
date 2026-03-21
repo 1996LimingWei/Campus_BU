@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     Image,
     Modal,
     Platform,
@@ -35,6 +36,7 @@ import { Teacher, TeacherReview } from '../../types';
 import { isHKBUEmail } from '../../utils/userUtils';
 import { EduBadge } from '../../components/common/EduBadge';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
+import { useUgcEntryActions } from '../../hooks/useUgcEntryActions';
 
 // 根据姓名生成首字母
 const getInitials = (name: string): string => {
@@ -75,6 +77,10 @@ export default function TeacherDetailScreen() {
     const [submitting, setSubmitting] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const { checkLogin } = useLoginPrompt();
+    const ugcActions = useUgcEntryActions({
+        currentUserId,
+        ensureLoggedIn: () => !!checkLogin(currentUserId),
+    });
 
     useEffect(() => {
         loadData();
@@ -261,7 +267,22 @@ export default function TeacherDetailScreen() {
                             <Text style={styles.emptyText}>{t('teachers.no_reviews')}</Text>
                         ) : (
                             reviews.map(review => (
-                                <View key={review.id} style={styles.reviewCard}>
+                                <Animated.View
+                                    key={review.id}
+                                    style={[styles.reviewCard, ugcActions.getHighlightStyle(review.id)]}
+                                >
+                                    <TouchableOpacity
+                                        activeOpacity={0.96}
+                                        onLongPress={() => ugcActions.openActions({
+                                            id: review.id,
+                                            targetId: review.id,
+                                            targetType: 'comment',
+                                            content: review.content,
+                                            authorId: review.authorName === '匿名的同学' ? undefined : review.authorId,
+                                            authorName: review.authorName,
+                                            isAnonymous: review.authorName === '匿名的同学',
+                                        })}
+                                    >
                                     <View style={styles.reviewHeader}>
                                         <View style={styles.reviewerInfo}>
                                             <View style={styles.reviewerAvatar}>
@@ -320,12 +341,14 @@ export default function TeacherDetailScreen() {
                                             <Text style={{ fontSize: 12, color: '#EF4444' }}>删除评价</Text>
                                         </TouchableOpacity>
                                     )}
-                                </View>
+                                    </TouchableOpacity>
+                                </Animated.View>
                             ))
                         )}
                     </View>
                 </ScrollView>
             )}
+            {ugcActions.ActionSheet}
 
             {/* Rating Modal */}
             <Modal

@@ -8,6 +8,7 @@ import { ProfileTabType } from './ProfileTabs';
 interface ProfilePostFeedProps {
     activeTab: ProfileTabType;
     posts: Post[];
+    privatePosts: Post[];
     likedPosts: Post[];
     onPostPress: (postId: string) => void;
     onLikePost: (postId: string) => void;
@@ -18,6 +19,7 @@ interface ProfilePostFeedProps {
 export const ProfilePostFeed: React.FC<ProfilePostFeedProps> = ({
     activeTab,
     posts,
+    privatePosts,
     likedPosts,
     onPostPress,
     onLikePost,
@@ -28,6 +30,8 @@ export const ProfilePostFeed: React.FC<ProfilePostFeedProps> = ({
         switch (activeTab) {
             case 'posts':
                 return posts;
+            case 'private':
+                return privatePosts;
             case 'likes':
                 return likedPosts;
             default:
@@ -41,7 +45,11 @@ export const ProfilePostFeed: React.FC<ProfilePostFeedProps> = ({
         return (
             <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>
-                    {activeTab === 'posts' ? '还没有发布过笔记哦' : '还没有点赞过笔记哦'}
+                    {activeTab === 'posts'
+                        ? '还没有发布过笔记哦'
+                        : activeTab === 'private'
+                            ? '还没有匿名发布过笔记哦'
+                            : '还没有点赞过笔记哦'}
                 </Text>
             </View>
         );

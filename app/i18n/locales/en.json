@@ -296,7 +296,8 @@
             "no_results": "No results found",
             "tabs": {
                 "discover": "Discover",
-                "forum": "Forum"
+                "forum": "Forum",
+                "users": "Users"
             }
         },
         "categories": {

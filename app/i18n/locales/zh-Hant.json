@@ -3,7 +3,7 @@
         "home": "首頁",
         "map": "附近",
         "course": "點評",
-        "agent": "Agent",
+        "agent": "助手",
         "classroom": "教室",
         "me": "我的"
     },
@@ -331,7 +331,8 @@
             "no_results": "未找到相關結果",
             "tabs": {
                 "discover": "發現",
-                "forum": "論壇"
+                "forum": "論壇",
+                "users": "用戶"
             }
         },
         "categories": {

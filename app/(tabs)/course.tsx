@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Skeleton } from '../../components/common/Skeleton';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
+import { useCourseActivity } from '../../context/CourseActivityContext';
 import { getCurrentUser } from '../../services/auth';
 import { enrichCoursesWithReviewStats, getLocalCourses } from '../../services/courses';
 import {
@@ -49,6 +50,7 @@ export default function CoursesScreen() {
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [allowRemoteFavorites, setAllowRemoteFavorites] = useState(false);
     const { checkLogin } = useLoginPrompt();
+    const { unreadByCourse, refresh: refreshCourseActivity } = useCourseActivity();
 
     const CourseSkeleton = () => (
         <View style={styles.skeletonCard}>
@@ -163,9 +165,10 @@ export default function CoursesScreen() {
             const task = InteractionManager.runAfterInteractions(() => {
                 fetchCourses(true); // Silent update on focus
                 loadFavorites();
+                void refreshCourseActivity();
             });
             return () => task.cancel();
-        }, [])
+        }, [refreshCourseActivity])
     );
 
     const loadFavorites = async () => {
@@ -195,6 +198,7 @@ export default function CoursesScreen() {
             if (allowRemoteFavorites && currentUserId) {
                 await setCourseFavoriteRemote(currentUserId, courseId, !isFavorite);
             }
+            await refreshCourseActivity();
         } catch (e) {
             console.error('Error saving favorite courses:', e);
         }
@@ -221,11 +225,15 @@ export default function CoursesScreen() {
         }
     };
 
-    const renderCourseItem = ({ item }: { item: Course }) => (
+    const renderCourseItem = ({ item }: { item: Course }) => {
+        const hasUnread = !!unreadByCourse[item.id]?.hasAnyUnread;
+
+        return (
         <TouchableOpacity
             style={styles.courseCard}
             onPress={() => handleCoursePress(item.id)}
         >
+            {hasUnread && <View style={styles.courseUnreadDot} />}
             <View style={styles.courseRow}>
                 <View style={styles.courseMain}>
                     <View style={styles.courseHeader}>
@@ -259,7 +267,8 @@ export default function CoursesScreen() {
                 </View>
             </View>
         </TouchableOpacity>
-    );
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -303,6 +312,7 @@ export default function CoursesScreen() {
                                 style={styles.favoriteCard}
                                 onPress={() => handleCoursePress(item.id)}
                             >
+                                {!!unreadByCourse[item.id]?.hasAnyUnread && <View style={styles.favoriteUnreadDot} />}
                                 <Text style={styles.favoriteCode}>{(item.code || '').toUpperCase()}</Text>
                             </TouchableOpacity>
                         )}
@@ -463,11 +473,21 @@ const styles = StyleSheet.create({
         maxWidth: 180,
         borderWidth: 1,
         borderColor: '#FDE68A',
+        position: 'relative',
     },
     favoriteCode: {
         fontSize: 13,
         fontWeight: '700',
         color: '#92400E',
+    },
+    favoriteUnreadDot: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 8,
+        height: 8,
+        borderRadius: 999,
+        backgroundColor: '#EF4444',
     },
     allCoursesTitle: {
         fontSize: 14,
@@ -487,6 +507,17 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 4,
         elevation: 2,
+        position: 'relative',
+    },
+    courseUnreadDot: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        width: 10,
+        height: 10,
+        borderRadius: 999,
+        backgroundColor: '#EF4444',
+        zIndex: 2,
     },
     courseRow: {
         flexDirection: 'row',

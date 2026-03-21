@@ -1,10 +1,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { getCurrentUser } from '../services/auth';
+import { fetchDirectConversations, subscribeToDirectConversationList } from '../services/messages';
 import { fetchUnreadNotificationSummary, subscribeToNotifications } from '../services/notifications';
 
 interface NotificationContextType {
     unreadCount: number;
     hasUnread: boolean;
+    messageUnreadCount: number;
+    totalUnreadCount: number;
+    hasAnyUnread: boolean;
     refreshCount: () => Promise<void>;
     clearCount: () => void;
 }
@@ -14,17 +18,24 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [hasUnread, setHasUnread] = useState(false);
+    const [messageUnreadCount, setMessageUnreadCount] = useState(0);
 
     const refreshCount = useCallback(async () => {
         try {
             const user = await getCurrentUser();
             if (user) {
-                const summary = await fetchUnreadNotificationSummary(user.uid);
+                const [summary, conversations] = await Promise.all([
+                    fetchUnreadNotificationSummary(user.uid),
+                    fetchDirectConversations(user.uid),
+                ]);
+                const unreadMessages = conversations.reduce((sum, conversation) => sum + (conversation.unreadCount || 0), 0);
                 setUnreadCount(summary.unreadCount);
                 setHasUnread(summary.hasUnread);
+                setMessageUnreadCount(unreadMessages);
             } else {
                 setUnreadCount(0);
                 setHasUnread(false);
+                setMessageUnreadCount(0);
             }
         } catch (error) {
             console.error('Error refreshing notification count:', error);
@@ -34,10 +45,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const clearCount = useCallback(() => {
         setUnreadCount(0);
         setHasUnread(false);
+        setMessageUnreadCount(0);
     }, []);
 
     useEffect(() => {
-        let subscription: any;
+        let notificationSubscription: any;
+        let messageUnsubscribe: (() => void) | undefined;
 
         const init = async () => {
             const user = await getCurrentUser();
@@ -46,7 +59,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 await refreshCount();
 
                 // Subscribe to real-time updates
-                subscription = subscribeToNotifications(user.uid, (payload) => {
+                notificationSubscription = subscribeToNotifications(user.uid, (payload) => {
                     if (payload.eventType === 'INSERT' && payload.new && !payload.new.is_read) {
                         setHasUnread(true);
                         setUnreadCount(prev => prev + 1);
@@ -75,18 +88,38 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                         setUnreadCount(prev => prev + 1);
                     }
                 });
+
+                messageUnsubscribe = subscribeToDirectConversationList(user.uid, () => {
+                    refreshCount().catch((error) => {
+                        console.error('Error refreshing counts after direct message update:', error);
+                    });
+                });
             }
         };
 
         init();
 
         return () => {
-            if (subscription) subscription.unsubscribe();
+            if (notificationSubscription) notificationSubscription.unsubscribe();
+            messageUnsubscribe?.();
         };
     }, [refreshCount]);
 
+    const totalUnreadCount = unreadCount + messageUnreadCount;
+    const hasAnyUnread = hasUnread || messageUnreadCount > 0;
+
     return (
-        <NotificationContext.Provider value={{ unreadCount, hasUnread, refreshCount, clearCount }}>
+        <NotificationContext.Provider
+            value={{
+                unreadCount,
+                hasUnread,
+                messageUnreadCount,
+                totalUnreadCount,
+                hasAnyUnread,
+                refreshCount,
+                clearCount,
+            }}
+        >
             {children}
         </NotificationContext.Provider>
     );

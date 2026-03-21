@@ -2,7 +2,7 @@
   "expo": {
     "name": "HKCampus",
     "slug": "HKCampus",
-    "version": "1.1.0",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/images/HKCampusicon.png",
     "scheme": "hkcampus",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.budev.HKCampus",
-      "buildNumber": "1",
+      "buildNumber": "4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -29,7 +29,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.budev.hkcampus"
+      "package": "com.budev.hkcampus",
+      "versionCode": 3
     },
     "web": {
       "bundler": "metro",

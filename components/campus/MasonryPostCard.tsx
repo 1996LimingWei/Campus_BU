@@ -166,7 +166,6 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                                     </View>
                                 )}
 
-                                {/* Following badge on cover - keep it as is for text cards as it's safe there */}
                                 {post.isFollowingAuthor && (
                                     <View style={styles.followingBadgeTextCover}>
                                         <View style={styles.followingBadgeContent}>
@@ -176,13 +175,14 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                                     </View>
                                 )}
 
-                                {/* Main text */}
-                                <Text
-                                    style={[styles.textCoverContent, { color: palette!.text }]}
-                                    numberOfLines={7}
-                                >
-                                    {post.content}
-                                </Text>
+                                <View style={styles.textCoverContentWrap}>
+                                    <Text
+                                        style={[styles.textCoverContent, { color: palette!.text }]}
+                                        numberOfLines={8}
+                                    >
+                                        {post.content}
+                                    </Text>
+                                </View>
 
                                 {/* Fade-out hint at bottom */}
                                 <View style={styles.textCoverFade} />
@@ -190,13 +190,6 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                         )}
 
                         <View style={styles.bodyPrimary}>
-                            {/* Text-card: single-line title from content */}
-                            {isTextOnly && (
-                                <Text style={styles.textTitle} numberOfLines={1}>
-                                    {post.content}
-                                </Text>
-                            )}
-
                             {/* Image card: one-line content preview above author */}
                             {!isTextOnly && !!post.content && (
                                 <Text style={styles.contentPreview} numberOfLines={1}>
@@ -293,14 +286,16 @@ const styles = StyleSheet.create({
     },
     categoryBadge: {
         position: 'absolute',
-        top: 8,
-        right: 8,
+        top: 10,
+        right: 10,
+        minHeight: 22,
         paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 8,
+        borderRadius: 999,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     categoryBadgeText: {
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: '700',
         color: '#fff',
     },
@@ -309,8 +304,11 @@ const styles = StyleSheet.create({
     textCover: {
         width: '100%',
         aspectRatio: 3 / 4,
-        padding: 14,
-        justifyContent: 'flex-end',
+        paddingHorizontal: 16,
+        paddingTop: 18,
+        paddingBottom: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
         overflow: 'hidden',
         position: 'relative',
     },
@@ -331,23 +329,36 @@ const styles = StyleSheet.create({
         left: -10,
     },
     textCoverCategory: {
-        alignSelf: 'flex-start',
+        position: 'absolute',
+        top: 10,
+        right: 10,
         backgroundColor: 'rgba(255,255,255,0.22)',
-        borderRadius: 8,
+        borderRadius: 999,
+        minHeight: 22,
         paddingHorizontal: 8,
-        paddingVertical: 3,
-        marginBottom: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2,
     },
     textCoverCategoryText: {
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: '700',
         color: '#fff',
     },
+    textCoverContentWrap: {
+        flex: 1,
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 6,
+    },
     textCoverContent: {
-        fontSize: 14,
-        fontWeight: '600',
-        lineHeight: 20,
-        letterSpacing: 0.1,
+        fontSize: 22,
+        fontWeight: '700',
+        lineHeight: 31,
+        letterSpacing: 0.2,
+        textAlign: 'center',
+        width: '100%',
     },
     textCoverFade: {
         position: 'absolute',
@@ -362,18 +373,12 @@ const styles = StyleSheet.create({
     // ── Card body ─────────────────────────────────────────────────────────────
     bodyPrimary: {
         paddingHorizontal: 10,
-        paddingTop: 10,
-        paddingBottom: 4,
+        paddingTop: 8,
+        paddingBottom: 2,
     },
     bodyFooter: {
         paddingHorizontal: 10,
         paddingBottom: 10,
-    },
-    textTitle: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#1F2937',
-        marginBottom: 6,
     },
     contentPreview: {
         fontSize: 12,
@@ -439,12 +444,12 @@ const styles = StyleSheet.create({
     followingBadgeContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        gap: 3,
     },
     followingBadgeDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
         backgroundColor: '#1E3A8A',
     },
     followingBadgeText: {
@@ -454,26 +459,29 @@ const styles = StyleSheet.create({
         letterSpacing: 0.1,
     },
     followingBadgeTextOnCover: {
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: '700',
         color: '#1E3A8A',
         letterSpacing: 0.1,
     },
     followingBadgeTextCover: {
         position: 'absolute',
-        bottom: 10,
+        top: 10,
         left: 10,
         backgroundColor: '#FFFFFF',
-        paddingHorizontal: 9,
-        paddingVertical: 5,
+        minHeight: 22,
+        paddingHorizontal: 7,
         borderRadius: 999,
         borderWidth: 1,
         borderColor: '#E5E7EB',
+        alignItems: 'center',
+        justifyContent: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 3,
+        zIndex: 3,
     },
     followingBadgeDotOnCover: {
         backgroundColor: '#1E3A8A',

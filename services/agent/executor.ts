@@ -1,10 +1,9 @@
 import { FAQService } from '../faq';
-import { getCourseByCode, getReviews, searchCourses } from '../courses';
+import { getCourseByCode, getReviews, searchCourses, addReview } from '../courses';
 import { supabase } from '../supabase';
-import { fetchTeamingRequests } from '../teaming';
+import { fetchTeamingRequests, postTeamingRequest } from '../teaming';
 import { getUserScheduleEntries, UserScheduleEntry } from '../schedule';
-import { LIBRARY_SCRIPTS } from './automation/library';
-import { agentBridge } from './bridge';
+import { getCurrentUser } from '../auth';
 import {
     formatBuildingInfo,
     formatNearbyPlaceInfo,
@@ -16,7 +15,7 @@ import { callDeepSeekStream } from './llm';
 import { getAllUserFacts, saveMemoryFact } from './memory';
 import { TOOLS } from './tools';
 import { AgentContext, AgentGeoPoint, AgentResponse, AgentStep } from './types';
-import { Course, CourseTeaming, Review } from '../../types';
+import { ContactMethod, Course, CourseTeaming, Review } from '../../types';
 
 type ScheduleQueryIntent = 'today' | 'tomorrow' | 'next' | 'weekday' | 'all';
 
@@ -147,6 +146,29 @@ const formatScheduleSummary = (entries: UserScheduleEntry[], label: string): str
 };
 
 type CourseCommunityScope = 'reviews' | 'chat' | 'teaming' | 'all';
+type CoursePublishIntent = 'review' | 'chat' | 'teaming';
+
+type PendingCourseAction = {
+    intent: CoursePublishIntent;
+    course: Course | null;
+    courseQuery?: string;
+    content?: string;
+    rating?: number;
+    section?: string;
+    targetTeammate?: string;
+    contacts?: ContactMethod[];
+};
+
+type PendingWriteAction =
+    | {
+        type: 'course';
+        action: PendingCourseAction;
+    }
+    | {
+        type: 'memory';
+        key: string;
+        value: any;
+    };
 
 const extractCourseCode = (query: string): string | null => {
     const match = query.toUpperCase().match(/\b([A-Z]{2,6}\s?\d{4}[A-Z]?)\b/);
@@ -178,6 +200,146 @@ const isCourseCommunityQuery = (query: string): boolean => {
     const hasCourseIdentity = Boolean(extractCourseCode(query)) || /这门课|這門課|这堂课|這堂課|课程|課程/.test(query);
     const hasCommunityIntent = /评价|評價|点评|點評|review|reviews|聊天室|群聊|chatroom|chat|message|teaming|组队|組隊|队友|隊友|口碑|怎么样|怎麼樣|如何|值得上吗|值得上嗎|好不好|活跃吗|活躍嗎/.test(query);
     return hasCommunityIntent && hasCourseIdentity;
+};
+
+const detectCoursePublishIntent = (query: string): CoursePublishIntent | null => {
+    if (/我(?:想|希望|要)(?:要)?组队|我(?:想|希望|要)(?:要)?組隊|帮我组队|幫我組隊|发布组队|發布組隊|发组队|發組隊|找队友|找隊友|想找队友|想找隊友|想找组员|想找組員|组队帖|組隊帖|teaming post|team up|用户想组队|用戶想組隊/i.test(query)) {
+        return 'teaming';
+    }
+
+    if (/(发|發|写|寫|发布|發布|提交|帮我发|幫我發|帮我写|幫我寫).*(评价|評價|点评|點評|review)|评价.*(发|發|写|寫|发布|發布|提交)|点评.*(发|發|写|寫|发布|發布|提交)/i.test(query)) {
+        return 'review';
+    }
+
+    if (/(发|發|发送|傳送|帮我发|幫我發|帮我说|幫我說|替我发|替我發).*(聊天室|群聊|chatroom|chat)|在.*(聊天室|群聊|chatroom|chat).*(发|發|说|說|留言|message)|聊天室.*(发|發|说|說|留言)|群聊.*(发|發|说|說|留言)/i.test(query)) {
+        return 'chat';
+    }
+
+    return null;
+};
+
+const isCancelActionQuery = (query: string): boolean =>
+    /取消|算了|不用了|先不用|停止|cancel|never mind/i.test(query.trim());
+
+const isConfirmActionQuery = (query: string): boolean =>
+    /^(是|好的|好|确认|確認|可以|就这样|就這樣|没问题|沒問題|yes|ok|okay|confirm|send|发送|發送)$/i.test(query.trim());
+
+const extractDelimitedContent = (query: string): string | undefined => {
+    const match = query.match(/[：:]\s*(.+)$/);
+    const value = match?.[1]?.trim();
+    return value || undefined;
+};
+
+const stripCourseActionPhrases = (query: string): string => query
+    .replace(/\b[A-Za-z]{2,6}\s?\d{4}[A-Za-z]?\b/g, ' ')
+    .replace(/^(请|請)?\s*(帮我发|幫我發|帮我写|幫我寫|帮我说|幫我說|替我发|替我發|发布|發布|提交|发送|傳送)\s*/i, '')
+    .replace(/^(我(?:想|希望|要)(?:要)?组队|我(?:想|希望|要)(?:要)?組隊|帮我组队|幫我組隊|发布组队|發布組隊|发组队|發組隊)\s*/i, '')
+    .replace(/^(评价|評價|点评|點評|review|聊天室|群聊|chatroom|chat|message|消息)\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const extractRating = (query: string): number | undefined => {
+    const patterns = [
+        /([1-5](?:\.\d)?)\s*(星|stars?)/i,
+        /评分[是為为]?\s*([1-5](?:\.\d)?)/i,
+        /打\s*([1-5](?:\.\d)?)\s*星/i,
+        /([1-5](?:\.\d)?)\s*分/i,
+    ];
+
+    for (const pattern of patterns) {
+        const match = query.match(pattern);
+        if (match) {
+            const rating = Number(match[1]);
+            if (rating >= 1 && rating <= 5) {
+                return rating;
+            }
+        }
+    }
+
+    return undefined;
+};
+
+const extractSection = (query: string): string | undefined => {
+    const patterns = [
+        /\bsec(?:tion)?\s*[:：]?\s*([A-Za-z0-9_-]+)/i,
+        /\bsection\s*[:：]?\s*([A-Za-z0-9_-]+)/i,
+        /(?:第?\s*|)([A-Za-z]?\d{1,2})\s*(?:班|组|組)\b/i,
+    ];
+
+    for (const pattern of patterns) {
+        const match = query.match(pattern);
+        const value = match?.[1]?.trim();
+        if (value) return value.toUpperCase();
+    }
+
+    return undefined;
+};
+
+const extractTargetTeammate = (query: string): string | undefined => {
+    const match = query.match(/(?:想找|想搵|希望找|目标队友|目標隊友|prefer|looking for)\s*[:：]?\s*([^，。,\n]+)/i);
+    return match?.[1]?.trim() || undefined;
+};
+
+const extractEmailAddress = (query: string): string | undefined => {
+    const match = query.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+    return match?.[0];
+};
+
+const extractContacts = (query: string, fallbackEmail?: string): ContactMethod[] => {
+    const contacts: ContactMethod[] = [];
+    const add = (platform: ContactMethod['platform'], value?: string, otherPlatformName?: string) => {
+        const trimmed = value?.trim();
+        if (!trimmed) return;
+        if (contacts.some(item => item.platform === platform && item.value === trimmed)) return;
+        contacts.push({ platform, value: trimmed, otherPlatformName });
+    };
+
+    const wechat = query.match(/(?:微信|wechat|wx)\s*[:：]?\s*([A-Za-z0-9._-]+)/i);
+    add('WeChat', wechat?.[1]);
+
+    const whatsapp = query.match(/(?:whatsapp|wa)\s*[:：]?\s*([+\d][\d\s-]{5,})/i);
+    add('WhatsApp', whatsapp?.[1]?.replace(/\s+/g, ''));
+
+    const telegram = query.match(/(?:telegram|tg)\s*[:：]?\s*@?([A-Za-z0-9_]{3,})/i);
+    add('Telegram', telegram?.[1] ? `@${telegram[1].replace(/^@/, '')}` : undefined);
+
+    const instagram = query.match(/(?:instagram|ig)\s*[:：]?\s*@?([A-Za-z0-9._]{3,})/i);
+    add('Instagram', instagram?.[1] ? `@${instagram[1].replace(/^@/, '')}` : undefined);
+
+    const email = extractEmailAddress(query) || fallbackEmail;
+    add('Email', email);
+
+    return contacts;
+};
+
+const looksLikeStandaloneCourseReply = (query: string): boolean => {
+    const normalized = query.trim();
+    return Boolean(extractCourseCode(normalized)) && stripCourseActionPhrases(normalized) === '';
+};
+
+const extractFreeformContent = (query: string): string | undefined => {
+    const delimited = extractDelimitedContent(query);
+    if (delimited) return delimited;
+
+    const stripped = stripCourseActionPhrases(query);
+    return stripped.length >= 4 ? stripped : undefined;
+};
+
+const isAgentMetaQuery = (query: string): boolean =>
+    /^(用户|用戶|user)\s*(想|要|正在|需要)|先了解|先确认|先確認|具体课程|具體課程|需要先/.test(query.trim());
+
+const normalizeAssistantReply = (reply?: string): string | undefined => {
+    if (!reply) return reply;
+
+    if (/用户想组队|用戶想組隊/.test(reply) && /课程|課程/.test(reply)) {
+        return '我先接着帮你看组队这件事。前面的聊天里还没有明确课程，你把课程代码发我一下，我继续帮你往下处理。';
+    }
+
+    if (/需要现在的课程信息|需要.*课程信息|需要.*課程信息/.test(reply)) {
+        return '我先接着往下帮你处理，不过前面的聊天里还没有明确课程。你把课程代码发我一下，我继续。';
+    }
+
+    return reply;
 };
 
 const formatReviewSummary = (reviews: Review[], course: Course): string => {
@@ -274,6 +436,8 @@ const buildCourseCommunityIdCandidates = async (course: Course, query: string): 
 export class AgentExecutor {
     private context: AgentContext;
     private static readonly MAX_HISTORY_ITEMS = 16;
+    private pendingCourseAction: PendingCourseAction | null = null;
+    private pendingWriteAction: PendingWriteAction | null = null;
 
     constructor(userId: string) {
         this.context = {
@@ -312,10 +476,38 @@ export class AgentExecutor {
     async process(prompt: string, onUpdate?: (text: string) => void): Promise<AgentResponse> {
         this.pushHistory('user', prompt);
 
+        const pendingWriteResponse = await this.continuePendingWriteAction(prompt);
+        if (pendingWriteResponse) {
+            if (pendingWriteResponse.finalAnswer) {
+                const normalizedAnswer = normalizeAssistantReply(pendingWriteResponse.finalAnswer);
+                if (normalizedAnswer) {
+                    pendingWriteResponse.finalAnswer = normalizedAnswer;
+                    this.pushHistory('assistant', normalizedAnswer);
+                }
+            }
+            return pendingWriteResponse;
+        }
+
+        const pendingResponse = await this.continuePendingCourseAction(prompt);
+        if (pendingResponse) {
+            if (pendingResponse.finalAnswer) {
+                const normalizedAnswer = normalizeAssistantReply(pendingResponse.finalAnswer);
+                if (normalizedAnswer) {
+                    pendingResponse.finalAnswer = normalizedAnswer;
+                    this.pushHistory('assistant', normalizedAnswer);
+                }
+            }
+            return pendingResponse;
+        }
+
         const routed = await this.tryLocalRoute(prompt);
         if (routed) {
             if (routed.finalAnswer) {
-                this.pushHistory('assistant', routed.finalAnswer);
+                const normalizedAnswer = normalizeAssistantReply(routed.finalAnswer);
+                if (normalizedAnswer) {
+                    routed.finalAnswer = normalizedAnswer;
+                    this.pushHistory('assistant', normalizedAnswer);
+                }
             }
             return routed;
         }
@@ -342,7 +534,7 @@ export class AgentExecutor {
             currentStep++;
         }
 
-        const finalAnswer = steps[steps.length - 1].reply || steps[steps.length - 1].thought;
+        const finalAnswer = normalizeAssistantReply(steps[steps.length - 1].reply || steps[steps.length - 1].thought);
         if (finalAnswer) {
             this.pushHistory('assistant', finalAnswer);
         }
@@ -354,6 +546,18 @@ export class AgentExecutor {
     }
 
     private async tryLocalRoute(prompt: string): Promise<AgentResponse | null> {
+        const publishIntent = detectCoursePublishIntent(prompt);
+        if (publishIntent) {
+            const response = await this.startCourseAction(prompt, publishIntent);
+            return {
+                steps: [{
+                    thought: '本地命中课程社区发布请求',
+                    reply: response
+                }],
+                finalAnswer: response
+            };
+        }
+
         if (isDateQuery(prompt)) {
             const observation = this.readCurrentDateInfo(prompt);
             return {
@@ -432,8 +636,92 @@ export class AgentExecutor {
         return null;
     }
 
+    private async continuePendingWriteAction(prompt: string): Promise<AgentResponse | null> {
+        if (!this.pendingWriteAction) return null;
+
+        if (isCancelActionQuery(prompt)) {
+            this.pendingWriteAction = null;
+            this.pendingCourseAction = null;
+            const reply = '已取消这次写入操作。你如果想改内容，直接重新告诉我，我会先给你确认稿。';
+            return {
+                steps: [{
+                    thought: '用户取消待确认写入',
+                    reply,
+                }],
+                finalAnswer: reply,
+            };
+        }
+
+        if (isConfirmActionQuery(prompt)) {
+            const reply = await this.executePendingWriteAction();
+            return {
+                steps: [{
+                    thought: '用户确认执行写入',
+                    reply,
+                }],
+                finalAnswer: reply,
+            };
+        }
+
+        if (this.pendingWriteAction.type === 'course') {
+            const response = await this.startCourseAction(
+                prompt,
+                this.pendingWriteAction.action.intent,
+                this.pendingWriteAction.action,
+            );
+            return {
+                steps: [{
+                    thought: '用户修改待确认内容',
+                    reply: response,
+                }],
+                finalAnswer: response,
+            };
+        }
+
+        this.pendingWriteAction = null;
+        const reply = '这次偏好写入我先取消了。你直接告诉我想让我记住什么，我会先发确认内容给你。';
+        return {
+            steps: [{
+                thought: '待确认记忆写入被改写',
+                reply,
+            }],
+            finalAnswer: reply,
+        };
+    }
+
+    private async continuePendingCourseAction(prompt: string): Promise<AgentResponse | null> {
+        if (!this.pendingCourseAction) return null;
+
+        if (isCancelActionQuery(prompt)) {
+            this.pendingCourseAction = null;
+            return {
+                steps: [{
+                    thought: '用户取消了待发布操作',
+                    reply: '已取消这次发布操作。你之后随时告诉我课程和内容，我再帮你发。'
+                }],
+                finalAnswer: '已取消这次发布操作。你之后随时告诉我课程和内容，我再帮你发。'
+            };
+        }
+
+        const response = await this.startCourseAction(prompt, this.pendingCourseAction.intent, this.pendingCourseAction);
+        return {
+            steps: [{
+                thought: '继续补全课程社区发布信息',
+                reply: response
+            }],
+            finalAnswer: response
+        };
+    }
+
     private async executeTool(toolName: string, input: any): Promise<string> {
         console.log(`[Agent] Executing tool: ${toolName}`, input);
+
+        if (toolName === 'read_course_community') {
+            const routedPublishIntent = detectCoursePublishIntent(input?.query || '');
+            if (routedPublishIntent) {
+                return this.startCourseAction(input?.query || '', routedPublishIntent, this.pendingCourseAction);
+            }
+        }
 
         // Real and Mock tool implementations
         switch (toolName) {
@@ -445,6 +733,21 @@ export class AgentExecutor {
                 return this.findNearbyPlace(input?.query || '');
             case 'read_course_community':
                 return this.readCourseCommunity(input?.query || '');
+            case 'post_course_review':
+                return this.startCourseAction(
+                    `${input?.courseCode || input?.courseId || ''} ${input?.rating || ''}星 ${input?.content || ''}`.trim(),
+                    'review'
+                );
+            case 'post_course_teaming':
+                return this.startCourseAction(
+                    `${input?.courseCode || input?.courseId || ''} section ${input?.section || ''} ${input?.content || ''}`.trim(),
+                    'teaming'
+                );
+            case 'send_course_chat_message':
+                return this.startCourseAction(
+                    `${input?.courseCode || input?.courseId || ''} ${input?.content || ''}`.trim(),
+                    'chat'
+                );
             case 'get_user_profile':
                 const facts = await getAllUserFacts(this.context.userId);
                 if (Object.keys(facts).length === 0) {
@@ -452,72 +755,12 @@ export class AgentExecutor {
                 }
                 return JSON.stringify(facts);
             case 'save_user_preference':
-                await saveMemoryFact(this.context.userId, input.key, input.value);
-                return `Successfully remembered that your ${input.key} is ${input.value}.`;
+                return this.prepareMemoryWrite(input?.key, input?.value);
             case 'search_canteen_menu':
                 return "Nearby Harmony Cafeteria has 'Spicy Chicken' on special today. It's only 5 mins from Hall 1.";
             case 'check_library_availability':
-                try {
-                    const result = await agentBridge.injectAndObserve(LIBRARY_SCRIPTS.SCAN_SLOTS, 'LIBRARY_SCAN_RESULT');
-                    const availCount = (result.slots as any[]).filter(s => s.status === 'available').length;
-                    return `I scanned the library page and found ${availCount} available slots.`;
-                } catch (e) {
-                    console.warn('[Agent] Real-time scan failed, using mock data.', e);
-                    return "Floor 3 has 15 individual carrels available at the moment.";
-                }
             case 'book_library_seat':
-                // Plan B Logic: Coze Brain + Local Hands
-                try {
-                    // 1. Check Auth in WebView
-                    const { isLoggedIn } = await agentBridge.injectAndObserve(LIBRARY_SCRIPTS.CHECK_AUTH, 'AUTH_STATUS');
-                    if (!isLoggedIn) {
-                        return "It looks like you aren't logged in to the library portal yet. Please log in on the library page first so I can complete the booking for you.";
-                    }
-
-                    // 2. Scan for current availability (Eyes)
-                    const { slots } = await agentBridge.injectAndObserve(LIBRARY_SCRIPTS.SCAN_SLOTS, 'LIBRARY_SCAN_RESULT');
-
-                    if (!slots || slots.length === 0) {
-                        return "I can't see any available slots on the current page. Please make sure you are on the correct library booking page.";
-                    }
-
-                    /*
-                    // 3. Call Coze (Brain) for intelligent selection
-                    console.log('[Agent] Consulting Coze brain for:', input.time);
-                    const cozeResult = await CozeService.runWorkflow({
-                        query: `User wants to book at: ${input.time}`,
-                        slots_data: JSON.stringify(slots)
-                    });
-
-                    const targetSlotId = cozeResult?.slotId || cozeResult?.selected_slot_id;
-                    const targetSlot = slots.find((s: any) => s.id === targetSlotId);
-
-                    if (!targetSlot) {
-                    */
-                        // Fallback to simple selection if Coze fails or doesn't find a match
-                        const fallbackSlot = slots.find((s: any) =>
-                            s.status === 'available' &&
-                            (s.title.includes(input.time || '') || s.time.includes(input.time || ''))
-                        );
-
-                        if (!fallbackSlot) {
-                            return `I couldn't find an available slot for ${input.time || 'your requested time'}. Would you like to check another time?`;
-                        }
-
-                        agentBridge.execute(LIBRARY_SCRIPTS.BOOK_SLOT(fallbackSlot.id));
-                        return `Successfully initiated booking for ${fallbackSlot.title}. Please confirm on the screen!`;
-                    /*
-                    }
-
-                    // 4. Execute the click (Hands)
-                    agentBridge.execute(LIBRARY_SCRIPTS.BOOK_SLOT(targetSlot.id));
-
-                    return `Successfully initiated booking for ${targetSlot.title} via Coze. Please check the library page to confirm the final submission!`;
-                    */
-                } catch (e: any) {
-                    console.error('[Agent] Booking failed:', e);
-                    return `Sorry, I encountered an error: ${e.message}. Please try manual booking on the library screen.`;
-                }
+                return '图书馆自动化预约功能已下线，当前助手仅提供问答服务。';
             case 'search_campus_faq':
                 // 1. Search local legacy FAQs
                 const localResults = FAQService.searchFAQs(input.query);
@@ -546,6 +789,349 @@ export class AgentExecutor {
             default:
                 return `Error: Tool ${toolName} not found.`;
         }
+    }
+
+    private prepareMemoryWrite(key?: string, value?: any): string {
+        const normalizedKey = typeof key === 'string' ? key.trim() : '';
+        const normalizedValue = typeof value === 'string' ? value.trim() : value;
+
+        if (!normalizedKey || normalizedValue === undefined || normalizedValue === null || normalizedValue === '') {
+            return '我还不能写入这条记忆，因为键或内容不完整。你可以直接告诉我你想让我记住什么。';
+        }
+
+        this.pendingCourseAction = null;
+        this.pendingWriteAction = {
+            type: 'memory',
+            key: normalizedKey,
+            value: normalizedValue,
+        };
+
+        return `我准备记住这条信息：${normalizedKey} = ${String(normalizedValue)}。\n如果就是这样写，回复“确认”或“是”；如果要改，直接把新内容发我。`;
+    }
+
+    private async startCourseAction(
+        prompt: string,
+        intent: CoursePublishIntent,
+        seed?: PendingCourseAction | null
+    ): Promise<string> {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.uid) {
+            this.pendingCourseAction = null;
+            return '要帮你发内容的话需要先登录。你登录后再告诉我一次，我可以继续帮你处理。';
+        }
+
+        const merged = await this.mergeCourseActionDraft(prompt, intent, seed || undefined);
+        return this.handleCourseActionDraft(merged, currentUser);
+    }
+
+    private async mergeCourseActionDraft(
+        prompt: string,
+        intent: CoursePublishIntent,
+        seed?: PendingCourseAction
+    ): Promise<PendingCourseAction> {
+        const draft: PendingCourseAction = {
+            intent,
+            course: seed?.course || null,
+            courseQuery: seed?.courseQuery,
+            content: seed?.content,
+            rating: seed?.rating,
+            section: seed?.section,
+            targetTeammate: seed?.targetTeammate,
+            contacts: seed?.contacts ? [...seed.contacts] : [],
+        };
+
+        const safePrompt = isAgentMetaQuery(prompt) ? '' : prompt;
+
+        const directCourse = await this.resolveCourseForAction(safePrompt);
+        if (directCourse) {
+            draft.course = directCourse;
+            draft.courseQuery = directCourse.code;
+        } else if (!draft.course) {
+            const historyCourse = await this.resolveCourseFromRecentContext();
+            if (historyCourse) {
+                draft.course = historyCourse;
+                draft.courseQuery = historyCourse.code;
+            }
+        }
+
+        const rating = extractRating(safePrompt);
+        if (typeof rating === 'number') {
+            draft.rating = rating;
+        }
+
+        const section = extractSection(safePrompt);
+        if (section) {
+            draft.section = section;
+        }
+
+        const targetTeammate = extractTargetTeammate(safePrompt);
+        if (targetTeammate) {
+            draft.targetTeammate = targetTeammate;
+        }
+
+        const mergedContacts = extractContacts(safePrompt, undefined);
+        if (mergedContacts.length > 0) {
+            const contactMap = new Map<string, ContactMethod>();
+            [...(draft.contacts || []), ...mergedContacts].forEach(contact => {
+                contactMap.set(`${contact.platform}:${contact.value}`, contact);
+            });
+            draft.contacts = Array.from(contactMap.values());
+        }
+
+        const content = extractFreeformContent(safePrompt);
+        if (content && !looksLikeStandaloneCourseReply(safePrompt)) {
+            draft.content = section
+                ? content.replace(/^section\s*[A-Za-z0-9_-]+[\s，,:：-]*/i, '').trim()
+                : content;
+        }
+
+        return draft;
+    }
+
+    private async resolveCourseForAction(query: string): Promise<Course | null> {
+        const explicitCode = extractCourseCode(query);
+        if (explicitCode) {
+            return this.resolveCourseFromQuery(explicitCode);
+        }
+
+        if (/这门课|這門課|这堂课|這堂課/.test(query)) {
+            return this.resolveCourseFromRecentContext();
+        }
+
+        return null;
+    }
+
+    private async resolveCourseFromRecentContext(): Promise<Course | null> {
+        const recent = [...this.context.history]
+            .slice(-10)
+            .reverse()
+            .filter(item => item.role === 'user')
+            .map(item => item.content);
+
+        for (const content of recent) {
+            const code = extractCourseCode(content);
+            if (!code) continue;
+            const course = await this.resolveCourseFromQuery(code);
+            if (course) return course;
+        }
+
+        return null;
+    }
+
+    private rememberPendingCourseAction(action: PendingCourseAction) {
+        this.pendingCourseAction = action;
+        this.pendingWriteAction = null;
+    }
+
+    private clearPendingCourseAction() {
+        this.pendingCourseAction = null;
+    }
+
+    private formatCourseActionConfirmation(action: PendingCourseAction): string {
+        const courseLabel = action.course?.code || action.courseQuery || '这门课';
+
+        if (action.intent === 'chat') {
+            return `我准备发到 ${courseLabel} 聊天室的内容是：\n${action.content?.trim() || ''}\n\n如果就是这样发，回复“确认”或“是”；如果要改，直接把新内容发我。`;
+        }
+
+        if (action.intent === 'review') {
+            return `我准备发布到 ${courseLabel} 的评价是：\n评分：${action.rating} 星\n内容：${action.content?.trim() || ''}\n\n如果就是这样写，回复“确认”或“是”；如果要改，直接把新内容发我。`;
+        }
+
+        const contactText = (action.contacts || [])
+            .map((contact) => `${contact.platform}: ${contact.value}`)
+            .join('；');
+
+        return `我准备发布 ${courseLabel} 组队帖：\nsection：${action.section}\n内容：${action.content?.trim() || ''}${action.targetTeammate ? `\n目标队友：${action.targetTeammate}` : ''}${contactText ? `\n联系方式：${contactText}` : ''}\n\n如果就是这样发，回复“确认”或“是”；如果要改，直接把新内容发我。`;
+    }
+
+    private async executePendingWriteAction(): Promise<string> {
+        const pending = this.pendingWriteAction;
+        this.pendingWriteAction = null;
+
+        if (!pending) {
+            return '当前没有待确认的写入操作。';
+        }
+
+        if (pending.type === 'memory') {
+            await saveMemoryFact(this.context.userId, pending.key, pending.value);
+            return `已经记住：${pending.key} = ${String(pending.value)}。`;
+        }
+
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.uid) {
+            return '要执行这次写入需要先登录。';
+        }
+
+        this.clearPendingCourseAction();
+        return this.executeCourseAction(pending.action, currentUser);
+    }
+
+    private async executeCourseAction(action: PendingCourseAction, currentUser: any): Promise<string> {
+        if (action.intent === 'chat' && action.course && action.content) {
+            return this.sendCourseChatMessage(action.course, currentUser, action.content);
+        }
+
+        if (action.intent === 'review' && action.course && typeof action.rating === 'number' && action.content) {
+            return this.publishCourseReview(action.course, currentUser, action.rating, action.content);
+        }
+
+        if (action.intent === 'teaming' && action.course && action.section && action.content && action.contacts?.length) {
+            return this.publishTeamingPost(action.course, currentUser, {
+                section: action.section,
+                content: action.content,
+                targetTeammate: action.targetTeammate,
+                contacts: action.contacts,
+            });
+        }
+
+        return '这次写入信息还不完整，我先没有提交。你把缺的内容继续发我，我会重新生成确认稿。';
+    }
+
+    private async handleCourseActionDraft(action: PendingCourseAction, currentUser: any): Promise<string> {
+        const courseLabel = action.course?.code || action.courseQuery || '这门课';
+
+        if (!action.course) {
+            this.rememberPendingCourseAction(action);
+            if (action.intent === 'teaming') {
+                return '我先帮你接着看组队这件事。前面的上下文里我还没定位到具体课程，你把课程代码发我一下，比如 COMP3015，我再继续帮你往下发。';
+            }
+
+            if (action.intent === 'review') {
+                return '我可以直接帮你发评价，不过我先得知道是哪个课程。把课程代码发我一下，比如 COMP2016。';
+            }
+
+            return '我可以帮你把话发到课程聊天室，不过前面的上下文里还没有明确课程。你把课程代码发我一下，比如 COMP3015。';
+        }
+
+        if (action.intent === 'chat') {
+            if (!action.content) {
+                this.rememberPendingCourseAction(action);
+                return `收到，是 ${courseLabel}。你想发到聊天室的内容直接发我一句完整的话，我帮你接着发出去。`;
+            }
+
+            this.clearPendingCourseAction();
+            this.pendingWriteAction = { type: 'course', action };
+            return this.formatCourseActionConfirmation(action);
+        }
+
+        if (action.intent === 'review') {
+            if (typeof action.rating !== 'number' || !action.content) {
+                this.rememberPendingCourseAction(action);
+                if (typeof action.rating !== 'number' && !action.content) {
+                    return `收到，是 ${courseLabel}。你把评分和想写的评价一起发我就行，比如“4星，作业不少，但老师讲得很清楚”。`;
+                }
+
+                if (typeof action.rating !== 'number') {
+                    return `收到，是 ${courseLabel}，评价内容我先记下了。再给我一个 1 到 5 星的评分，我就帮你发出去。`;
+                }
+
+                return `收到，是 ${courseLabel}，${action.rating} 星我也记下了。再把你想发的评价正文给我，我就继续。`;
+            }
+
+            this.clearPendingCourseAction();
+            this.pendingWriteAction = { type: 'course', action };
+            return this.formatCourseActionConfirmation(action);
+        }
+
+        const fallbackEmail = currentUser.email || undefined;
+        const contacts = (action.contacts && action.contacts.length > 0)
+            ? action.contacts
+            : extractContacts('', fallbackEmail);
+
+        if (!action.section || !action.content) {
+            this.rememberPendingCourseAction({ ...action, contacts });
+            if (!action.section && !action.content) {
+                return `收到，是 ${courseLabel}。下一步把你的 section 和想发的组队内容告诉我就行，比如“section A1，我会前端，想找认真做 project 的队友”。`;
+            }
+            if (!action.section) {
+                return `收到，${courseLabel} 的组队内容我先记下了。再给我你的 section，比如 A1 或 B2，我就继续帮你发。`;
+            }
+            return `收到，你是 ${courseLabel} 的 ${action.section}。再把你想发的组队内容直接发我，我就继续。`;
+        }
+
+        if (!contacts.length) {
+            this.rememberPendingCourseAction(action);
+            return `内容和课程我都记下了。最后还差一个联系方式，比如“微信 tim123”或“email me@hkbu.edu.hk”，我拿到后就帮你发。`;
+        }
+
+        this.clearPendingCourseAction();
+        this.pendingWriteAction = {
+            type: 'course',
+            action: {
+                ...action,
+                contacts,
+            },
+        };
+        return this.formatCourseActionConfirmation({
+            ...action,
+            contacts,
+        });
+    }
+
+    private async sendCourseChatMessage(course: Course, currentUser: any, content: string): Promise<string> {
+        const courseIds = await buildCourseCommunityIdCandidates(course, course.code);
+        const targetCourseId = courseIds[0] || course.id;
+
+        const { error } = await supabase
+            .from('messages')
+            .insert({
+                course_id: targetCourseId,
+                sender_id: currentUser.uid,
+                content: content.trim(),
+            });
+
+        if (error) {
+            console.error('[Agent] Failed to send course chat message:', error);
+            return `我没能把消息发到 ${course.code} 聊天室，数据库返回的是：${error.message}。`;
+        }
+
+        return `已经帮你发到 ${course.code} 聊天室：${content.trim()}`;
+    }
+
+    private async publishCourseReview(course: Course, currentUser: any, rating: number, content: string): Promise<string> {
+        const { error } = await addReview({
+            courseId: course.id,
+            authorId: currentUser.uid,
+            authorName: currentUser.displayName || 'Anonymous',
+            authorAvatar: currentUser.avatarUrl || currentUser.photoURL || '👤',
+            rating,
+            difficulty: 3,
+            content: content.trim(),
+            semester: 'Current',
+            isAnonymous: false,
+        });
+
+        if (error) {
+            console.error('[Agent] Failed to post course review:', error);
+            return `我没能把评价发到 ${course.code}，数据库返回的是：${error.message || '未知错误'}。`;
+        }
+
+        return `已经帮你把这条 ${rating} 星评价发到 ${course.code}：${content.trim()}`;
+    }
+
+    private async publishTeamingPost(
+        course: Course,
+        currentUser: any,
+        input: { section: string; content: string; targetTeammate?: string; contacts: ContactMethod[] }
+    ): Promise<string> {
+        const result = await postTeamingRequest({
+            courseId: course.id,
+            userId: currentUser.uid,
+            userName: currentUser.displayName || 'Anonymous',
+            userAvatar: currentUser.avatarUrl || currentUser.photoURL || '👤',
+            userMajor: currentUser.major || 'Student',
+            section: input.section,
+            selfIntro: input.content.trim(),
+            targetTeammate: input.targetTeammate,
+            contacts: input.contacts,
+        });
+
+        if (!result.success) {
+            return `我没能帮你发 ${course.code} 的组队帖，数据库返回的是：${result.error || '未知错误'}。`;
+        }
+
+        return `已经帮你发出 ${course.code} 的组队帖，section ${input.section}。如果你还想补充目标队友要求或改内容，直接继续跟我说。`;
     }
 
     private async readUserSchedule(query: string): Promise<string> {
@@ -748,6 +1334,7 @@ export class AgentExecutor {
 3. HONESTY: Do not hallucinate facts. If you do not know the answer, use a tool to find it.
 4. PERSONAL SCHEDULE: If the user asks about their own classes, timetable, next class, or classes on a certain day, you MUST use the "read_user_schedule" tool.
 5. COURSE COMMUNITY: If the user asks about a course's reviews, chatroom, teaming posts, or overall community status, you MUST use the "read_course_community" tool.
+6. COURSE COMMUNITY POSTING: If the user wants to publish a course review, a teaming post, or a course chatroom message, first infer the course from recent conversation if possible. If still missing, ask for the course code. Once enough information is available, you MUST use the relevant posting tool instead of only giving instructions.
 6. BUILDINGS: If the user asks where a building is, what a building code means, or asks about a campus building, you MUST use the "read_campus_building" tool.
 7. NEARBY PLACES: If the user asks what is near them, where they are now, or which building/restaurant is closest, you MUST use the "find_nearby_place" tool.
 

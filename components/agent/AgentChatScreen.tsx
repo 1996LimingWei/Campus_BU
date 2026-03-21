@@ -4,7 +4,7 @@ import { ArrowLeft, Bot, Send, Sparkles, User } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    ActivityIndicator,
+    Animated,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
@@ -16,11 +16,7 @@ import {
     View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
-import { APP_CONFIG } from '../../constants/Config';
-import { agentBridge } from '../../services/agent/bridge';
 import { AgentExecutor } from '../../services/agent/executor';
-import { getCookieInjectionScript } from '../../services/agent/session';
 import { AgentStep } from '../../services/agent/types';
 import { getCurrentUser } from '../../services/auth';
 import { GuestLoginModal } from '../common/GuestLoginModal';
@@ -29,19 +25,60 @@ interface AgentChatScreenProps {
     showBackButton?: boolean;
 }
 
-const shouldUseTaskAgent = (input: string): boolean => {
-    const text = input.trim().toLowerCase();
-    if (!text) return false;
+function TypingDots() {
+    const dot1 = useRef(new Animated.Value(0.35)).current;
+    const dot2 = useRef(new Animated.Value(0.35)).current;
+    const dot3 = useRef(new Animated.Value(0.35)).current;
 
-    const hasBookingDomain = /图书馆|圖書館|library|seat|study room|group study|individual study|room booking|room_bookings|book_slot|scan_date|start_manual_login|sys01\.lib\.hkbu\.edu\.hk/.test(text);
-    const hasTaskIntent = /订位|訂位|预约|預約|book(?!\s*(where|location))/i.test(text)
-        || /booking/i.test(text)
-        || /登录订位|登入訂位|登录|登入/.test(text)
-        || /扫描|scan|查空位|查位|scan_date/.test(text)
-        || /抢位|搶位|预订|預訂|帮我订|幫我訂|reserve/.test(text);
+    useEffect(() => {
+        const makeLoop = (target: Animated.Value, delay: number) => Animated.loop(
+            Animated.sequence([
+                Animated.delay(delay),
+                Animated.timing(target, {
+                    toValue: 1,
+                    duration: 360,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(target, {
+                    toValue: 0.35,
+                    duration: 360,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
 
-    return hasBookingDomain && hasTaskIntent;
-};
+        const animations = [
+            makeLoop(dot1, 0),
+            makeLoop(dot2, 140),
+            makeLoop(dot3, 280),
+        ];
+
+        animations.forEach(animation => animation.start());
+        return () => animations.forEach(animation => animation.stop());
+    }, [dot1, dot2, dot3]);
+
+    return (
+        <View style={styles.typingDots}>
+            {[dot1, dot2, dot3].map((value, index) => (
+                <Animated.View
+                    key={index}
+                    style={[
+                        styles.typingDot,
+                        {
+                            opacity: value,
+                            transform: [{
+                                translateY: value.interpolate({
+                                    inputRange: [0.35, 1],
+                                    outputRange: [2, -2],
+                                }),
+                            }],
+                        },
+                    ]}
+                />
+            ))}
+        </View>
+    );
+}
 
 const shouldUseCurrentLocation = (input: string): boolean => {
     const text = input.trim().toLowerCase();
@@ -63,51 +100,23 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
     }[]>([]);
     const [loading, setLoading] = useState(false);
     const [keyboardVisible, setKeyboardVisible] = useState(false);
-    const [showWebView, setShowWebView] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [loadingSession, setLoadingSession] = useState(true);
     const [showGuestModal, setShowGuestModal] = useState(false);
     const [deviceLocation, setDeviceLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const { t } = useTranslation();
     const scrollViewRef = useRef<ScrollView>(null);
-    const webViewRef = useRef<WebView>(null);
     const agentRef = useRef<AgentExecutor>(new AgentExecutor('demo-user'));
-    const langGraphAgentRef = useRef<any>(null);
-    const [cookieScript, setCookieScript] = useState('');
-    const [webViewUrl, setWebViewUrl] = useState('https://library.hkbu.edu.hk/');
 
     useEffect(() => {
         const userId = currentUser?.uid || 'demo-user';
         agentRef.current = new AgentExecutor(userId);
         agentRef.current.setDeviceLocation(deviceLocation);
-        langGraphAgentRef.current = null;
     }, [currentUser?.uid]);
 
     useEffect(() => {
         agentRef.current.setDeviceLocation(deviceLocation);
     }, [deviceLocation]);
-
-    const ensureTaskAgent = async () => {
-        if (!langGraphAgentRef.current) {
-            const { LangGraphExecutor } = await import('../../services/agent/langgraph_executor');
-            langGraphAgentRef.current = new LangGraphExecutor(currentUser?.uid || 'demo-user');
-            langGraphAgentRef.current.setCallbacks({
-                onShowWebView: () => setShowWebView(true),
-                onHideWebView: () => setShowWebView(false),
-                onNavigateWebView: (url: string) => setWebViewUrl(url),
-                onPushMessage: (content: string, quickReplies?: string[]) => {
-                    setMessages(prev => [...prev, {
-                        role: 'assistant' as const,
-                        content,
-                        quickReplies,
-                    }]);
-                    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-                },
-            });
-        }
-
-        return langGraphAgentRef.current;
-    };
 
     const ensureCurrentLocation = async () => {
         if (deviceLocation) {
@@ -150,18 +159,10 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
             setLoadingSession(true);
             const user = await getCurrentUser();
             setCurrentUser(user);
-            const script = await getCookieInjectionScript();
-            setCookieScript(script);
             setLoadingSession(false);
         }
         loadSession();
     }, []);
-
-    useEffect(() => {
-        if (webViewRef.current) {
-            agentBridge.setWebView(webViewRef as unknown as React.RefObject<WebView>);
-        }
-    });
 
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -191,8 +192,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         setLoading(true);
 
         try {
-            const useTaskAgent = shouldUseTaskAgent(userMsg);
-            if (!useTaskAgent && shouldUseCurrentLocation(userMsg)) {
+            if (shouldUseCurrentLocation(userMsg)) {
                 const coords = await ensureCurrentLocation();
                 agentRef.current.setDeviceLocation(coords);
             }
@@ -208,9 +208,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 scrollViewRef.current?.scrollToEnd({ animated: false });
             };
 
-            const response = useTaskAgent
-                ? await (await ensureTaskAgent()).process(userMsg)
-                : await agentRef.current.process(userMsg, onUpdate);
+            const response = await agentRef.current.process(userMsg, onUpdate);
 
             setMessages(prev => prev.map(m => m.id === streamId ? {
                 ...m,
@@ -258,19 +256,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                             <Text style={styles.headerSubtitle}>校园信息助手</Text>
                         </View>
                     </View>
-                    <View style={styles.headerActions}>
-                        {APP_CONFIG.shouldShowDebug(currentUser?.uid) && (
-                            <TouchableOpacity
-                                onPress={() => setShowWebView(!showWebView)}
-                                style={[
-                                    styles.debugButton,
-                                    showWebView && styles.debugButtonActive
-                                ]}
-                            >
-                                <Bot size={16} color={showWebView ? '#FFFFFF' : '#1E3A8A'} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                    <View style={styles.headerActions} />
                 </View>
             </View>
 
@@ -323,7 +309,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                                 <View style={styles.messageContentWrapper}>
                                     {msg.role === 'assistant' ? (
                                         msg.content === '' ? (
-                                            <ActivityIndicator size="small" color="#1E3A8A" style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
+                                            <TypingDots />
                                         ) : (
                                             <TextInput
                                                 style={styles.assistantSelectableText}
@@ -377,40 +363,6 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 >
                     <Send size={20} color="#fff" />
                 </TouchableOpacity>
-            </View>
-
-            <View style={showWebView ? styles.webviewVisible : styles.webviewHidden}>
-                {showWebView && (
-                    <TouchableOpacity style={styles.webviewCloseBtn} onPress={() => setShowWebView(false)}>
-                        <Text style={styles.webviewCloseBtnText}>收起页面 ▼</Text>
-                    </TouchableOpacity>
-                )}
-                <WebView
-                    ref={webViewRef}
-                    source={{ uri: webViewUrl }}
-                    style={{ flex: 1 }}
-                    onMessage={(e) => agentBridge.handleMessage(e)}
-                    injectedJavaScriptBeforeContentLoaded={cookieScript}
-                    injectedJavaScript={`
-                        document.cookie && window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
-                            JSON.stringify({ type: 'COOKIES', payload: { cookies: document.cookie } })
-                        );
-                        true;
-                    `}
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                    sharedCookiesEnabled={true}
-                    thirdPartyCookiesEnabled={true}
-                    setSupportMultipleWindows={false}
-                    mixedContentMode="compatibility"
-                    userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    startInLoadingState={true}
-                    allowsBackForwardNavigationGestures={true}
-                    onShouldStartLoadWithRequest={(request) => {
-                        console.log('[WebView] Navigating to:', request.url);
-                        return true;
-                    }}
-                />
             </View>
 
             <GuestLoginModal
@@ -628,46 +580,10 @@ const styles = StyleSheet.create({
     sendButtonDisabled: {
         backgroundColor: '#9CA3AF',
     },
-    webviewVisible: {
-        height: '40%',
-        borderTopWidth: 2,
-        borderTopColor: '#1E3A8A',
-        backgroundColor: '#fff',
-    },
-    webviewHidden: {
-        position: 'absolute',
-        width: 300,
-        height: 300,
-        opacity: 0,
-        left: -9999,
-    },
-    webviewCloseBtn: {
-        backgroundColor: '#1E3A8A',
-        paddingVertical: 6,
-        alignItems: 'center',
-    },
-    webviewCloseBtnText: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-    },
-    debugButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 12,
-        backgroundColor: '#F0F2F8',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    debugButtonActive: {
-        backgroundColor: '#1E3A8A',
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     quickRepliesContainer: {
         flexDirection: 'row',
@@ -695,6 +611,19 @@ const styles = StyleSheet.create({
         padding: 0,
         margin: 0,
         includeFontPadding: false,
+    },
+    typingDots: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        minHeight: 24,
+        paddingVertical: 2,
+    },
+    typingDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 999,
+        backgroundColor: '#1E3A8A',
     },
 });
 

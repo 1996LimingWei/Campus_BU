@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 import { StartupAnimation } from '../components/common/StartupAnimation';
+import { CourseActivityProvider } from '../context/CourseActivityContext';
 import { LoginPromptProvider } from '../context/LoginPromptContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import '../global.css';
@@ -143,14 +144,16 @@ export default function RootLayout() {
       )}
       <LoginPromptProvider>
         <NotificationProvider>
-          <Stack
-            screenOptions={{
-              animation: 'slide_from_right',
-              animationDuration: 400,
-              headerShown: false,
-            }}
-          />
-          <StatusBar style="auto" />
+          <CourseActivityProvider>
+            <Stack
+              screenOptions={{
+                animation: 'slide_from_right',
+                animationDuration: 400,
+                headerShown: false,
+              }}
+            />
+            <StatusBar style="auto" />
+          </CourseActivityProvider>
         </NotificationProvider>
       </LoginPromptProvider>
     </GestureHandlerRootView>

@@ -24,6 +24,44 @@ export const TOOLS: ToolDefinition[] = [
         }
     },
     {
+        name: 'post_course_review',
+        description: 'Post a course review on behalf of the logged-in user after the course, rating, and review content are clear.',
+        parameters: {
+            type: 'object',
+            properties: {
+                courseCode: { type: 'string', description: 'The course code, such as COMP3015.' },
+                rating: { type: 'number', description: 'A 1-5 star rating.' },
+                content: { type: 'string', description: 'The review text the user wants to publish.' }
+            },
+            required: ['courseCode', 'rating', 'content']
+        }
+    },
+    {
+        name: 'post_course_teaming',
+        description: 'Publish a teaming post for a course after course, section, intro, and contact details are clear.',
+        parameters: {
+            type: 'object',
+            properties: {
+                courseCode: { type: 'string', description: 'The course code, such as COMP3015.' },
+                section: { type: 'string', description: 'The user section, such as A1.' },
+                content: { type: 'string', description: 'The self-introduction or teaming note to publish.' }
+            },
+            required: ['courseCode', 'section', 'content']
+        }
+    },
+    {
+        name: 'send_course_chat_message',
+        description: 'Send a message to the course chatroom after the course and message content are clear.',
+        parameters: {
+            type: 'object',
+            properties: {
+                courseCode: { type: 'string', description: 'The course code, such as COMP3015.' },
+                content: { type: 'string', description: 'The chat message content to send.' }
+            },
+            required: ['courseCode', 'content']
+        }
+    },
+    {
         name: 'read_campus_building',
         description: 'Read HKBU building information such as location, description, and nearby facilities for a named building or building code.',
         parameters: {
@@ -55,36 +93,6 @@ export const TOOLS: ToolDefinition[] = [
                 preference: { type: 'string', description: 'Food preference (e.g., spicy, vegetarian)' }
             },
             required: ['location']
-        }
-    },
-    {
-        name: 'check_library_availability',
-        description: 'Query availability. If libraryName is provided but roomType is not, it returns available Room Types. If both are provided, it returns available Time Slots.',
-        parameters: {
-            type: 'object',
-            properties: {
-                libraryName: {
-                    type: 'string',
-                    description: 'Name of the library (Main Library, Shek Mun Campus Library, AAB Learning Commons)'
-                },
-                roomType: {
-                    type: 'string',
-                    description: 'Type of room (Group Study Rooms, Individual Study Rooms, Multipurpose Rooms)'
-                }
-            },
-            required: ['libraryName']
-        }
-    },
-    {
-        name: 'book_library_seat',
-        description: 'Book a seat in the library. Requires user confirmation step.',
-        parameters: {
-            type: 'object',
-            properties: {
-                seatId: { type: 'string', description: 'ID of the seat to book' },
-                time: { type: 'string', description: 'Booking time (e.g., 14:00)' }
-            },
-            required: ['seatId', 'time']
         }
     },
     {

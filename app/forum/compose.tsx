@@ -5,9 +5,11 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
+    Dimensions,
     Image,
     KeyboardAvoidingView,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -16,10 +18,13 @@ import {
     View,
 } from 'react-native';
 import { Toast, ToastType } from '../../components/campus/Toast';
+import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { getCurrentUser } from '../../services/auth';
 import { createForumPost, uploadForumImage } from '../../services/forum';
 import { ForumCategory } from '../../types';
 
+const SCREEN_W = Dimensions.get('window').width;
+const PREVIEW_SIZE = Math.floor((SCREEN_W - 40 - 16) / 3);
 
 export default function ForumComposeScreen() {
     const { t } = useTranslation();
@@ -36,6 +41,8 @@ export default function ForumComposeScreen() {
     const [content, setContent] = useState('');
     const [category, setCategory] = useState<ForumCategory>('general');
     const [images, setImages] = useState<string[]>([]);
+    const [previewVisible, setPreviewVisible] = useState(false);
+    const [previewIndex, setPreviewIndex] = useState<number | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [toast, setToast] = useState<{ visible: boolean; message: string; type: ToastType }>({
         visible: false, message: '', type: 'success',
@@ -60,6 +67,16 @@ export default function ForumComposeScreen() {
     };
 
     const removeImage = (i: number) => setImages(prev => prev.filter((_, idx) => idx !== i));
+
+    const openPreview = (index: number) => {
+        setPreviewIndex(index);
+        setPreviewVisible(true);
+    };
+
+    const closePreview = () => {
+        setPreviewVisible(false);
+        setPreviewIndex(null);
+    };
 
     const handleSubmit = async () => {
         if (!title.trim()) { showToast(t('forum.compose.error_title')); return; }
@@ -166,12 +183,23 @@ export default function ForumComposeScreen() {
                 {/* Image grid */}
                 <View style={styles.imageGrid}>
                     {images.map((uri, i) => (
-                        <View key={i} style={styles.imageThumb}>
+                        <Pressable
+                            key={i}
+                            style={styles.imageThumb}
+                            onPress={() => openPreview(i)}
+                        >
                             <Image source={{ uri }} style={styles.thumbImg} />
-                            <TouchableOpacity style={styles.removeBtn} onPress={() => removeImage(i)}>
+                            <Pressable
+                                style={styles.removeBtn}
+                                hitSlop={6}
+                                onPress={(event) => {
+                                    event.stopPropagation();
+                                    removeImage(i);
+                                }}
+                            >
                                 <X size={12} color="#fff" />
-                            </TouchableOpacity>
-                        </View>
+                            </Pressable>
+                        </Pressable>
                     ))}
                     {images.length < 9 && (
                         <TouchableOpacity style={styles.addImageBox} onPress={pickImage}>
@@ -181,6 +209,20 @@ export default function ForumComposeScreen() {
                     )}
                 </View>
             </ScrollView>
+
+            {previewVisible && previewIndex !== null && images[previewIndex] && (
+                <View style={styles.previewOverlay}>
+                    <ZoomableImageCarousel
+                        images={images}
+                        width={SCREEN_W}
+                        height={SCREEN_W}
+                        contentFit="contain"
+                        previewMode="standalone"
+                        externalViewerIndex={previewIndex}
+                        onViewerRequestClose={closePreview}
+                    />
+                </View>
+            )}
 
             <Toast
                 visible={toast.visible}
@@ -289,6 +331,7 @@ const styles = StyleSheet.create({
         top: 4, right: 4,
         width: 20, height: 20,
         borderRadius: 10,
+        zIndex: 2,
         backgroundColor: 'rgba(0,0,0,0.5)',
         alignItems: 'center',
         justifyContent: 'center',
@@ -303,4 +346,9 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     addImageText: { fontSize: 11, color: '#9CA3AF', textAlign: 'center' },
+    previewOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#000',
+        zIndex: 1000,
+    },
 });

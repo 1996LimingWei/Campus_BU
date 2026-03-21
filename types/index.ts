@@ -54,6 +54,7 @@ export interface PostComment {
     authorName: string;
     authorEmail?: string;
     authorAvatar?: string;
+    isAnonymous?: boolean;
     content: string;
     parentCommentId?: string;
     replyToName?: string;

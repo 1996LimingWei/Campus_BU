@@ -244,6 +244,40 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     } as User;
 };
 
+export type UserSearchResult = {
+    uid: string;
+    displayName: string;
+    major: string;
+    email?: string;
+    avatarUrl: string;
+};
+
+export const searchUserProfiles = async (query: string, limit: number = 20): Promise<UserSearchResult[]> => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+        return [];
+    }
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, display_name, major, email, avatar_url')
+        .or(`display_name.ilike.%${trimmedQuery}%,major.ilike.%${trimmedQuery}%,email.ilike.%${trimmedQuery}%`)
+        .limit(limit);
+
+    if (error) {
+        console.error('Error searching users:', error);
+        throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+        uid: row.id,
+        displayName: row.display_name || 'Anonymous',
+        major: row.major || 'Student',
+        email: row.email || '',
+        avatarUrl: row.avatar_url || '',
+    }));
+};
+
 // Auth state listener
 export const onAuthChange = (callback: (user: any | null) => void) => {
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {

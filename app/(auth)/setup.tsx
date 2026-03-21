@@ -313,7 +313,8 @@ export default function SetupScreen() {
                             />
                         </Animated.View>
 
-                        {/* Tags */}
+                        {/*
+                        Social tags are temporarily disabled.
                         <Animated.View entering={FadeInDown.delay(500).springify()} style={styles.inputGroup}>
                             <View style={styles.labelRow}>
                                 <Text style={styles.label}>{t('setup.tags_label')}</Text>
@@ -336,7 +337,6 @@ export default function SetupScreen() {
                             </View>
                         </Animated.View>
 
-                        {/* AI Gen Bio */}
                         {selectedTags.length > 0 && (
                             <Animated.View entering={FadeInDown.delay(600).springify()} style={styles.aiSection}>
                                 <View style={styles.aiHeader}>
@@ -361,6 +361,7 @@ export default function SetupScreen() {
                                 ) : null}
                             </Animated.View>
                         )}
+                        */}
 
                         <Animated.View entering={FadeInUp.delay(700).springify()} style={styles.submitCard}>
                             <LinearGradient

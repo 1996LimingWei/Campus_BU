@@ -5,9 +5,11 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
+    Dimensions,
     Image,
     KeyboardAvoidingView,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -16,12 +18,14 @@ import {
     View
 } from 'react-native';
 import { Toast, ToastType } from '../../components/campus/Toast';
+import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { getCurrentUser } from '../../services/auth';
 import { createPost, uploadPostImage } from '../../services/campus';
 import { PostCategory } from '../../types';
 import { getNearestBuilding } from '../../utils/location';
 
 export default function ComposeScreen() {
+    const SCREEN_W = Dimensions.get('window').width;
     const { t } = useTranslation();
     const CATEGORIES: { id: PostCategory; label: string }[] = [
         { id: 'Events', label: t('campus.categories.events') },
@@ -40,6 +44,8 @@ export default function ComposeScreen() {
     const [content, setContent] = useState('');
     const [category, setCategory] = useState<PostCategory>('Events');
     const [images, setImages] = useState<string[]>([]);
+    const [previewVisible, setPreviewVisible] = useState(false);
+    const [previewIndex, setPreviewIndex] = useState<number | null>(null);
     const [isAnonymous, setIsAnonymous] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [toast, setToast] = useState<{ visible: boolean; message: string; type: ToastType }>({
@@ -73,6 +79,16 @@ export default function ComposeScreen() {
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const openPreview = (index: number) => {
+        setPreviewIndex(index);
+        setPreviewVisible(true);
+    };
+
+    const closePreview = () => {
+        setPreviewVisible(false);
+        setPreviewIndex(null);
     };
 
     const handleSubmit = async () => {
@@ -193,15 +209,22 @@ export default function ComposeScreen() {
                 {images.length > 0 && (
                     <View style={styles.imagesGrid}>
                         {images.map((uri, index) => (
-                            <View key={index} style={styles.imagePreviewContainer}>
+                            <Pressable
+                                key={index}
+                                style={styles.imagePreviewContainer}
+                                onPress={() => openPreview(index)}
+                            >
                                 <Image source={{ uri }} style={styles.imagePreview} />
-                                <TouchableOpacity
+                                <Pressable
                                     style={styles.removeImageButton}
-                                    onPress={() => removeImage(index)}
+                                    onPress={(event) => {
+                                        event.stopPropagation();
+                                        removeImage(index);
+                                    }}
                                 >
                                     <X size={16} color="#fff" />
-                                </TouchableOpacity>
-                            </View>
+                                </Pressable>
+                            </Pressable>
                         ))}
                         {images.length < 6 && (
                             <TouchableOpacity style={styles.addImageMini} onPress={pickImage}>
@@ -235,6 +258,20 @@ export default function ComposeScreen() {
                     </TouchableOpacity>
                 </View>
             </ScrollView>
+
+            {previewVisible && previewIndex !== null && images[previewIndex] && (
+                <View style={styles.previewOverlay}>
+                    <ZoomableImageCarousel
+                        images={images}
+                        width={SCREEN_W}
+                        height={SCREEN_W}
+                        contentFit="contain"
+                        previewMode="standalone"
+                        externalViewerIndex={previewIndex}
+                        onViewerRequestClose={closePreview}
+                    />
+                </View>
+            )}
 
             <Toast
                 visible={toast.visible}
@@ -419,5 +456,10 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#1E3A8A',
         fontWeight: '500',
+    },
+    previewOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#000',
+        zIndex: 1000,
     },
 });
