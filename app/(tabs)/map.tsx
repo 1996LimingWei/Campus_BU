@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Building, ChevronRight, Crosshair, Heart, Image as ImageIcon, MapPin, MessageCircle, Utensils, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,7 +34,6 @@ import { fetchPosts } from '../../services/campus';
 import { CAMPUS_LOCATIONS } from '../../services/locations';
 import { CampusLocation } from '../../types';
 import { compressImage } from '../../utils/image';
-import { isInHongKong } from '../../utils/location';
 
 const { width, height } = Dimensions.get('window');
 
@@ -51,10 +50,6 @@ const FOOD_SHEET_COLLAPSED_OFFSET = Math.max(0, FOOD_SHEET_HEIGHT - FOOD_SHEET_V
 
 // Keep edit button code path for future use, but hide it in current builds.
 const SHOW_BUILDING_EDIT_BUTTON = false;
-
-// 🧪 TEST MODE: Set to true to test region restriction dialog (simulates being outside Hong Kong)
-// ⚠️ IMPORTANT: Set back to false before production deployment!
-const TEST_REGION_RESTRICTION = false;
 
 const FOOD_ORDER_OPTIONS = [
     { key: 'main-canteen', name: 'Main Canteen', orderUrl: 'https://csd2.order.place/store/112867/mode/prekiosk', locationId: 'o1' },
@@ -735,7 +730,6 @@ export default function MapScreen() {
 
     const [activeFilter, setActiveFilter] = useState<FilterType>('newest');
     const [selectedPost, setSelectedPost] = useState<any>(null);
-    const [heading, setHeading] = useState<number>(0);
     const [pendingLocation, setPendingLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [locating, setLocating] = useState(false);
     const [markersVisible, setMarkersVisible] = useState(true);
@@ -762,7 +756,6 @@ export default function MapScreen() {
     const [isNavigating, setIsNavigating] = useState(false);
 
     // Region Restriction State
-    const [regionChecked, setRegionChecked] = useState(false);
 
     // Handle navigation params
     useEffect(() => {
@@ -855,75 +848,26 @@ export default function MapScreen() {
         loadPostsData();
     }, [loadPostsData]);
 
-    // Check region restriction on component mount
-    const checkRegionRestriction = useCallback(async () => {
-        if (regionChecked) return; // Avoid duplicate checks
-
-        try {
-            // 1. Request location permissions
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                // If user denies permission, assume they're in Hong Kong (allow access)
-                setRegionChecked(true);
-                return;
-            }
-
-            // 2. Get current location
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-            });
-            const { latitude, longitude } = location.coords;
-
-            // 3. Check if in Hong Kong
-            const inHongKong = isInHongKong(latitude, longitude);
-
-            // 🧪 TEST MODE: Reverse logic when testing (treat HK as non-HK)
-            const shouldRestrict = TEST_REGION_RESTRICTION ? inHongKong : !inHongKong;
-
-            if (shouldRestrict) {
-                Alert.alert(
-                    t('map.region_restriction.title'),
-                    t('map.region_restriction.message'),
-                    [
-                        {
-                            text: t('map.region_restriction.confirm'),
-                            onPress: () => router.back(), // Go back to previous screen
-                        },
-                    ],
-                    { cancelable: false }
-                );
-            }
-
-            setRegionChecked(true);
-        } catch (error) {
-            console.error('Region check failed:', error);
-            setRegionChecked(true); // Mark as checked to avoid blocking on error
+    // Load map data on mount; location is only requested from explicit user actions.
+    useEffect(() => {
+        const openFoodMapParam = params.openFoodMap;
+        const shouldKeepFoodOverlay = (
+            Array.isArray(openFoodMapParam)
+                ? openFoodMapParam.includes('true')
+                : openFoodMapParam === 'true'
+        ) || Boolean(params.foodId);
+        if (shouldKeepFoodOverlay) {
+            setShowFoodMap(true);
+        } else {
+            setShowFoodMap(true);
+            setHighlightedFoodId(null);
         }
-    }, [regionChecked, t, router]);
 
-    // Trigger region check when screen is focused
-    useFocusEffect(
-        useCallback(() => {
-            checkRegionRestriction();
-            const openFoodMapParam = params.openFoodMap;
-            const shouldKeepFoodOverlay = (
-                Array.isArray(openFoodMapParam)
-                    ? openFoodMapParam.includes('true')
-                    : openFoodMapParam === 'true'
-            ) || Boolean(params.foodId);
-            if (shouldKeepFoodOverlay) {
-                setShowFoodMap(true);
-            } else {
-                setShowFoodMap(true);
-                setHighlightedFoodId(null);
-            }
-
-            const task = InteractionManager.runAfterInteractions(() => {
-                loadPostsData();
-            });
-            return () => task.cancel();
-        }, [loadPostsData, checkRegionRestriction, params.foodId, params.openFoodMap])
-    );
+        const task = InteractionManager.runAfterInteractions(() => {
+            loadPostsData();
+        });
+        return () => task.cancel();
+    }, [loadPostsData, params.foodId, params.openFoodMap]);
 
     // Save to storage whenever buildingsData changes (debounced or on key events)
     // For simplicity, we'll save on drag end (which updates state) and on export.
@@ -1089,51 +1033,6 @@ export default function MapScreen() {
         },
     }), [animateFoodSheet, closeFoodSheet, foodSheetTranslateY]);
 
-    // Track heading
-    React.useEffect(() => {
-        let headingSubscription: Location.LocationSubscription | null = null;
-
-        async function startHeadingTrack() {
-            try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status !== 'granted') return;
-
-                headingSubscription = await Location.watchHeadingAsync((data) => {
-                    const h = Math.round(data.trueHeading || data.magHeading);
-                    setHeading(h);
-                });
-            } catch (err) {
-                console.log('Heading error:', err);
-            }
-        }
-
-        let positionSubscription: Location.LocationSubscription | null = null;
-        async function startLocationTrack() {
-            try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status !== 'granted') return;
-
-                positionSubscription = await Location.watchPositionAsync(
-                    { accuracy: Location.Accuracy.Balanced, distanceInterval: 5 },
-                    (location) => {
-                        const { latitude, longitude } = location.coords;
-                        setUserLocation({ lat: latitude, lng: longitude });
-                    }
-                );
-            } catch (err) {
-                console.log('Location track error:', err);
-            }
-        }
-
-        startHeadingTrack();
-        startLocationTrack();
-
-        return () => {
-            if (headingSubscription) headingSubscription.remove();
-            if (positionSubscription) positionSubscription.remove();
-        };
-    }, []);
-
     // Sync userLocation with WebView (without re-centering)
     React.useEffect(() => {
         if (userLocation && webViewRef.current) {
@@ -1145,18 +1044,6 @@ export default function MapScreen() {
             `);
         }
     }, [userLocation]);
-
-    // Sync heading with WebView
-    React.useEffect(() => {
-        if (webViewRef.current) {
-            webViewRef.current.injectJavaScript(`
-                if (window.updateUserHeading) {
-                    window.updateUserHeading(${heading});
-                }
-                true;
-            `);
-        }
-    }, [heading]);
 
     // Trigger animation when selection changes
     React.useEffect(() => {
@@ -1276,7 +1163,7 @@ export default function MapScreen() {
             : buildingsData;
     }, [buildingsData, isNavigating, navTarget]);
 
-    // Memoize the HTML to prevent reloads when location/heading changes
+    // Memoize the HTML to prevent reloads when data changes
     const mapHtml = useMemo(() => {
         return generateMapHTML(
             currentPosts,

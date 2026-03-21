@@ -2,6 +2,7 @@ import * as Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import storage from '../lib/storage';
 import { supabase } from './supabase';
 
 export interface PushTokenData {
@@ -10,6 +11,10 @@ export interface PushTokenData {
     token: string;
     platform?: string;
 }
+
+const PUSH_NOTIFICATIONS_ENABLED_KEY_PREFIX = 'hkcampus_push_notifications_enabled';
+
+const getPushNotificationsEnabledKey = (userId: string) => `${PUSH_NOTIFICATIONS_ENABLED_KEY_PREFIX}:${userId}`;
 
 // Global configuration for how notifications are handled when the app is in foreground
 Notifications.setNotificationHandler({
@@ -115,17 +120,56 @@ export async function savePushToken(userId: string, token: string): Promise<bool
     }
 }
 
+export async function getPushNotificationsEnabled(userId: string): Promise<boolean> {
+    if (!userId) return false;
+
+    try {
+        const value = await storage.getItem(getPushNotificationsEnabledKey(userId));
+        return value === 'true';
+    } catch (error) {
+        console.error('Error reading push notification preference:', error);
+        return false;
+    }
+}
+
+export async function setPushNotificationsEnabled(userId: string, enabled: boolean): Promise<boolean> {
+    if (!userId) return false;
+
+    try {
+        if (enabled) {
+            const token = await registerForPushNotificationsAsync();
+            if (!token) return false;
+
+            const saved = await savePushToken(userId, token);
+            if (!saved) return false;
+        } else {
+            const removed = await removePushToken(userId);
+            if (!removed) return false;
+        }
+
+        await storage.setItem(getPushNotificationsEnabledKey(userId), enabled ? 'true' : 'false');
+        return true;
+    } catch (error) {
+        console.error('Error updating push notification preference:', error);
+        return false;
+    }
+}
+
 /**
  * Removes a specific push token from the database (e.g., on logout)
  */
-export async function removePushToken(userId: string, token: string): Promise<boolean> {
-    if (!userId || !token) return false;
+export async function removePushToken(userId: string, token?: string): Promise<boolean> {
+    if (!userId) return false;
 
     try {
-        const { error } = await supabase
+        const query = supabase
             .from('user_push_tokens')
             .delete()
-            .match({ user_id: userId, token: token });
+            .eq('user_id', userId);
+
+        const { error } = token
+            ? await query.eq('token', token)
+            : await query;
 
         if (error) throw error;
         return true;

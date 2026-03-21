@@ -10,7 +10,6 @@ import { LoginPromptProvider } from '../context/LoginPromptContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import '../global.css';
 import { getUserProfile, isDemoMode, onAuthChange, shouldSkipAuthRedirect } from '../services/auth';
-import { registerForPushNotificationsAsync, savePushToken } from '../services/push_notifications';
 import { prefetchBuildings } from '../services/buildings';
 import { prefetchLocalCourses } from '../services/courses';
 import './i18n/i18n'; // Initialize i18n
@@ -112,16 +111,6 @@ export default function RootLayout() {
                 router.replace('/(auth)/setup');
               }
             } else {
-              // User is logged in and has a profile. Register for push notifications.
-              try {
-                const token = await registerForPushNotificationsAsync();
-                if (token) {
-                  await savePushToken(user.uid, token);
-                }
-              } catch (pushErr) {
-                console.log('Failed to register push token during auth:', pushErr);
-              }
-
               if (inAuthGroup) {
                 // Don't auto-redirect if user is on forgot-password page
                 if (currentSegment !== 'setup' && !isForgotPasswordPage) {

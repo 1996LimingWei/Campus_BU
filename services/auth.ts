@@ -147,6 +147,24 @@ export const signOut = async () => {
     await storage.removeItem(DEMO_MODE_KEY);
 };
 
+// Delete account
+export const deleteAccount = async () => {
+    try {
+        // Attempt standard Supabase RPC convention for user deletion
+        // Note: The developer must create a 'delete_user' function in Supabase
+        // that handles the actual auth.users deletion using security definer.
+        const { error } = await supabase.rpc('delete_user');
+        if (error) {
+            console.warn('[auth.ts] delete_user RPC returned error (might not be created yet):', error);
+        }
+    } catch (e) {
+        console.warn('[auth.ts] Exception calling delete_user RPC:', e);
+    } finally {
+        // Always sign out the user locally
+        await signOut();
+    }
+};
+
 /**
  * Update user password (used after OTP verification or in settings)
  */

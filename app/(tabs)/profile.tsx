@@ -3,15 +3,16 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Bell, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { AdminBadge } from '../../components/common/AdminBadge';
 import { EduBadge } from '../../components/common/EduBadge';
 import MyScheduleCard from '../../components/profile/MyScheduleCard';
 import { useNotifications } from '../../context/NotificationContext';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import storage from '../../lib/storage';
-import { createUserProfile, getCurrentUser, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
+import { createUserProfile, getCurrentUser, getUserProfile, signOut, deleteAccount, uploadAndUpdateAvatar } from '../../services/auth';
 import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
+import { getPushNotificationsEnabled, setPushNotificationsEnabled as updatePushNotificationsEnabled } from '../../services/push_notifications';
 import { supabase } from '../../services/supabase';
 import { changeLanguage } from '../i18n/i18n';
 import { ProfileHeader } from '../../components/profile/ProfileHeader';
@@ -45,6 +46,8 @@ export default function ProfileScreen() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loadingNotifications, setLoadingNotifications] = useState(true);
     const [loadingProfile, setLoadingProfile] = useState(true);
+    const [pushNotificationsEnabled, setPushNotificationsEnabledState] = useState(false);
+    const [pushNotificationsLoading, setPushNotificationsLoading] = useState(false);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState('');
@@ -63,6 +66,8 @@ export default function ProfileScreen() {
             if (user) {
                 setUserId(user.uid);
                 setUserEmail(user.email || '');
+                const enabled = await getPushNotificationsEnabled(user.uid);
+                setPushNotificationsEnabledState(enabled);
 
                 // Check admin status
                 const adminStatus = await isAdmin(user.uid);
@@ -84,6 +89,7 @@ export default function ProfileScreen() {
                 }
             } else {
                 console.log('[Profile] No user found');
+                setPushNotificationsEnabledState(false);
             }
         } catch (error) {
             console.error('[Profile] Error loading data:', error);
@@ -187,6 +193,31 @@ export default function ProfileScreen() {
         await changeLanguage(lang);
     };
 
+    const handlePushNotificationsToggle = async (nextEnabled: boolean) => {
+        if (!userId) {
+            checkLogin(userId);
+            return;
+        }
+
+        setPushNotificationsLoading(true);
+        try {
+            const ok = await updatePushNotificationsEnabled(userId, nextEnabled);
+            if (!ok) {
+                Alert.alert(
+                    t('common.tip'),
+                    nextEnabled
+                        ? t('profile.push_notifications_enable_failed', 'Could not enable notifications. Please check permission and try again.')
+                        : t('profile.push_notifications_disable_failed', 'Could not disable notifications. Please try again.')
+                );
+                return;
+            }
+
+            setPushNotificationsEnabledState(nextEnabled);
+        } finally {
+            setPushNotificationsLoading(false);
+        }
+    };
+
     const handleSignOut = () => {
         Alert.alert(
             t('profile.sign_out'),
@@ -200,6 +231,29 @@ export default function ProfileScreen() {
                         await signOut();
                         await storage.removeItem(DEMO_MODE_KEY);
                         router.replace('/(auth)/login');
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            t('profile.delete_account'),
+            t('profile.delete_account_confirm'),
+            [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                    text: t('profile.delete_account'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteAccount();
+                            router.replace('/(auth)/login');
+                        } catch (e) {
+                            console.error('Delete account failed:', e);
+                            Alert.alert(t('common.error'), t('profile.cannot_update', 'Operation failed'));
+                        }
                     }
                 }
             ]
@@ -638,6 +692,30 @@ export default function ProfileScreen() {
                         </View>
                     </View>
 
+                    {/* Push Notifications */}
+                    {userId && (
+                        <View style={styles.section}>
+                            <View style={styles.settingRow}>
+                                <View style={styles.settingLeft}>
+                                    <Bell size={20} color="#1E3A8A" />
+                                    <Text style={styles.settingLabel}>{t('profile.push_notifications')}</Text>
+                                </View>
+                                <Switch
+                                    value={pushNotificationsEnabled}
+                                    onValueChange={handlePushNotificationsToggle}
+                                    disabled={pushNotificationsLoading}
+                                    trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
+                                    thumbColor={pushNotificationsEnabled ? '#1E3A8A' : '#FFFFFF'}
+                                />
+                            </View>
+                            <Text style={styles.settingHint}>
+                                {pushNotificationsEnabled
+                                    ? t('profile.push_notifications_enabled_hint')
+                                    : t('profile.push_notifications_disabled_hint')}
+                            </Text>
+                        </View>
+                    )}
+
                     {/* Settings */}
                     <View style={styles.section}>
                         <TouchableOpacity
@@ -652,10 +730,18 @@ export default function ProfileScreen() {
 
                     {/* Sign Out / Sign In */}
                     {userId ? (
-                        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-                            <LogOut size={20} color="#EF4444" />
-                            <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
-                        </TouchableOpacity>
+                        <View>
+                            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+                                <LogOut size={20} color="#EF4444" />
+                                <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.signOutButton, { marginTop: 12, backgroundColor: 'transparent', borderWidth: 0 }]} 
+                                onPress={handleDeleteAccount}
+                            >
+                                <Text style={[styles.signOutText, { color: '#9CA3AF', fontSize: 13 }]}>{t('profile.delete_account')}</Text>
+                            </TouchableOpacity>
+                        </View>
                     ) : (
                         <TouchableOpacity
                             style={[styles.signOutButton, { borderColor: '#1E3A8A' }]}
