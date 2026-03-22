@@ -19,7 +19,7 @@ import { ProfileMessages } from '../../components/profile/ProfileMessages';
 import { ProfilePostFeed } from '../../components/profile/ProfilePostFeed';
 import { ProfileTabs, ProfileTabType } from '../../components/profile/ProfileTabs';
 import { fetchAnonymousPostsByAuthor, fetchLikedPosts, fetchPostsByAuthor, togglePostLike } from '../../services/campus';
-import { Post, SOCIAL_TAGS, User as UserProfile } from '../../types';
+import { Post, User as UserProfile } from '../../types';
 import { isAdmin, isHKBUEmail } from '../../utils/userUtils';
 
 // Helper to check if avatar URL is valid (not a local file path)
@@ -37,7 +37,6 @@ const LANGUAGE_OPTIONS = [
 export default function ProfileScreen() {
     const router = useRouter();
     const { t, i18n } = useTranslation();
-    const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const currentLang = i18n.language;
     const [showNotifications, setShowNotifications] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
@@ -83,7 +82,6 @@ export default function ProfileScreen() {
                         ...userProfile,
                         email: userProfile.email || user.email || '',
                     });
-                    setSelectedTags(userProfile.socialTags || []);
                 }
             } else {
                 console.log('[Profile] No user found');
@@ -261,40 +259,6 @@ export default function ProfileScreen() {
         const Clipboard = await import('expo-clipboard');
         await Clipboard.setStringAsync(text);
         Alert.alert(t('common.tip'), t('profile.help_copied'));
-    };
-
-    const toggleTag = async (tag: string) => {
-        if (!checkLogin(userId)) return;
-        let newTags = [...selectedTags];
-        if (selectedTags.includes(tag)) {
-            newTags = selectedTags.filter(t => t !== tag);
-        } else if (selectedTags.length < 3) {
-            newTags = [...selectedTags, tag];
-        } else {
-            Alert.alert(t('common.tip', 'Tip'), t('setup.tags_limit', 'You can only select up to 3 tags'));
-            return;
-        }
-
-        setSelectedTags(newTags);
-
-        // Persist to DB
-        if (userId && profile) {
-            try {
-                const user = await getCurrentUser();
-                await createUserProfile(
-                    userId,
-                    profile.displayName,
-                    newTags,
-                    profile.major,
-                    profile.avatarUrl,
-                    user?.email || ''
-                );
-            } catch (error) {
-                console.error('Failed to persist tags:', error);
-                // Rollback UI state on failure
-                setSelectedTags(selectedTags);
-            }
-        }
     };
 
     const handleAvatarPress = async () => {
@@ -652,33 +616,6 @@ export default function ProfileScreen() {
                             </View>
                         )}
                     </View>
-
-                    {/*
-                    Social Tags are temporarily hidden.
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>{t('profile.social_tags')}</Text>
-                        <Text style={styles.sectionSubtitle}>{t('profile.select_tags')}</Text>
-                        <View style={styles.tagsGrid}>
-                            {SOCIAL_TAGS.map((tag) => (
-                                <TouchableOpacity
-                                    key={tag}
-                                    style={[
-                                        styles.tagButton,
-                                        selectedTags.includes(tag) && styles.tagButtonActive
-                                    ]}
-                                    onPress={() => toggleTag(tag)}
-                                >
-                                    <Text style={[
-                                        styles.tagText,
-                                        selectedTags.includes(tag) && styles.tagTextActive
-                                    ]}>
-                                        {tag}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-                    */}
 
 
                     {/* Language Switcher */}
@@ -1184,30 +1121,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#9CA3AF',
         marginBottom: 12,
-    },
-    tagsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    tagButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 16,
-        backgroundColor: '#F3F4F6',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    tagButtonActive: {
-        backgroundColor: '#1E3A8A',
-        borderColor: '#4B0082',
-    },
-    tagText: {
-        fontSize: 12,
-        color: '#4B5563',
-    },
-    tagTextActive: {
-        color: '#fff',
     },
     statsRow: {
         flexDirection: 'row',

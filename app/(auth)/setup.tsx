@@ -1,14 +1,12 @@
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Camera, Check, ChevronRight, LogOut, Sparkles, User as UserIcon, Wand2 } from 'lucide-react-native';
+import { ArrowLeft, Camera, Check, ChevronRight, LogOut, Sparkles, User as UserIcon } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { callDeepSeek } from '../../services/agent/llm';
 import { auth, createUserProfile, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
-import { SOCIAL_TAGS } from '../../types';
 
 export default function SetupScreen() {
     const router = useRouter();
@@ -16,10 +14,8 @@ export default function SetupScreen() {
     const [displayName, setDisplayName] = useState('');
     const [major, setMajor] = useState('');
     const [avatar, setAvatar] = useState<string | null>(null);
-    const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [bio, setBio] = useState('');
     const [loading, setLoading] = useState(false);
-    const [generatingBio, setGeneratingBio] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
 
     React.useEffect(() => {
@@ -31,7 +27,6 @@ export default function SetupScreen() {
                     setIsEditMode(true);
                     setDisplayName(profile.displayName || '');
                     setMajor(profile.major || '');
-                    setSelectedTags(profile.socialTags || []);
                     if (profile.avatarUrl) setAvatar(profile.avatarUrl);
                 }
             }
@@ -55,18 +50,6 @@ export default function SetupScreen() {
 
         if (!result.canceled) {
             setAvatar(result.assets[0].uri);
-        }
-    };
-
-    const toggleTag = (tag: string) => {
-        if (selectedTags.includes(tag)) {
-            setSelectedTags(selectedTags.filter(t => t !== tag));
-        } else {
-            if (selectedTags.length >= 3) {
-                Alert.alert(t('common.tip', 'Tip'), t('setup.tags_limit', 'You can only select up to 3 tags'));
-                return;
-            }
-            setSelectedTags([...selectedTags, tag]);
         }
     };
 
@@ -120,7 +103,7 @@ export default function SetupScreen() {
                 }
             }
 
-            await createUserProfile(user.id, finalDisplayName, selectedTags, finalMajor, finalAvatarUrl, user.email || '');
+            await createUserProfile(user.id, finalDisplayName, finalMajor, finalAvatarUrl, user.email || '');
             console.log('[Setup] Profile saved successfully');
 
             if (isEditMode) {
@@ -160,26 +143,6 @@ export default function SetupScreen() {
         } catch (error: any) {
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleGenerateBio = async () => {
-        if (selectedTags.length === 0) {
-            Alert.alert(t('common.tip', 'Tip'), t('setup.ai_gen_hint', '请先选择几个标签，AI 才能了解你哦'));
-            return;
-        }
-
-        setGeneratingBio(true);
-        try {
-            const result = await callDeepSeek([
-                { role: 'system', content: '你是一个充满活力的校园社交助手。' },
-                { role: 'user', content: `请根据以下标签，为用户写一段简短、有趣、有个性的个人简介（30字以内）：${selectedTags.join(', ')}。请直接输出简介内容。` }
-            ]);
-            setBio(result);
-        } catch (error) {
-            Alert.alert(t('common.error', 'Error'), t('setup.ai_gen_error', '生成失败，请重试'));
-        } finally {
-            setGeneratingBio(false);
         }
     };
 
@@ -312,56 +275,6 @@ export default function SetupScreen() {
                                 onChangeText={setMajor}
                             />
                         </Animated.View>
-
-                        {/*
-                        Social tags are temporarily disabled.
-                        <Animated.View entering={FadeInDown.delay(500).springify()} style={styles.inputGroup}>
-                            <View style={styles.labelRow}>
-                                <Text style={styles.label}>{t('setup.tags_label')}</Text>
-                                <Text style={styles.counter}>{selectedTags.length}/3</Text>
-                            </View>
-                            <View style={styles.tagsContainer}>
-                                {SOCIAL_TAGS.map((tag) => {
-                                    const isSelected = selectedTags.includes(tag);
-                                    return (
-                                        <TouchableOpacity
-                                            key={tag}
-                                            onPress={() => toggleTag(tag)}
-                                            style={[styles.tag, isSelected && styles.tagSelected]}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Text style={[styles.tagText, isSelected && styles.tagTextSelected]}>{tag}</Text>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
-                        </Animated.View>
-
-                        {selectedTags.length > 0 && (
-                            <Animated.View entering={FadeInDown.delay(600).springify()} style={styles.aiSection}>
-                                <View style={styles.aiHeader}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Wand2 size={16} color="#4F46E5" style={{ marginRight: 6 }} />
-                                        <Text style={styles.aiLabel}>{t('setup.ai_gen_title')}</Text>
-                                    </View>
-                                    <TouchableOpacity
-                                        onPress={handleGenerateBio}
-                                        disabled={generatingBio}
-                                        style={styles.aiButton}
-                                    >
-                                        <Text style={styles.aiButtonText}>
-                                            {generatingBio ? t('setup.ai_gen_loading') : t('setup.ai_gen_btn')}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                                {bio ? (
-                                    <View style={styles.bioBox}>
-                                        <Text style={styles.bioText}>{bio}</Text>
-                                    </View>
-                                ) : null}
-                            </Animated.View>
-                        )}
-                        */}
 
                         <Animated.View entering={FadeInUp.delay(700).springify()} style={styles.submitCard}>
                             <LinearGradient

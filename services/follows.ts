@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 
 const USER_FOLLOWS_TABLE = 'user_follows';
+const USERS_TABLE = 'users';
 
 const isFollowTableMissing = (error: any): boolean => {
     const msg = String(error?.message || '').toLowerCase();
@@ -102,6 +103,83 @@ export const getFollowCounts = async (userId: string): Promise<FollowCounts> => 
         followersCount: followersRes.count || 0,
         followingCount: followingRes.count || 0,
     };
+};
+
+export interface FollowUserInfo {
+    uid: string;
+    displayName: string;
+    avatarUrl: string;
+    major: string;
+}
+
+const fetchFollowUserProfiles = async (userIds: string[]): Promise<FollowUserInfo[]> => {
+    if (userIds.length === 0) return [];
+
+    const { data: profiles, error: profileError } = await supabase
+        .from(USERS_TABLE)
+        .select('id, display_name, avatar_url, major')
+        .in('id', userIds);
+
+    if (profileError) {
+        console.error('Error fetching follow profiles:', profileError);
+        throw profileError;
+    }
+
+    const profileMap = new Map(
+        (profiles || []).map((profile: any) => [
+            profile.id,
+            {
+                uid: profile.id,
+                displayName: profile.display_name || 'User',
+                avatarUrl: profile.avatar_url || '',
+                major: profile.major || '',
+            },
+        ])
+    );
+
+    return userIds
+        .map((userId) => profileMap.get(userId))
+        .filter(Boolean) as FollowUserInfo[];
+};
+
+export const getFollowersList = async (userId: string): Promise<FollowUserInfo[]> => {
+    if (!userId) return [];
+
+    const { data, error } = await supabase
+        .from(USER_FOLLOWS_TABLE)
+        .select('follower_id')
+        .eq('following_id', userId);
+
+    if (error) {
+        if (isFollowTableMissing(error)) return [];
+        console.error('Error fetching followers list:', error);
+        throw error;
+    }
+
+    const followerIds = (data || []).map((item: any) => item.follower_id).filter(Boolean);
+    if (followerIds.length === 0) return [];
+
+    return fetchFollowUserProfiles(followerIds);
+};
+
+export const getFollowingList = async (userId: string): Promise<FollowUserInfo[]> => {
+    if (!userId) return [];
+
+    const { data, error } = await supabase
+        .from(USER_FOLLOWS_TABLE)
+        .select('following_id')
+        .eq('follower_id', userId);
+
+    if (error) {
+        if (isFollowTableMissing(error)) return [];
+        console.error('Error fetching following list:', error);
+        throw error;
+    }
+
+    const followingIds = (data || []).map((item: any) => item.following_id).filter(Boolean);
+    if (followingIds.length === 0) return [];
+
+    return fetchFollowUserProfiles(followingIds);
 };
 
 export const getFollowingUserIds = async (followerId?: string): Promise<string[]> => {

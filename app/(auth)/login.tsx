@@ -160,7 +160,7 @@ export default function LoginScreen() {
                             <View style={[styles.inputContainer, { flex: 2 }]}>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder={t('auth.email_placeholder')}
+                                    placeholder={emailSuffix === '@life.hkbu.edu.hk' ? t('auth.email_placeholder') : t('auth.email_prefix_placeholder', 'example')}
                                     placeholderTextColor="#9CA3AF"
                                     value={emailPrefix}
                                     onChangeText={setEmailPrefix}

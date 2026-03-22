@@ -23,6 +23,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { TranslatableText } from '../../components/common/TranslatableText';
 import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { useNotifications } from '../../context/NotificationContext';
 import { getCurrentUser } from '../../services/auth';
@@ -534,9 +535,10 @@ export default function ChatScreen() {
                         </>
                     ) : (
                         <>
-                            <Text style={[styles.messageText, isMe ? styles.myText : styles.theirText]}>
-                                {item.content}
-                            </Text>
+                            <TranslatableText 
+                                text={item.content}
+                                style={[styles.messageText, isMe ? styles.myText : styles.theirText]} 
+                            />
                             <View style={styles.textTimeRow}>
                                 <Text style={[styles.timeText, isMe ? styles.myTime : styles.theirTime]}>
                                     {formatMessageTime(item.createdAt)}

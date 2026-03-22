@@ -6,7 +6,7 @@ export const getDiscoverableUsers = async (currentUserId: string): Promise<Omit<
     try {
         const { data, error } = await supabase
             .from('users')
-            .select('id, display_name, avatar_url, major, social_tags, email')
+            .select('id, display_name, avatar_url, major, email')
             .neq('id', currentUserId)
             .limit(50);
 
@@ -20,7 +20,6 @@ export const getDiscoverableUsers = async (currentUserId: string): Promise<Omit<
             .map((row: any) => ({
                 uid: row.id,
                 displayName: row.display_name || 'Anonymous',
-                socialTags: Array.isArray(row.social_tags) ? row.social_tags : [],
                 major: row.major || 'Student',
                 avatarUrl: row.avatar_url || '',
                 email: row.email || undefined,

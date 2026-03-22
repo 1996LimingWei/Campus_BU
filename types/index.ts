@@ -17,7 +17,6 @@ export interface ProfileStats {
 export interface User {
     uid: string;
     displayName: string;
-    socialTags: string[];
     major: string;
     email?: string;
     avatarUrl: string;
@@ -28,20 +27,6 @@ export interface User {
     followsYou?: boolean; // For viewing others
     bio?: string;
 }
-
-// Social Tags Options
-export const SOCIAL_TAGS = [
-    'Library Ghost 📚',
-    'Canteen Philosopher 🍜',
-    'Shaw Campus Runner 🏃',
-    'Deadline Fighter ⏰',
-    'Milk Tea Connoisseur 🧋',
-    'Night Owl 🦉',
-    'Morning Bird 🐦',
-    'Group Project Leader 👑',
-    'Solo Warrior 🗡️',
-    'Coffee Addict ☕',
-] as const;
 
 // Post Types
 export type PostType = 'event' | 'review' | 'guide' | 'lost_found';

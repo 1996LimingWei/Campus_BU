@@ -191,6 +191,8 @@ export default function UserProfileScreen() {
                     onFollowPress={currentUserId && currentUserId !== id ? handleFollowToggle : undefined}
                     followLoading={followLoading}
                     onMessagePress={() => router.push({ pathname: '/messages/[id]' as any, params: { id: id! } })}
+                    onFollowersPress={id ? () => router.push({ pathname: '/profile/followers' as any, params: { userId: id, tab: 'followers' } }) : undefined}
+                    onFollowingPress={id ? () => router.push({ pathname: '/profile/followers' as any, params: { userId: id, tab: 'following' } }) : undefined}
                 />
 
                 <View style={styles.pageTabContainer}>

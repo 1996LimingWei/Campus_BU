@@ -40,8 +40,8 @@ export const CourseActivityProvider: React.FC<{ children: React.ReactNode }> = (
             const favoriteCourseIds = await loadCourseFavorites(resolvedUserId, true);
             const unreadMap = await getFavoriteCourseCommunityUnreadMap(resolvedUserId, favoriteCourseIds);
             setUnreadByCourse(unreadMap);
-        } catch (error) {
-            console.error('Error refreshing course activity context:', error);
+        } catch (error: any) {
+            console.warn('Silent refresh issue in course activity context:', error?.message || error);
         }
     }, []);
 

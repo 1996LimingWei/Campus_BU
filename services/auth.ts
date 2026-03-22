@@ -144,7 +144,6 @@ export const updatePassword = async (password: string) => {
 export const createUserProfile = async (
     uid: string,
     displayName: string,
-    socialTags: string[],
     major: string,
     avatarUrl: string = '',
     email: string = ''
@@ -152,7 +151,6 @@ export const createUserProfile = async (
     const userData: User = {
         uid, // Will be stored as 'id' in DB if column name differs, but usually we map JSON
         displayName,
-        socialTags,
         major,
         email,
         avatarUrl,
@@ -169,7 +167,6 @@ export const createUserProfile = async (
             display_name: displayName,
             major: major,
             avatar_url: avatarUrl,
-            social_tags: socialTags,
             email: email,
             updated_at: new Date().toISOString(),
         });
@@ -203,7 +200,6 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
         major: data.major,
         email: data.email,
         avatarUrl: data.avatar_url || data.avatarUrl,
-        socialTags: data.social_tags || data.socialTags || [],
         createdAt: data.created_at ? new Date(data.created_at) : new Date(),
     } as User;
 };
@@ -266,7 +262,6 @@ export const getCurrentUser = async () => {
             major: profile?.major || 'Student',
             avatarUrl: avatar,
             photoURL: avatar, // Backwards compatibility
-            socialTags: profile?.socialTags || [],
             email: user.email // Explicitly include email
         };
     }

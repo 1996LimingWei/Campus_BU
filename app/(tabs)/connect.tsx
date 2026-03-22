@@ -149,14 +149,6 @@ export default function ConnectScreen() {
                             <Text style={styles.userName}>{currentUser.displayName}</Text>
                             <Text style={styles.userMajor}>{currentUser.major || 'Student'}</Text>
                             <Text style={styles.userDistance}>点击卡片查看主页</Text>
-
-                            <View style={styles.tagsContainer}>
-                                {(currentUser.socialTags || []).slice(0, 4).map((tag, index) => (
-                                    <View key={index} style={styles.tag}>
-                                        <Text style={styles.tagText}>{tag}</Text>
-                                    </View>
-                                ))}
-                            </View>
                         </TouchableOpacity>
 
                         <View style={styles.navContainer}>
@@ -315,24 +307,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: 'rgba(255,255,255,0.75)',
         marginBottom: 16,
-    },
-    tagsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: 8,
-        minHeight: 40,
-    },
-    tag: {
-        backgroundColor: 'rgba(255,255,255,0.25)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-    },
-    tagText: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: '500',
     },
     navContainer: {
         flexDirection: 'row',

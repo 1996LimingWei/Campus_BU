@@ -43,20 +43,6 @@ export const UserCard: React.FC<UserCardProps> = ({ user, onPoke, onWave, onChat
                 <Text className="text-gray-500 mt-1">{user.major}</Text>
             </View>
 
-            {/* Tags */}
-            <View className="px-6 pb-4">
-                <View className="flex-row flex-wrap justify-center gap-2">
-                    {user.socialTags.map((tag, index) => (
-                        <View
-                            key={index}
-                            className="bg-primary/10 px-3 py-1.5 rounded-full"
-                        >
-                            <Text className="text-primary text-sm font-medium">{tag}</Text>
-                        </View>
-                    ))}
-                </View>
-            </View>
-
             {/* Divider */}
             <View className="h-px bg-gray-100 mx-6" />
 

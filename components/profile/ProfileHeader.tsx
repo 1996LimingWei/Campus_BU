@@ -14,6 +14,8 @@ interface ProfileHeaderProps {
     onSettingsPress?: () => void;
     onFollowPress?: () => void;
     onMessagePress?: () => void;
+    onFollowersPress?: () => void;
+    onFollowingPress?: () => void;
     followLoading?: boolean;
 }
 
@@ -24,6 +26,8 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     onSettingsPress,
     onFollowPress,
     onMessagePress,
+    onFollowersPress,
+    onFollowingPress,
     followLoading = false,
 }) => {
     const { t } = useTranslation();
@@ -38,6 +42,9 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     const followLabel = followLoading
         ? t('profile.follow_loading')
         : (user?.isFollowing ? t('profile.followed') : t('profile.follow'));
+
+    const followersCount = user?.stats?.followersCount || 0;
+    const followingCount = user?.stats?.followingCount || 0;
 
     return (
         <View style={styles.cardContainer}>
@@ -69,9 +76,27 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                             )}
                             <Text style={styles.bio} numberOfLines={1}>{subtitle}</Text>
                             {!isGuest && user?.stats && (
-                                <Text style={styles.metaText}>
-                                    {user.stats.followersCount || 0} 粉丝 · {user.stats.followingCount || 0} 关注
-                                </Text>
+                                <View style={styles.statsRow}>
+                                    <TouchableOpacity
+                                        style={styles.statItem}
+                                        onPress={onFollowersPress}
+                                        activeOpacity={onFollowersPress ? 0.6 : 1}
+                                        disabled={!onFollowersPress}
+                                    >
+                                        <Text style={styles.statNumber}>{followersCount}</Text>
+                                        <Text style={styles.statLabel}>{t('profile.followers')}</Text>
+                                    </TouchableOpacity>
+                                    <View style={styles.statDivider} />
+                                    <TouchableOpacity
+                                        style={styles.statItem}
+                                        onPress={onFollowingPress}
+                                        activeOpacity={onFollowingPress ? 0.6 : 1}
+                                        disabled={!onFollowingPress}
+                                    >
+                                        <Text style={styles.statNumber}>{followingCount}</Text>
+                                        <Text style={styles.statLabel}>{t('profile.following_people')}</Text>
+                                    </TouchableOpacity>
+                                </View>
                             )}
                         </View>
 
@@ -198,10 +223,30 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         marginTop: 6,
     },
-    metaText: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        marginTop: 6,
+    statsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    statItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    statNumber: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#111827',
+        marginRight: 3,
+    },
+    statLabel: {
+        fontSize: 13,
+        color: '#6B7280',
+    },
+    statDivider: {
+        width: 1,
+        height: 14,
+        backgroundColor: '#E5E7EB',
+        marginHorizontal: 12,
     },
     editIconBtn: {
         marginLeft: 12,
