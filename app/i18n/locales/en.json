@@ -102,6 +102,19 @@
         "follow_back": "Follow Back",
         "unfollow_confirm": "Unfollow this author?",
         "unfollow": "Unfollow",
+        "share": {
+            "share_post": "Share Post",
+            "title": "Share Post",
+            "following": "Following",
+            "follower": "Follower",
+            "messaged": "Messaged",
+            "no_users": "No users to share with",
+            "message_label": "Say something to your friend",
+            "message_placeholder": "Type a message...",
+            "send": "Send",
+            "success": "Post shared successfully",
+            "failed": "Failed to share"
+        },
         "schedule": {
             "title": "My Schedule",
             "subtitle": "Supports screenshot import, OCR recognition, and manual course entry.",

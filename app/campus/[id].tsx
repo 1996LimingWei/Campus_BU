@@ -6,6 +6,7 @@ import {
     MessageCircle,
     MoreHorizontal,
     Send,
+    Share2,
     Trash2,
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
@@ -30,6 +31,7 @@ import {
 import { ActionModal } from '../../components/campus/ActionModal';
 import { AdminDeletionModal, DeletionReason } from '../../components/campus/AdminDeletionModal';
 import { BottomSheet } from '../../components/campus/BottomSheet';
+import { SharePostModal } from '../../components/campus/SharePostModal';
 import { Toast, ToastType } from '../../components/campus/Toast';
 import { EduBadge } from '../../components/common/EduBadge';
 import { TranslatableText } from '../../components/common/TranslatableText';
@@ -45,6 +47,7 @@ import {
     fetchPostComments,
     togglePostLike,
 } from '../../services/campus';
+import { sendDirectMessage } from '../../services/messages';
 import { Post, PostComment } from '../../types';
 import { isAdmin, isHKBUEmail } from '../../utils/userUtils';
 
@@ -112,11 +115,14 @@ export default function PostDetailScreen() {
     const [userDeletionConfirmVisible, setUserDeletionConfirmVisible] = useState(false);
     const [isAdminUser, setIsAdminUser] = useState(false);
     const [isOwnPost, setIsOwnPost] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
 
     // Debug logging for settings sheet
     React.useEffect(() => {
         console.log('[PostDetail] settingsSheetVisible changed:', settingsSheetVisible);
-    }, [settingsSheetVisible]);
+        console.log('[PostDetail] currentUser:', currentUser ? 'exists' : 'null', 'uid:', currentUser?.uid);
+        console.log('[PostDetail] isAdminUser:', isAdminUser, 'isOwnPost:', isOwnPost);
+    }, [settingsSheetVisible, currentUser, isAdminUser, isOwnPost]);
 
     // Check if current user is admin
     React.useEffect(() => {
@@ -137,10 +143,10 @@ export default function PostDetailScreen() {
     React.useEffect(() => {
         if (post && currentUser?.uid) {
             const ownsPost = post.authorId === currentUser.uid;
-            console.log('[PostDetail] Post ownership check:', { 
-                postAuthorId: post.authorId, 
-                currentUserId: currentUser.uid, 
-                isOwnPost: ownsPost 
+            console.log('[PostDetail] Post ownership check:', {
+                postAuthorId: post.authorId,
+                currentUserId: currentUser.uid,
+                isOwnPost: ownsPost
             });
             setIsOwnPost(ownsPost);
         } else {
@@ -343,7 +349,13 @@ export default function PostDetailScreen() {
                 setToast({ visible: true, message: '已删除', type: 'success' });
                 // Global sync for deletion
                 DeviceEventEmitter.emit('campus_post_updated', { id: post.id, deleted: true });
-                setTimeout(() => router.back(), 1000);
+                setTimeout(() => {
+                    if (router.canGoBack()) {
+                        router.back();
+                    } else {
+                        router.replace('/(tabs)/campus' as any);
+                    }
+                }, 1000);
             } catch {
                 setToast({ visible: true, message: '删除失败', type: 'error' });
                 setDeleteModalVisible(false);
@@ -409,7 +421,13 @@ export default function PostDetailScreen() {
             });
 
             // Navigate back after short delay
-            setTimeout(() => router.back(), 1500);
+            setTimeout(() => {
+                if (router.canGoBack()) {
+                    router.back();
+                } else {
+                    router.replace('/(tabs)/campus' as any);
+                }
+            }, 1500);
         } catch (error) {
             console.error('[PostDetail] Error deleting post:', error);
             setToast({
@@ -439,7 +457,7 @@ export default function PostDetailScreen() {
 
     const handleUserDeleteConfirm = async () => {
         console.log('[PostDetail] User delete confirmed for own post');
-        
+
         if (!post) {
             console.error('[PostDetail] No post to delete');
             return;
@@ -470,7 +488,11 @@ export default function PostDetailScreen() {
 
             // Navigate back after short delay
             setTimeout(() => {
-                router.back();
+                if (router.canGoBack()) {
+                    router.back();
+                } else {
+                    router.replace('/(tabs)/campus' as any);
+                }
             }, 1500);
         } catch (error) {
             console.error('[PostDetail] Error deleting post (user deletion):', error);
@@ -545,7 +567,16 @@ export default function PostDetailScreen() {
 
                 {/* ── Top header bar ── */}
                 <View style={styles.topBar}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => {
+                        console.log('[PostDetail] Back button pressed');
+                        // Check if we can go back, otherwise navigate to campus feed
+                        if (router.canGoBack()) {
+                            router.back();
+                        } else {
+                            console.log('[PostDetail] No history, navigating to campus feed');
+                            router.replace('/(tabs)/campus' as any);
+                        }
+                    }}>
                         <ChevronLeft size={24} color="#1E3A8A" />
                     </TouchableOpacity>
                     <Text style={styles.topBarTitle}>HKCampus</Text>
@@ -909,6 +940,25 @@ export default function PostDetailScreen() {
                     visible={settingsSheetVisible}
                     onClose={() => setSettingsSheetVisible(false)}
                 >
+                    {/* Share post option - always shown at the top */}
+                    {currentUser?.uid && (
+                        <TouchableOpacity
+                            style={styles.shareOption}
+                            onPress={() => {
+                                console.log('[PostDetail] Share button clicked, currentUser.uid:', currentUser?.uid);
+                                console.log('[PostDetail] Post data:', { id, content: post?.content?.substring(0, 50) });
+                                setSettingsSheetVisible(false);
+                                setShowShareModal(true);
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.shareIconContainer}>
+                                <Share2 size={20} color="#1E3A8A" />
+                            </View>
+                            <Text style={styles.shareText}>{t('share.share_post', '分享帖子')}</Text>
+                        </TouchableOpacity>
+                    )}
+
                     {/* Admin-only delete option (for admin viewing others' posts) */}
                     {isAdminUser && !isOwnPost && (
                         <TouchableOpacity
@@ -922,7 +972,7 @@ export default function PostDetailScreen() {
                             <Text style={styles.adminDeleteText}>管理员删除</Text>
                         </TouchableOpacity>
                     )}
-                    
+
                     {/* User delete option (for own posts - normal users and admins) */}
                     {isOwnPost && (
                         <TouchableOpacity
@@ -936,7 +986,7 @@ export default function PostDetailScreen() {
                             <Text style={[styles.adminDeleteText, { color: '#111827' }]}>删除帖子</Text>
                         </TouchableOpacity>
                     )}
-                    
+
                     {/* Admin viewing own post: show both options (user + admin) */}
                     {isAdminUser && isOwnPost && (
                         <TouchableOpacity
@@ -950,9 +1000,9 @@ export default function PostDetailScreen() {
                             <Text style={styles.adminDeleteText}>管理员删除</Text>
                         </TouchableOpacity>
                     )}
-                    
-                    {/* Empty content for non-admin users viewing others' posts */}
-                    {!isAdminUser && !isOwnPost && <View style={{ flex: 1 }} />}
+
+                    {/* Empty content for non-admin users viewing others' posts (no share) */}
+                    {!currentUser && !isAdminUser && !isOwnPost && <View style={{ flex: 1 }} />}
                 </BottomSheet>
                 <AdminDeletionModal
                     visible={adminDeletionModalVisible}
@@ -982,6 +1032,33 @@ export default function PostDetailScreen() {
                     onHide={() => setToast(prev => ({ ...prev, visible: false }))}
                 />
                 {ugcActions.ActionSheet}
+                <SharePostModal
+                    visible={showShareModal}
+                    onClose={() => {
+                        console.log('[PostDetail] Share modal closed');
+                        setShowShareModal(false);
+                    }}
+                    onBack={() => {
+                        console.log('[PostDetail] Share modal back pressed, reopening settings sheet');
+                        setShowShareModal(false);
+                        setSettingsSheetVisible(true);
+                    }}
+                    currentUserId={currentUser?.uid || ''}
+                    postId={id}
+                    postContent={post?.content || ''}
+                    onShare={async (receiverId: string, message: string) => {
+                        console.log('[PostDetail] onShare called with receiverId:', receiverId);
+                        console.log('[PostDetail] Message length:', message.length);
+                        try {
+                            await sendDirectMessage(currentUser?.uid || '', receiverId, message);
+                            console.log('[PostDetail] sendDirectMessage succeeded');
+                            setToast({ visible: true, message: t('share.success', '帖子已分享'), type: 'success' });
+                        } catch (error) {
+                            console.error('[PostDetail] Failed to send message:', error);
+                            setToast({ visible: true, message: t('share.failed', '分享失败'), type: 'error' });
+                        }
+                    }}
+                />
             </Animated.View>
         </KeyboardAvoidingView>
     );
@@ -1366,6 +1443,26 @@ const styles = StyleSheet.create({
     actionCount: {
         fontSize: 11,
         color: '#6B7280',
+        fontWeight: '600',
+    },
+    shareOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        gap: 12,
+    },
+    shareIconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#EFF6FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    shareText: {
+        fontSize: 16,
+        color: '#111827',
         fontWeight: '600',
     },
     adminDeleteOption: {

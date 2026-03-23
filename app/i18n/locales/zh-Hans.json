@@ -102,6 +102,19 @@
         "follow_back": "回关",
         "unfollow_confirm": "不再关注该作者？",
         "unfollow": "不再关注",
+        "share": {
+            "share_post": "分享帖子",
+            "title": "分享帖子",
+            "following": "关注",
+            "follower": "粉丝",
+            "messaged": "私信",
+            "no_users": "暂无可分享的用户",
+            "message_label": "和朋友说点什么吧",
+            "message_placeholder": "输入消息...",
+            "send": "发送",
+            "success": "帖子已分享",
+            "failed": "分享失败"
+        },
         "schedule": {
             "title": "我的课表",
             "subtitle": "支持截图导入、OCR 识别和手动搜课补录。",
