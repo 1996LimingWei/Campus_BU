@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { ChevronRight, Flag, Heart, MapPin, MessageCircle, MoreVertical, Trash2, UserMinus, X } from 'lucide-react-native';
+import { ChevronRight, Flag, Heart, MapPin, MessageCircle, MoreVertical, Share2, Trash2, UserMinus, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Dimensions, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -14,11 +14,13 @@ import Animated, {
     useSharedValue,
     withSpring
 } from 'react-native-reanimated';
+import { sendDirectMessage } from '../../services/messages';
 import { blockUser, reportContent, ReportReason } from '../../services/moderation';
 import { Post } from '../../types';
 import { isAdminSync, isHKBUEmail } from '../../utils/userUtils';
 import { AdminBadge } from '../common/AdminBadge';
 import { EduBadge } from '../common/EduBadge';
+import { SharePostModal } from './SharePostModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -36,6 +38,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onLike, onC
     const [zoomImage, setZoomImage] = useState<string | null>(null);
     const [showMenu, setShowMenu] = useState(false);
     const [showReasons, setShowReasons] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
 
     const timeAgo = formatDistanceToNow(post.createdAt, { addSuffix: true });
     const pressed = useSharedValue(1);
@@ -267,6 +270,21 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onLike, onC
                     </View>
                 </Modal>
 
+                {/* Share Post Modal */}
+                {currentUserId && (
+                    <SharePostModal
+                        visible={showShareModal}
+                        onClose={() => setShowShareModal(false)}
+                        currentUserId={currentUserId}
+                        postId={post.id}
+                        postContent={post.content}
+                        onShare={async (receiverId, message) => {
+                            await sendDirectMessage(currentUserId, receiverId, message);
+                            Alert.alert(t('common.success'), t('share.success', '帖子已分享'));
+                        }}
+                    />
+                )}
+
                 {/* Custom Moderation Menu */}
                 <Modal
                     visible={showMenu}
@@ -298,6 +316,23 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onLike, onC
                                     <Text style={styles.menuTitle}>{t('moderation.options_title')}</Text>
 
                                     <View style={styles.menuSection}>
+                                        {/* Share Post Option - Always at the top */}
+                                        {currentUserId && (
+                                            <TouchableOpacity
+                                                style={styles.menuItem}
+                                                onPress={() => {
+                                                    setShowMenu(false);
+                                                    setShowShareModal(true);
+                                                }}
+                                            >
+                                                <View style={[styles.menuIcon, { backgroundColor: '#EFF6FF' }]}>
+                                                    <Share2 size={20} color="#1E3A8A" />
+                                                </View>
+                                                <Text style={styles.menuItemText}>{t('share.share_post', '分享帖子')}</Text>
+                                                <ChevronRight size={18} color="#D1D5DB" />
+                                            </TouchableOpacity>
+                                        )}
+
                                         <TouchableOpacity
                                             style={styles.menuItem}
                                             onPress={() => setShowReasons(true)}
