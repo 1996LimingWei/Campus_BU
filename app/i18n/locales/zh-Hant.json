@@ -98,6 +98,9 @@
         "following_title": "關注列表",
         "no_followers": "暫無粉絲",
         "no_following": "暫未關注任何人",
+        "follow_back": "回關",
+        "unfollow_confirm": "不再關注該作者？",
+        "unfollow": "不再關注",
         "schedule": {
             "title": "我的課表",
             "subtitle": "支援截圖匯入、OCR 識別與手動補錄課程。",

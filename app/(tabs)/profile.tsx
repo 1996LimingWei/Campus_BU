@@ -1,26 +1,26 @@
 import { formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Bell, Camera, ChevronRight, Copy, Edit3, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Shield, Sparkles, X } from 'lucide-react-native';
+import { Bell, ChevronRight, Copy, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Shield, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, InteractionManager, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { AdminBadge } from '../../components/common/AdminBadge';
-import { EduBadge } from '../../components/common/EduBadge';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, InteractionManager, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { FollowListModal } from '../../components/profile/FollowListModal';
 import MyScheduleCard from '../../components/profile/MyScheduleCard';
-import { useNotifications } from '../../context/NotificationContext';
-import { useLoginPrompt } from '../../hooks/useLoginPrompt';
-import { createUserProfile, getCurrentUser, getUserProfile, signOut, deleteAccount, uploadAndUpdateAvatar } from '../../services/auth';
-import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
-import { getPushNotificationsEnabled, setPushNotificationsEnabled as updatePushNotificationsEnabled } from '../../services/push_notifications';
-import { supabase } from '../../services/supabase';
-import { changeLanguage } from '../i18n/i18n';
 import { ProfileHeader } from '../../components/profile/ProfileHeader';
 import { ProfileMessages } from '../../components/profile/ProfileMessages';
 import { ProfilePostFeed } from '../../components/profile/ProfilePostFeed';
 import { ProfileTabs, ProfileTabType } from '../../components/profile/ProfileTabs';
+import { useNotifications } from '../../context/NotificationContext';
+import { useLoginPrompt } from '../../hooks/useLoginPrompt';
+import { deleteAccount, getCurrentUser, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
 import { fetchAnonymousPostsByAuthor, fetchLikedPosts, fetchPostsByAuthor, togglePostLike } from '../../services/campus';
+import { getFollowCounts } from '../../services/follows';
+import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
+import { getPushNotificationsEnabled, setPushNotificationsEnabled as updatePushNotificationsEnabled } from '../../services/push_notifications';
+import { supabase } from '../../services/supabase';
 import { Post, User as UserProfile } from '../../types';
-import { isAdmin, isHKBUEmail } from '../../utils/userUtils';
+import { isAdmin } from '../../utils/userUtils';
+import { changeLanguage } from '../i18n/i18n';
 
 // Helper to check if avatar URL is valid (not a local file path)
 const isValidAvatarUrl = (url?: string) => {
@@ -76,11 +76,20 @@ export default function ProfileScreen() {
                 setNotifications(notifData);
 
                 // Load Profile
-                const userProfile = await getUserProfile(user.uid);
+                const [userProfile, followCounts] = await Promise.all([
+                    getUserProfile(user.uid),
+                    getFollowCounts(user.uid),
+                ]);
                 if (userProfile) {
                     setProfile({
                         ...userProfile,
                         email: userProfile.email || user.email || '',
+                        stats: {
+                            postsCount: 0,
+                            followersCount: followCounts.followersCount,
+                            followingCount: followCounts.followingCount,
+                            appreciationCount: 0,
+                        },
                     });
                 }
             } else {
@@ -470,11 +479,18 @@ export default function ProfileScreen() {
     const pagerRef = React.useRef<ScrollView>(null);
     const scrollX = React.useRef(new Animated.Value(0)).current;
     const { width: SCREEN_W } = Dimensions.get('window');
+    const [followModalVisible, setFollowModalVisible] = useState(false);
+    const [followModalTab, setFollowModalTab] = useState<'followers' | 'following'>('followers');
 
     const scrollToMode = (mode: 'overview' | 'messages' | 'content') => {
         const index = mode === 'overview' ? 0 : mode === 'messages' ? 1 : 2;
         pagerRef.current?.scrollTo({ x: index * SCREEN_W, animated: true });
         setProfileMode(mode);
+    };
+
+    const handleFollowStatsPress = (tab: 'followers' | 'following') => {
+        setFollowModalTab(tab);
+        setFollowModalVisible(true);
     };
 
     const onPagerScroll = (e: any) => {
@@ -492,16 +508,17 @@ export default function ProfileScreen() {
             </View>
 
             {/* Profile Header Card */}
-            <ProfileHeader 
+            <ProfileHeader
                 user={profile}
                 isCurrentUser={true}
                 onEditPress={() => router.push('/(auth)/setup')}
-                onSettingsPress={() => {}} 
+                onSettingsPress={() => { }}
+                onFollowStatsPress={userId ? handleFollowStatsPress : undefined}
             />
 
             {/* Premium Tab Switcher */}
             <View style={styles.pageTabContainer}>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.pageTab}
                     onPress={() => scrollToMode('overview')}
                 >
@@ -510,7 +527,7 @@ export default function ProfileScreen() {
                     </Text>
                     {profileMode === 'overview' && <View style={styles.pageTabIndicator} />}
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.pageTab}
                     onPress={() => scrollToMode('messages')}
                 >
@@ -528,7 +545,7 @@ export default function ProfileScreen() {
                     </View>
                     {profileMode === 'messages' && <View style={styles.pageTabIndicator} />}
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.pageTab}
                     onPress={() => scrollToMode('content')}
                 >
@@ -553,8 +570,8 @@ export default function ProfileScreen() {
                 style={{ flex: 1 }}
             >
                 {/* Page 0: Overview */}
-                <ScrollView 
-                    style={{ width: SCREEN_W }} 
+                <ScrollView
+                    style={{ width: SCREEN_W }}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContentPager}
                 >
@@ -699,8 +716,8 @@ export default function ProfileScreen() {
                                 <LogOut size={20} color="#EF4444" />
                                 <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.signOutButton, { marginTop: 12, backgroundColor: 'transparent', borderWidth: 0 }]} 
+                            <TouchableOpacity
+                                style={[styles.signOutButton, { marginTop: 12, backgroundColor: 'transparent', borderWidth: 0 }]}
                                 onPress={handleDeleteAccount}
                             >
                                 <Text style={[styles.signOutText, { color: '#9CA3AF', fontSize: 13 }]}>{t('profile.delete_account')}</Text>
@@ -724,13 +741,13 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* Page 2: My Content */}
-                <ScrollView 
-                    style={{ width: SCREEN_W }} 
+                <ScrollView
+                    style={{ width: SCREEN_W }}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContentPager}
                 >
                     <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
-                    <ProfilePostFeed 
+                    <ProfilePostFeed
                         activeTab={activeTab}
                         posts={posts}
                         privatePosts={privatePosts}
@@ -871,6 +888,32 @@ export default function ProfileScreen() {
                     </View>
                 </TouchableOpacity>
             </Modal>
+
+            {/* Follow List Modal */}
+            {userId && (
+                <FollowListModal
+                    visible={followModalVisible}
+                    onClose={() => setFollowModalVisible(false)}
+                    userId={userId}
+                    currentUserId={userId}
+                    initialTab={followModalTab}
+                    onFollowCountChange={(followersCount, followingCount) => {
+                        // Update the profile stats in real-time
+                        setProfile(prev => {
+                            if (!prev) return prev;
+                            return {
+                                ...prev,
+                                stats: {
+                                    postsCount: prev.stats?.postsCount || 0,
+                                    followersCount,
+                                    followingCount,
+                                    appreciationCount: prev.stats?.appreciationCount || 0,
+                                },
+                            };
+                        });
+                    }}
+                />
+            )}
         </View>
     );
 }

@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FollowListModal } from '../../components/profile/FollowListModal';
 import { ProfileHeader } from '../../components/profile/ProfileHeader';
 import { ProfilePostFeed } from '../../components/profile/ProfilePostFeed';
-import { getUserProfile, getCurrentUser } from '../../services/auth';
+import { getCurrentUser, getUserProfile } from '../../services/auth';
 import { fetchPostsByAuthor, togglePostLike } from '../../services/campus';
 import { followUser, getFollowCounts, isFollowingUser, unfollowUser } from '../../services/follows';
-import { User, Post } from '../../types';
+import { Post, User } from '../../types';
 
 export default function UserProfileScreen() {
     const { t } = useTranslation();
@@ -19,6 +20,8 @@ export default function UserProfileScreen() {
     const [posts, setPosts] = useState<Post[]>([]);
     const [currentUserId, setCurrentUserId] = useState<string | undefined>();
     const [followLoading, setFollowLoading] = useState(false);
+    const [followModalVisible, setFollowModalVisible] = useState(false);
+    const [followModalTab, setFollowModalTab] = useState<'followers' | 'following'>('followers');
 
     useEffect(() => {
         const loadData = async () => {
@@ -65,7 +68,7 @@ export default function UserProfileScreen() {
     const handleLikePost = async (postId: string) => {
         if (!currentUserId) return;
         // Optimistic update
-        setPosts(prev => prev.map(p => 
+        setPosts(prev => prev.map(p =>
             p.id === postId ? {
                 ...p,
                 isLiked: !p.isLiked,
@@ -147,6 +150,11 @@ export default function UserProfileScreen() {
         }
     };
 
+    const handleFollowStatsPress = (tab: 'followers' | 'following') => {
+        setFollowModalTab(tab);
+        setFollowModalVisible(true);
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -174,8 +182,8 @@ export default function UserProfileScreen() {
             >
                 <View style={styles.blueHeader}>
                     <View style={styles.headerRow}>
-                        <TouchableOpacity 
-                            onPress={() => router.back()} 
+                        <TouchableOpacity
+                            onPress={() => router.back()}
                             style={[styles.backBtn, { position: 'absolute', left: 0 }]}
                         >
                             <ChevronLeft size={24} color="#fff" />
@@ -184,15 +192,14 @@ export default function UserProfileScreen() {
                     </View>
                 </View>
 
-                <ProfileHeader 
-                    user={user} 
+                <ProfileHeader
+                    user={user}
                     isCurrentUser={currentUserId === id}
                     onEditPress={currentUserId === id ? () => router.push('/(auth)/setup') : undefined}
                     onFollowPress={currentUserId && currentUserId !== id ? handleFollowToggle : undefined}
                     followLoading={followLoading}
                     onMessagePress={() => router.push({ pathname: '/messages/[id]' as any, params: { id: id! } })}
-                    onFollowersPress={id ? () => router.push({ pathname: '/profile/followers' as any, params: { userId: id, tab: 'followers' } }) : undefined}
-                    onFollowingPress={id ? () => router.push({ pathname: '/profile/followers' as any, params: { userId: id, tab: 'following' } }) : undefined}
+                    onFollowStatsPress={handleFollowStatsPress}
                 />
 
                 <View style={styles.pageTabContainer}>
@@ -202,7 +209,7 @@ export default function UserProfileScreen() {
                     </View>
                 </View>
 
-                <ProfilePostFeed 
+                <ProfilePostFeed
                     activeTab="posts"
                     posts={posts}
                     privatePosts={[]}
@@ -217,6 +224,29 @@ export default function UserProfileScreen() {
                 />
                 <View style={{ height: 100 }} />
             </ScrollView>
+
+            <FollowListModal
+                visible={followModalVisible}
+                onClose={() => setFollowModalVisible(false)}
+                userId={id || ''}
+                currentUserId={currentUserId}
+                initialTab={followModalTab}
+                onFollowCountChange={(followersCount, followingCount) => {
+                    // Update the user stats in real-time
+                    setUser(prev => {
+                        if (!prev) return prev;
+                        return {
+                            ...prev,
+                            stats: {
+                                postsCount: prev.stats?.postsCount || 0,
+                                followersCount,
+                                followingCount,
+                                appreciationCount: prev.stats?.appreciationCount || 0,
+                            },
+                        };
+                    });
+                }}
+            />
         </View>
     );
 }

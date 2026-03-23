@@ -99,6 +99,9 @@
         "following_title": "关注列表",
         "no_followers": "暂无粉丝",
         "no_following": "暂未关注任何人",
+        "follow_back": "回关",
+        "unfollow_confirm": "不再关注该作者？",
+        "unfollow": "不再关注",
         "schedule": {
             "title": "我的课表",
             "subtitle": "支持截图导入、OCR 识别和手动搜课补录。",

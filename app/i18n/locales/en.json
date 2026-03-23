@@ -99,6 +99,9 @@
         "following_title": "Following",
         "no_followers": "No followers yet",
         "no_following": "Not following anyone yet",
+        "follow_back": "Follow Back",
+        "unfollow_confirm": "Unfollow this author?",
+        "unfollow": "Unfollow",
         "schedule": {
             "title": "My Schedule",
             "subtitle": "Supports screenshot import, OCR recognition, and manual course entry.",

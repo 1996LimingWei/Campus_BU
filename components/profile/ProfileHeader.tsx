@@ -1,7 +1,7 @@
 import { Camera, Edit3, MessageCircle, User as UserIcon } from 'lucide-react-native';
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { User } from '../../types';
 import { isAdminSync, isHKBUEmail } from '../../utils/userUtils';
 import { AdminBadge } from '../common/AdminBadge';
@@ -17,6 +17,7 @@ interface ProfileHeaderProps {
     onFollowersPress?: () => void;
     onFollowingPress?: () => void;
     followLoading?: boolean;
+    onFollowStatsPress?: (tab: 'followers' | 'following') => void;
 }
 
 export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
@@ -29,6 +30,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     onFollowersPress,
     onFollowingPress,
     followLoading = false,
+    onFollowStatsPress,
 }) => {
     const { t } = useTranslation();
     const displayName = user?.displayName || t('profile.guest_name');
@@ -75,26 +77,26 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                                 </View>
                             )}
                             <Text style={styles.bio} numberOfLines={1}>{subtitle}</Text>
-                            {!isGuest && user?.stats && (
-                                <View style={styles.statsRow}>
+                            {!isGuest && user?.stats && onFollowStatsPress && (
+                                <View style={styles.followStatsRow}>
                                     <TouchableOpacity
-                                        style={styles.statItem}
-                                        onPress={onFollowersPress}
-                                        activeOpacity={onFollowersPress ? 0.6 : 1}
-                                        disabled={!onFollowersPress}
+                                        style={styles.followStatItem}
+                                        onPress={() => onFollowStatsPress('following')}
+                                        activeOpacity={0.6}
                                     >
-                                        <Text style={styles.statNumber}>{followersCount}</Text>
-                                        <Text style={styles.statLabel}>{t('profile.followers')}</Text>
+                                        <Text style={styles.followStatText}>
+                                            {followingCount}{t('profile.following_people', '关注')}
+                                        </Text>
                                     </TouchableOpacity>
-                                    <View style={styles.statDivider} />
+                                    <Text style={styles.followStatDivider}> </Text>
                                     <TouchableOpacity
-                                        style={styles.statItem}
-                                        onPress={onFollowingPress}
-                                        activeOpacity={onFollowingPress ? 0.6 : 1}
-                                        disabled={!onFollowingPress}
+                                        style={styles.followStatItem}
+                                        onPress={() => onFollowStatsPress('followers')}
+                                        activeOpacity={0.6}
                                     >
-                                        <Text style={styles.statNumber}>{followingCount}</Text>
-                                        <Text style={styles.statLabel}>{t('profile.following_people')}</Text>
+                                        <Text style={styles.followStatText}>
+                                            {followersCount}{t('profile.followers', '粉丝')}
+                                        </Text>
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -304,5 +306,24 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 1,
         borderColor: '#E5E7EB',
+    },
+    followStatsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    followStatItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    followStatText: {
+        fontSize: 13,
+        color: '#111827',
+        fontWeight: '500',
+    },
+    followStatDivider: {
+        fontSize: 13,
+        color: '#9CA3AF',
+        marginHorizontal: 8,
     },
 });
