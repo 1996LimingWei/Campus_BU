@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -41,6 +42,26 @@ export default function RootLayout() {
       // ignore if already hidden
     });
   }, []);
+
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as { type?: string } | undefined;
+      const title = String(response.notification.request.content.title || '');
+      const match = title.match(/(\d{4}-\d{2}-\d{2})/);
+      const digestDate = match?.[1];
+
+      if (data?.type === 'system' && title.includes('今日AI资讯摘要')) {
+        router.push({
+          pathname: '/agent/chat',
+          params: digestDate ? { digestDate } : undefined,
+        });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
 
   useEffect(() => {
     const checkAuth = async () => {

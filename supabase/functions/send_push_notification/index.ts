@@ -9,7 +9,15 @@ const getLocalizedTitle = (key: string): string => {
     'notifications.title_reply': '新回复',
     'notifications.title_like': '获赞',
   };
-  return titles[key] || '新通知';
+  if (titles[key]) {
+    return titles[key];
+  }
+
+  if (!key.startsWith('notifications.')) {
+    return key;
+  }
+
+  return '新通知';
 }
 
 const getLocalizedBody = (contentRaw: string): string => {

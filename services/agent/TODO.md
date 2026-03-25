@@ -6,7 +6,7 @@
 
 完整完成总结见：
 
-- [`services/agent/IMPLEMENTATION_SUMMARY.md`](/Users/xuweining/CodeBuddy/20260324190324/Campus_BU/services/agent/IMPLEMENTATION_SUMMARY.md)
+- [`services/agent/IMPLEMENTATION_SUMMARY.md`](/Campus_BU/services/agent/IMPLEMENTATION_SUMMARY.md)
 
 ---
 
@@ -53,6 +53,14 @@
 ## 高优先级修复
 
 当前高优先级问题已处理完成，后续优先进入检索、摘要质量和稳定子任务扩展。
+
+---
+
+## Daily Digest
+
+迁移到专属目录维护：
+
+- `services/agent/dailyDigest/TODO.md`
 
 ---
 

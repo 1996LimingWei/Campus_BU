@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Bot, Send, Sparkles, User } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,7 @@ import {
     Animated,
     Keyboard,
     KeyboardAvoidingView,
+    Linking,
     Platform,
     ScrollView,
     StyleSheet,
@@ -16,6 +17,7 @@ import {
     View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { runDailyDigestJobForUser } from '../../services/agent/dailyDigest';
 import { AgentExecutor } from '../../services/agent/executor';
 import { AgentStep } from '../../services/agent/types';
 import { getCurrentUser } from '../../services/auth';
@@ -89,6 +91,7 @@ const shouldUseCurrentLocation = (input: string): boolean => {
 
 export default function AgentChatScreen({ showBackButton = false }: AgentChatScreenProps) {
     const router = useRouter();
+    const params = useLocalSearchParams<{ digestDate?: string }>();
     const insets = useSafeAreaInsets();
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState<{
@@ -108,11 +111,70 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
     const scrollViewRef = useRef<ScrollView>(null);
     const agentRef = useRef<AgentExecutor>(new AgentExecutor('guest-session'));
 
+    const parseDigestDateParam = (value?: string): Date | null => {
+        if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return null;
+        }
+        const parsed = new Date(`${value}T00:00:00+08:00`);
+        if (Number.isNaN(parsed.getTime())) {
+            return null;
+        }
+        return parsed;
+    };
+
     useEffect(() => {
         const userId = currentUser?.uid || 'guest-session';
         agentRef.current = new AgentExecutor(userId);
         agentRef.current.setDeviceLocation(deviceLocation);
     }, [currentUser?.uid]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function injectDailyDigest() {
+            if (!currentUser?.uid) {
+                return;
+            }
+
+            try {
+                const preferredDate = parseDigestDateParam(
+                    Array.isArray(params.digestDate) ? params.digestDate[0] : params.digestDate
+                );
+                const result = preferredDate
+                    ? await runDailyDigestJobForUser(currentUser.uid, preferredDate)
+                    : await runDailyDigestJobForUser(currentUser.uid);
+                if (!result.ok || !result.payload || cancelled) {
+                    return;
+                }
+
+                const payload = result.payload;
+                const digestMessageId = `daily-digest-${payload.date}`;
+                setMessages((prev) => {
+                    if (prev.some((message) => message.id === digestMessageId)) {
+                        return prev;
+                    }
+
+                    return [
+                        ...prev,
+                        {
+                            role: 'assistant',
+                            content: payload.message,
+                            id: digestMessageId,
+                        },
+                    ];
+                });
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+            } catch (error) {
+                console.warn('[AgentChat] Failed to inject daily digest message:', error);
+            }
+        }
+
+        void injectDailyDigest();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentUser?.uid, params.digestDate]);
 
     useEffect(() => {
         agentRef.current.setDeviceLocation(deviceLocation);
@@ -311,16 +373,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                                         msg.content === '' ? (
                                             <TypingDots />
                                         ) : (
-                                            <TextInput
-                                                style={styles.assistantSelectableText}
-                                                value={msg.content}
-                                                multiline
-                                                editable={false}
-                                                scrollEnabled={false}
-                                                contextMenuHidden={false}
-                                                textAlignVertical="top"
-                                                selectionColor="#1E3A8A"
-                                            />
+                                            renderFormattedText(msg.content, false)
                                         )
                                     ) : (
                                         renderFormattedText(msg.content, true)
@@ -612,6 +665,16 @@ const styles = StyleSheet.create({
         margin: 0,
         includeFontPadding: false,
     },
+    inlineLink: {
+        color: '#1D4ED8',
+        textDecorationLine: 'underline',
+        fontWeight: '600',
+    },
+    inlineLinkUser: {
+        color: '#DBEAFE',
+        textDecorationLine: 'underline',
+        fontWeight: '600',
+    },
     typingDots: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -631,6 +694,47 @@ function renderFormattedText(text: string, isUser: boolean = false) {
     if (!text) return null;
     const lines = text.split('\n');
     const textColor = isUser ? '#fff' : '#1F2937';
+    const linkRegex = /(https?:\/\/[^\s]+)/g;
+
+    const openUrl = async (url: string) => {
+        try {
+            const canOpen = await Linking.canOpenURL(url);
+            if (!canOpen) {
+                return;
+            }
+            await Linking.openURL(url);
+        } catch (error) {
+            console.warn('[AgentChat] Failed to open url:', error);
+        }
+    };
+
+    const renderTextWithBold = (segmentText: string, lineKey: number): React.ReactNode[] => {
+        const boldRegex = /\*\*(.*?)\*\*/g;
+        const segments: React.ReactNode[] = [];
+        let lastIndex = 0;
+        let match: RegExpExecArray | null = boldRegex.exec(segmentText);
+
+        while (match) {
+            if (match.index > lastIndex) {
+                segments.push(segmentText.substring(lastIndex, match.index));
+            }
+
+            segments.push(
+                <Text key={`bold-${lineKey}-${match.index}`} style={{ fontWeight: 'bold', color: textColor }}>
+                    {match[1]}
+                </Text>
+            );
+
+            lastIndex = boldRegex.lastIndex;
+            match = boldRegex.exec(segmentText);
+        }
+
+        if (lastIndex < segmentText.length) {
+            segments.push(segmentText.substring(lastIndex));
+        }
+
+        return segments.length > 0 ? segments : [segmentText];
+    };
 
     return (
         <Text selectable style={{ fontSize: 15, color: textColor, lineHeight: 22 }}>
@@ -639,30 +743,33 @@ function renderFormattedText(text: string, isUser: boolean = false) {
                     ? `• ${line.trim().substring(2)}`
                     : line;
 
-                const boldRegex = /\*\*(.*?)\*\*/g;
-                const segments: React.ReactNode[] = [];
-                let lastIndex = 0;
-                let match;
+                const lineParts = displayLine.split(linkRegex);
+                const renderedParts: React.ReactNode[] = [];
 
-                while ((match = boldRegex.exec(displayLine)) !== null) {
-                    if (match.index > lastIndex) {
-                        segments.push(displayLine.substring(lastIndex, match.index));
+                lineParts.forEach((part, index) => {
+                    if (!part) return;
+
+                    if (/^https?:\/\//.test(part)) {
+                        renderedParts.push(
+                            <Text
+                                key={`link-${i}-${index}`}
+                                style={isUser ? styles.inlineLinkUser : styles.inlineLink}
+                                onPress={() => {
+                                    void openUrl(part);
+                                }}
+                            >
+                                {part}
+                            </Text>
+                        );
+                        return;
                     }
-                    segments.push(
-                        <Text key={`${i}-${match.index}`} style={{ fontWeight: 'bold', color: textColor }}>
-                            {match[1]}
-                        </Text>
-                    );
-                    lastIndex = boldRegex.lastIndex;
-                }
 
-                if (lastIndex < displayLine.length) {
-                    segments.push(displayLine.substring(lastIndex));
-                }
+                    renderedParts.push(...renderTextWithBold(part, i * 100 + index));
+                });
 
                 return (
                     <React.Fragment key={i}>
-                        {segments.length > 0 ? segments : displayLine}
+                        {renderedParts.length > 0 ? renderedParts : displayLine}
                         {i < lines.length - 1 ? '\n' : ''}
                     </React.Fragment>
                 );
