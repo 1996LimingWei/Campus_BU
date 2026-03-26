@@ -1,7 +1,11 @@
 import { DAILY_DIGEST_CONFIG } from './config';
 import { DigestItem } from './types';
 
-export const buildDailyDigestSummary = (items: DigestItem[], date: string): string => {
+export const buildDailyDigestSummary = (items: DigestItem[], date: string, extractedSummary?: string | null): string => {
+    if (extractedSummary) {
+        return extractedSummary;
+    }
+
     if (items.length === 0) {
         return `${date} 暂未抓取到可用资讯，稍后将自动重试。`;
     }

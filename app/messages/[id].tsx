@@ -1,7 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Camera, FileText, Image as ImageIcon, MoreVertical, Plus, Send } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Alert,
@@ -20,14 +22,11 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TranslatableText } from '../../components/common/TranslatableText';
 import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { useNotifications } from '../../context/NotificationContext';
 import { getCurrentUser } from '../../services/auth';
-import { reportContent, ReportReason } from '../../services/moderation';
 import {
     createDirectImageMessageContent,
     deleteDirectMessage,
@@ -42,6 +41,7 @@ import {
     subscribeToDirectConversation,
     uploadDirectMessageImage,
 } from '../../services/messages';
+import { reportContent, ReportReason } from '../../services/moderation';
 import { DirectMessage, DirectMessagePeer } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -68,6 +68,7 @@ export default function ChatScreen() {
     const router = useRouter();
     const flatListRef = useRef<FlatList>(null);
     const inputRef = useRef<TextInput>(null);
+    const hasInitialScrollCompletedRef = useRef(false);
     const { refreshCount } = useNotifications();
 
     const [loading, setLoading] = useState(true);
@@ -177,13 +178,10 @@ export default function ChatScreen() {
         });
     }, [conversationId, loadThread]);
 
+    // Reset scroll state when switching conversations
     useEffect(() => {
-        if (messages.length > 0) {
-            requestAnimationFrame(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            });
-        }
-    }, [messages.length]);
+        hasInitialScrollCompletedRef.current = false;
+    }, [peerUserId]);
 
     const sendOptimisticMessage = useCallback(async (optimisticMessage: DirectMessage, content: string) => {
         if (!currentUser?.uid || !peerUserId) {
@@ -611,6 +609,14 @@ export default function ChatScreen() {
                             messages.length === 0 && styles.messageListEmpty,
                         ]}
                         keyboardShouldPersistTaps="handled"
+                        onContentSizeChange={() => {
+                            if (messages.length > 0 && !hasInitialScrollCompletedRef.current) {
+                                flatListRef.current?.scrollToEnd({ animated: false });
+                                hasInitialScrollCompletedRef.current = true;
+                            } else if (messages.length > 0 && hasInitialScrollCompletedRef.current) {
+                                flatListRef.current?.scrollToEnd({ animated: false });
+                            }
+                        }}
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <Text style={styles.emptyTitle}>{t('messages.no_messages')}</Text>

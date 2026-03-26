@@ -694,7 +694,7 @@ function renderFormattedText(text: string, isUser: boolean = false) {
     if (!text) return null;
     const lines = text.split('\n');
     const textColor = isUser ? '#fff' : '#1F2937';
-    const linkRegex = /(https?:\/\/[^\s]+)/g;
+    const tokenRegex = /(【\d+】\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s]+)/g;
 
     const openUrl = async (url: string) => {
         try {
@@ -743,29 +743,39 @@ function renderFormattedText(text: string, isUser: boolean = false) {
                     ? `• ${line.trim().substring(2)}`
                     : line;
 
-                const lineParts = displayLine.split(linkRegex);
                 const renderedParts: React.ReactNode[] = [];
+                let lastIndex = 0;
+                let match: RegExpExecArray | null = tokenRegex.exec(displayLine);
 
-                lineParts.forEach((part, index) => {
-                    if (!part) return;
-
-                    if (/^https?:\/\//.test(part)) {
-                        renderedParts.push(
-                            <Text
-                                key={`link-${i}-${index}`}
-                                style={isUser ? styles.inlineLinkUser : styles.inlineLink}
-                                onPress={() => {
-                                    void openUrl(part);
-                                }}
-                            >
-                                {part}
-                            </Text>
-                        );
-                        return;
+                while (match) {
+                    if (match.index > lastIndex) {
+                        renderedParts.push(...renderTextWithBold(displayLine.slice(lastIndex, match.index), i * 100 + lastIndex));
                     }
 
-                    renderedParts.push(...renderTextWithBold(part, i * 100 + index));
-                });
+                    const fullMatch = match[0];
+                    const referenceUrl = match[2];
+                    const href = referenceUrl || fullMatch;
+                    const label = referenceUrl ? fullMatch.slice(0, fullMatch.indexOf('(')) : fullMatch;
+
+                    renderedParts.push(
+                        <Text
+                            key={`link-${i}-${match.index}`}
+                            style={isUser ? styles.inlineLinkUser : styles.inlineLink}
+                            onPress={() => {
+                                void openUrl(href);
+                            }}
+                        >
+                            {label}
+                        </Text>
+                    );
+
+                    lastIndex = match.index + fullMatch.length;
+                    match = tokenRegex.exec(displayLine);
+                }
+
+                if (lastIndex < displayLine.length) {
+                    renderedParts.push(...renderTextWithBold(displayLine.slice(lastIndex), i * 100 + lastIndex));
+                }
 
                 return (
                     <React.Fragment key={i}>

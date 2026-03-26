@@ -44,7 +44,6 @@ export const isAdmin = async (userId?: string | null): Promise<boolean> => {
     if (adminStatusCache &&
         adminStatusCache.userId === userId &&
         (now - adminStatusCache.timestamp) < CACHE_DURATION_MS) {
-        console.log('[isAdmin] Cache hit - isAdmin:', adminStatusCache.isAdmin);
         return adminStatusCache.isAdmin;
     }
 
@@ -79,7 +78,6 @@ export const isAdmin = async (userId?: string | null): Promise<boolean> => {
         }
 
         const isAdmin = !!data;
-        console.log('[isAdmin] RPC result - isAdmin:', isAdmin);
 
         // Update cache
         adminStatusCache = {
@@ -90,7 +88,6 @@ export const isAdmin = async (userId?: string | null): Promise<boolean> => {
 
         return isAdmin;
     } catch (error) {
-        console.error('[isAdmin] Exception:', error);
         return false;
     }
 };
@@ -109,11 +106,9 @@ export const isAdminSync = (userId?: string | null): boolean => {
     const now = Date.now();
     if (adminStatusCache.userId === userId &&
         (now - adminStatusCache.timestamp) < CACHE_DURATION_MS) {
-        console.log('[isAdminSync] Cache valid - isAdmin:', adminStatusCache.isAdmin);
         return adminStatusCache.isAdmin;
     }
 
-    console.log('[isAdminSync] Cache expired or wrong userId, returning false');
     return false;
 };
 

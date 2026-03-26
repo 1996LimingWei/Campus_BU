@@ -189,7 +189,11 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
 
     if (error) {
         if (error.code === 'PGRST116') return null; // PostgREST error for "no rows returned"
-        console.error('Error fetching profile:', error);
+        if (isTransientNetworkError(error)) {
+            console.warn('[auth.ts] transient profile fetch failure');
+        } else {
+            console.error('Error fetching profile:', error);
+        }
         throw error; // Rethrow actual errors (network, permissions, etc.)
     }
     if (!data) return null;
@@ -203,6 +207,16 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
         avatarUrl: data.avatar_url || data.avatarUrl,
         createdAt: data.created_at ? new Date(data.created_at) : new Date(),
     } as User;
+};
+
+const isTransientNetworkError = (error: unknown): boolean => {
+    const message = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error && 'message' in error
+            ? String((error as any).message)
+            : String(error || '');
+
+    return /network request failed|failed to fetch|networkerror|load failed/i.test(message);
 };
 
 export type UserSearchResult = {
@@ -253,7 +267,18 @@ export const getCurrentUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
         const user = session.user;
-        const profile = await getUserProfile(user.id);
+        let profile: User | null = null;
+
+        try {
+            profile = await getUserProfile(user.id);
+        } catch (error) {
+            if (!isTransientNetworkError(error)) {
+                throw error;
+            }
+
+            console.warn('[auth.ts] getCurrentUser falling back to session user after transient profile fetch failure');
+        }
+
         const avatar = profile?.avatarUrl || user.user_metadata?.avatar_url;
 
         return {

@@ -1,6 +1,8 @@
 export interface DigestItem {
     title: string;
     url: string;
+    lineIndex?: number;
+    contextSnippet?: string;
 }
 
 export interface DailyDigestPayload {

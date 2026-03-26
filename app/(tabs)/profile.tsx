@@ -58,7 +58,6 @@ export default function ProfileScreen() {
     const loadData = async () => {
         try {
             const user = await getCurrentUser();
-            console.log('[Profile] Current user:', user);
 
             if (user) {
                 setUserId(user.uid);
@@ -68,7 +67,6 @@ export default function ProfileScreen() {
 
                 // Check admin status
                 const adminStatus = await isAdmin(user.uid);
-                console.log('[Profile] Admin status result:', adminStatus);
                 setIsAdminUser(adminStatus);
 
                 // Load Notifications
@@ -93,7 +91,6 @@ export default function ProfileScreen() {
                     });
                 }
             } else {
-                console.log('[Profile] No user found');
                 setPushNotificationsEnabledState(false);
             }
         } catch (error) {
@@ -106,12 +103,10 @@ export default function ProfileScreen() {
 
     useFocusEffect(
         useCallback(() => {
-            console.log('[Profile] Screen focused, reloading data...');
             const task = InteractionManager.runAfterInteractions(() => {
                 loadData();
             });
             return () => {
-                console.log('[Profile] Screen unfocused');
                 task.cancel();
             };
         }, [])
