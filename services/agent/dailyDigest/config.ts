@@ -4,6 +4,7 @@ export const DAILY_DIGEST_CONFIG = {
     requestTimeoutMs: 12000,
     maxRetries: 2,
     maxItems: 24,
+    maxRefsPerLine: 2,
     summaryMaxChars: 220,
     sectionKeywords: ['AI资讯日报多渠道', 'AI 资讯日报多渠道', 'ai资讯日报多渠道'],
 };

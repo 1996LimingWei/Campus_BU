@@ -1,55 +1,66 @@
 import { composeDailyDigestMessage } from '../composeMessage';
 
 describe('composeDailyDigestMessage', () => {
-    it('formats each summary line with a clickable reference marker', () => {
-        const message = composeDailyDigestMessage('这是第一条摘要\n这是第二条摘要', [
-            { title: 'OpenAI 发布新模型', url: 'https://example.com/1', lineIndex: 0, contextSnippet: '这是第一条摘要' },
-            { title: '即梦 AI', url: 'https://example.com/2', lineIndex: 0, contextSnippet: '这是第一条摘要' },
-            { title: 'MIT 新研究', url: 'https://example.com/3', lineIndex: 1, contextSnippet: '这是第二条摘要' },
+    it('formats each summary line with clickable reference markers', () => {
+        const message = composeDailyDigestMessage('First summary line\nSecond summary line', [
+            { title: 'OpenAI release', url: 'https://example.com/1', lineIndex: 0, contextSnippet: 'First summary line' },
+            { title: 'Anthropic update', url: 'https://example.com/2', lineIndex: 0, contextSnippet: 'First summary line' },
+            { title: 'MIT research', url: 'https://example.com/3', lineIndex: 1, contextSnippet: 'Second summary line' },
         ]);
 
         expect(message).toBe(
-            '· 这是第一条摘要【1】(https://example.com/1)【2】(https://example.com/2)\n· 这是第二条摘要【3】(https://example.com/3)'
+            '· First summary line【1】(https://example.com/1)【2】(https://example.com/2)\n· Second summary line【3】(https://example.com/3)'
         );
     });
 
-    it('injects references before dunhao or comma-separated clause boundaries', () => {
-        const message = composeDailyDigestMessage('英伟达Nemotron Nano 12B、谷歌Lyria 3、TurboQuant及即梦3.0Pro等新模型密集发布', [
-            { title: '英伟达', url: 'https://example.com/1', lineIndex: 0, contextSnippet: '英伟达Nemotron Nano 12B 发布' },
-            { title: '谷歌', url: 'https://example.com/2', lineIndex: 0, contextSnippet: '谷歌Lyria 3 系列音乐模型上线' },
-            { title: 'TurboQuant', url: 'https://example.com/3', lineIndex: 0, contextSnippet: 'TurboQuant 大幅压低推理成本' },
-            { title: '即梦', url: 'https://example.com/4', lineIndex: 0, contextSnippet: '即梦3.0Pro 图像生成升级' },
+    it('injects references before comma-separated clause boundaries', () => {
+        const message = composeDailyDigestMessage('OpenAI, Anthropic, Google, xAI latest updates', [
+            { title: 'OpenAI', url: 'https://example.com/1', lineIndex: 0, contextSnippet: 'OpenAI latest updates' },
+            { title: 'Anthropic', url: 'https://example.com/2', lineIndex: 0, contextSnippet: 'Anthropic latest updates' },
+            { title: 'Google', url: 'https://example.com/3', lineIndex: 0, contextSnippet: 'Google latest updates' },
         ]);
 
         expect(message).toBe(
-            '· 英伟达Nemotron Nano 12B【1】(https://example.com/1)、谷歌Lyria 3【2】(https://example.com/2)、TurboQuant及即梦3.0Pro等新模型密集发布【3】(https://example.com/3)【4】(https://example.com/4)'
+            '· OpenAI【1】(https://example.com/1), Anthropic【2】(https://example.com/2), Google, xAI latest updates'
         );
     });
 
-    it('matches references to the most relevant clause within the same section', () => {
-        const message = composeDailyDigestMessage('英伟达Nemotron Nano 12B、谷歌Lyria 3、TurboQuant及即梦3.0Pro等新模型密集发布', [
+    it('matches references to the most relevant clause within the same line', () => {
+        const message = composeDailyDigestMessage('OpenAI, Anthropic, Google latest updates', [
             {
-                title: '新闻 A',
-                url: 'https://example.com/turbo',
+                title: 'Google',
+                url: 'https://example.com/google',
                 lineIndex: 0,
-                contextSnippet: '谷歌宣布 TurboQuant 大幅压低推理成本，手机端运行更顺滑',
+                contextSnippet: 'Google latest updates',
             },
             {
-                title: '新闻 B',
-                url: 'https://example.com/lyria',
+                title: 'Anthropic',
+                url: 'https://example.com/anthropic',
                 lineIndex: 0,
-                contextSnippet: '谷歌正式推出 Lyria 3 系列音乐模型，支持更长音频生成',
+                contextSnippet: 'Anthropic latest updates',
             },
             {
-                title: '新闻 C',
-                url: 'https://example.com/nemotron',
+                title: 'OpenAI',
+                url: 'https://example.com/openai',
                 lineIndex: 0,
-                contextSnippet: '英伟达发布 Nemotron Nano 12B，小参数模型能力增强',
+                contextSnippet: 'OpenAI latest updates',
             },
         ]);
 
         expect(message).toBe(
-            '· 英伟达Nemotron Nano 12B【3】(https://example.com/nemotron)、谷歌Lyria 3【2】(https://example.com/lyria)、TurboQuant及即梦3.0Pro等新模型密集发布【1】(https://example.com/turbo)'
+            '· OpenAI, Anthropic【2】(https://example.com/anthropic), Google latest updates【1】(https://example.com/google)'
+        );
+    });
+
+    it('limits each summary line to at most two references', () => {
+        const message = composeDailyDigestMessage('OpenAI, Anthropic, Google, xAI latest updates', [
+            { title: 'OpenAI', url: 'https://example.com/1', lineIndex: 0, contextSnippet: 'OpenAI latest updates' },
+            { title: 'Anthropic', url: 'https://example.com/2', lineIndex: 0, contextSnippet: 'Anthropic latest updates' },
+            { title: 'Google', url: 'https://example.com/3', lineIndex: 0, contextSnippet: 'Google latest updates' },
+        ]);
+
+        expect(message).toBe(
+            '· OpenAI【1】(https://example.com/1), Anthropic【2】(https://example.com/2), Google, xAI latest updates'
         );
     });
 });

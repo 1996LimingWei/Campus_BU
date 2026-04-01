@@ -1,3 +1,4 @@
+import { DAILY_DIGEST_CONFIG } from './config';
 import { DigestItem } from './types';
 
 const CLAUSE_DELIMITER_REGEX = /([、，,；;])/;
@@ -96,6 +97,7 @@ export const composeDailyDigestMessage = (summary: string, items: DigestItem[]):
     const formattedLines = summaryLines.map((line, index) => {
         const lineRefs = items
             .filter((item) => item.lineIndex === index || (item.lineIndex === undefined && items.indexOf(item) === index))
+            .slice(0, DAILY_DIGEST_CONFIG.maxRefsPerLine)
             .map((item) => ({
                 label: `【${refIndex++}】(${item.url})`,
                 matchText: item.contextSnippet || item.title,

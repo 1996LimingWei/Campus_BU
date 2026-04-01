@@ -98,3 +98,8 @@ OCR_SPACE_ENGINE=2
 - Demo 账号在 `constants/Config.ts` 中配置，便于演示与调试
 - 语言配置在 `app/i18n/`
 - Agent 配置在 `services/agent/config.ts`
+
+**Expo 启动说明**
+- `npm run start` 现在默认使用 `expo start --offline`。
+- 这样可以避免在代理网络或受限网络下，Expo CLI 启动时出现 `fetch failed` 错误。
+- 如果你想使用原来的在线启动方式，请运行 `npm run start:online`。
