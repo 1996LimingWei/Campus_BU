@@ -4,21 +4,8 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { sendOTP, updatePassword, verifyOTP } from '../../services/auth';
+import { AUTH_DOMAIN_OPTIONS, AUTH_LANGUAGE_OPTIONS } from '../authOptions';
 import { changeLanguage } from '../i18n/i18n';
-
-const DOMAINS = [
-    { label: '@life.hkbu.edu.hk', value: '@life.hkbu.edu.hk' },
-    { label: '@gmail.com', value: '@gmail.com' },
-    { label: '@qq.com', value: '@qq.com' },
-    { label: '@163.com', value: '@163.com' },
-    { label: 'Other / 其他', value: 'other' },
-];
-
-const LANGUAGES = [
-    { label: '简体中文', value: 'zh-Hans' },
-    { label: '繁體中文', value: 'zh-Hant' },
-    { label: 'English', value: 'en' },
-];
 
 export default function RegisterScreen() {
     const router = useRouter();
@@ -28,15 +15,12 @@ export default function RegisterScreen() {
     const [loading, setLoading] = useState(false);
     const [showDomainPicker, setShowDomainPicker] = useState(false);
     const [showLangPicker, setShowLangPicker] = useState(false);
-
-    // New State for Single-Page Flow
     const [otp, setOtp] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [countdown, setCountdown] = useState(0);
     const [isOtpSent, setIsOtpSent] = useState(false);
 
-    // Countdown Timer Effect
     React.useEffect(() => {
         let timer: any;
         if (countdown > 0) {
@@ -53,12 +37,11 @@ export default function RegisterScreen() {
     const handleSendOTP = async () => {
         if (!emailPrefix) {
             const placeholder = emailSuffix === 'other' ? t('auth.email_label') : t('auth.email_placeholder');
-            Alert.alert(t('common.tip', '提示'), placeholder);
+            Alert.alert(t('common.tip', 'Tip'), placeholder);
             return;
         }
 
         let prefix = emailPrefix.trim();
-        // If user pasted a full email with the same suffix, strip it to avoid duplication
         if (emailSuffix !== 'other' && prefix.toLowerCase().endsWith(emailSuffix.toLowerCase())) {
             prefix = prefix.substring(0, prefix.length - emailSuffix.length);
         }
@@ -72,9 +55,9 @@ export default function RegisterScreen() {
             const isResend = isOtpSent;
             setIsOtpSent(true);
             if (isResend) {
-                Alert.alert(t('auth.resend_success', '已重发'), t('auth.resend_msg', '验证码已重新发送到您的邮箱'));
+                Alert.alert(t('auth.resend_success', 'Resent'), t('auth.resend_msg', 'New OTP sent to your email'));
             } else {
-                Alert.alert(t('auth.send_success', '已发送'), t('auth.send_msg', '验证码已发送到您的邮箱'));
+                Alert.alert(t('auth.send_success', 'Sent'), t('auth.send_msg', 'Verification code sent to your email'));
             }
         } catch (error: any) {
             Alert.alert(t('common.error', 'Error'), error.message || t('auth.otp_failed', 'Failed to send verification code'));
@@ -84,7 +67,6 @@ export default function RegisterScreen() {
     };
 
     const handleRegister = async () => {
-        // Validation
         if (!isOtpSent) {
             Alert.alert(t('common.tip', 'Tip'), t('auth.send_otp_first', 'Please send verification code first'));
             return;
@@ -106,14 +88,10 @@ export default function RegisterScreen() {
 
         setLoading(true);
         try {
-            // 1. Verify OTP (Logs user in)
             const user = await verifyOTP(fullEmail, otp);
             if (!user) throw new Error('Verification failed');
 
-            // 2. Set Password
             await updatePassword(password);
-
-            // 3. Redirect to Setup
             router.replace('/(auth)/setup');
         } catch (error: any) {
             Alert.alert(t('common.error', 'Error'), error.message || t('auth.register_failed', 'Registration failed'));
@@ -162,7 +140,7 @@ export default function RegisterScreen() {
                     <TouchableOpacity style={styles.langSelector} onPress={() => setShowLangPicker(true)}>
                         <Globe size={18} color="#4B5563" />
                         <Text style={styles.langSelectorText}>
-                            {LANGUAGES.find(l => l.value === i18n.language)?.label || 'Language'}
+                            {AUTH_LANGUAGE_OPTIONS.find(l => l.value === i18n.language)?.label || 'Language'}
                         </Text>
                         <ChevronDown size={14} color="#4B5563" />
                     </TouchableOpacity>
@@ -222,7 +200,6 @@ export default function RegisterScreen() {
                         </View>
                     )}
 
-                    {/* OTP Input Row */}
                     <Text style={styles.label}>{t('auth.verification_code', 'Verification Code')}</Text>
                     <View style={styles.otpRow}>
                         <View style={[styles.inputContainer, { flex: 1 }]}>
@@ -247,7 +224,6 @@ export default function RegisterScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Password Input */}
                     <Text style={styles.label}>{t('auth.password_label')}</Text>
                     <View style={styles.passwordContainer}>
                         <TextInput
@@ -279,20 +255,20 @@ export default function RegisterScreen() {
                     </TouchableOpacity>
 
                     <View style={[styles.footer, { marginTop: 18, marginBottom: 4 }]}>
-                        <Text style={styles.footerText}>{t('auth.agreement_prefix', '登录即代表同意 ')}</Text>
+                        <Text style={styles.footerText}>{t('auth.agreement_prefix', 'By logging in you agree to ')}</Text>
                         <TouchableOpacity onPress={() => router.push({ pathname: '/legal', params: { tab: 'terms' } } as any)}>
-                            <Text style={styles.link}>{t('auth.user_agreement', '用户协议')}</Text>
+                            <Text style={styles.link}>{t('auth.user_agreement', 'Terms')}</Text>
                         </TouchableOpacity>
-                        <Text style={styles.footerText}> {t('auth.and', '与')} </Text>
+                        <Text style={styles.footerText}> {t('auth.and', ' and ')} </Text>
                         <TouchableOpacity onPress={() => router.push({ pathname: '/legal', params: { tab: 'privacy' } } as any)}>
-                            <Text style={styles.link}>{t('auth.privacy_policy', '隐私政策')}</Text>
+                            <Text style={styles.link}>{t('auth.privacy_policy', 'Privacy Policy')}</Text>
                         </TouchableOpacity>
                     </View>
 
                     <View style={styles.footer}>
                         <Text style={styles.footerText}>{t('auth.go_to_login_prefix', 'Already have an account?')}</Text>
                         <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-                            <Text style={styles.link}>{t('auth.go_to_login_link', 'Log In')}</Text>
+                            <Text style={styles.link}>{t('auth.go_to_login_link', 'Login')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -304,7 +280,7 @@ export default function RegisterScreen() {
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>{t('auth.select_domain', 'Select Domain')}</Text>
                         </View>
-                        <FlatList data={DOMAINS} renderItem={renderDomainItem} keyExtractor={item => item.value} />
+                        <FlatList data={[...AUTH_DOMAIN_OPTIONS]} renderItem={renderDomainItem} keyExtractor={item => item.value} />
                     </View>
                 </TouchableOpacity>
             </Modal>
@@ -315,7 +291,7 @@ export default function RegisterScreen() {
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>{t('auth.language_select')}</Text>
                         </View>
-                        <FlatList data={LANGUAGES} renderItem={renderLangItem} keyExtractor={item => item.value} />
+                        <FlatList data={[...AUTH_LANGUAGE_OPTIONS]} renderItem={renderLangItem} keyExtractor={item => item.value} />
                     </View>
                 </TouchableOpacity>
             </Modal>
@@ -502,7 +478,6 @@ const styles = StyleSheet.create({
         color: '#1E3A8A',
         fontWeight: 'bold',
     },
-    // New Styles for Single Page Auth
     otpRow: {
         flexDirection: 'row',
         gap: 12,

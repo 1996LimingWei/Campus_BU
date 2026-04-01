@@ -4,26 +4,13 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { signIn } from '../../services/auth';
+import { AUTH_DOMAIN_OPTIONS, AUTH_LANGUAGE_OPTIONS } from '../authOptions';
 import { changeLanguage } from '../i18n/i18n';
-
-const DOMAINS = [
-    { label: '@life.hkbu.edu.hk', value: '@life.hkbu.edu.hk' },
-    { label: '@gmail.com', value: '@gmail.com' },
-    { label: '@qq.com', value: '@qq.com' },
-    { label: '@163.com', value: '@163.com' },
-    { label: 'Other / 其他', value: 'other' },
-];
-
-const LANGUAGES = [
-    { label: '简体中文', value: 'zh-Hans' },
-    { label: '繁體中文', value: 'zh-Hant' },
-    { label: 'English', value: 'en' },
-];
 
 export default function LoginScreen() {
     const router = useRouter();
     const { t, i18n } = useTranslation();
-    const [emailPrefix, setEmailPrefix] = useState(''); // Also used for full email in 'other' mode
+    const [emailPrefix, setEmailPrefix] = useState('');
     const [emailSuffix, setEmailSuffix] = useState('@life.hkbu.edu.hk');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -39,12 +26,11 @@ export default function LoginScreen() {
     const handlePasswordLogin = async () => {
         if (!emailPrefix || !password) {
             const placeholder = emailSuffix === 'other' ? t('auth.email_label') : t('auth.email_placeholder');
-            Alert.alert(t('common.tip', '提示'), placeholder + ' & ' + t('auth.password_placeholder'));
+            Alert.alert(t('common.tip', 'Tip'), `${placeholder} & ${t('auth.password_placeholder')}`);
             return;
         }
 
         let prefix = emailPrefix.trim();
-        // If user accidentally entered full email in the prefix field
         if (emailSuffix !== 'other' && prefix.toLowerCase().endsWith(emailSuffix.toLowerCase())) {
             prefix = prefix.substring(0, prefix.length - emailSuffix.length);
         }
@@ -58,14 +44,12 @@ export default function LoginScreen() {
                 router.replace('/(tabs)/campus');
             }
         } catch (error: any) {
-            // Check if the error is "Invalid login credentials" which usually means user doesn't exist or wrong password.
-            // In a campus context, if they can't login, we can offer registration or specifically check if they exist.
             const isInvalidCredentials = error.message === 'Invalid login credentials' || error.status === 400 || error.status === 422;
 
             if (isInvalidCredentials) {
                 Alert.alert(
-                    t('common.error', '错误'),
-                    t('auth.invalid_credentials', '邮箱或密码错误，请重试。如未注册请先注册。'),
+                    t('common.error', 'Error'),
+                    t('auth.invalid_credentials', 'Invalid email or password. Please try again or register if you do not have an account.'),
                     [
                         { text: t('common.cancel'), style: 'cancel' },
                         {
@@ -75,7 +59,7 @@ export default function LoginScreen() {
                     ]
                 );
             } else {
-                Alert.alert(t('common.error', '错误'), error.message || t('auth.login_failed', '登录失败'));
+                Alert.alert(t('common.error', 'Error'), error.message || t('auth.login_failed', 'Login failed'));
             }
         } finally {
             setLoading(false);
@@ -118,7 +102,7 @@ export default function LoginScreen() {
                     <TouchableOpacity style={styles.langSelector} onPress={() => setShowLangPicker(true)}>
                         <Globe size={18} color="#4B5563" />
                         <Text style={styles.langSelectorText}>
-                            {LANGUAGES.find(l => l.value === i18n.language)?.label || 'Language'}
+                            {AUTH_LANGUAGE_OPTIONS.find(l => l.value === i18n.language)?.label || 'Language'}
                         </Text>
                         <ChevronDown size={14} color="#4B5563" />
                     </TouchableOpacity>
@@ -227,22 +211,19 @@ export default function LoginScreen() {
                         <Text style={styles.guestButtonText}>{t('auth.guest_login')}</Text>
                     </TouchableOpacity>
 
-
-
                     <View style={styles.footer}>
-                        <Text style={styles.footerText}>{t('auth.agreement_prefix', '登录即代表同意 ')}</Text>
+                        <Text style={styles.footerText}>{t('auth.agreement_prefix', 'By logging in you agree to ')}</Text>
                         <TouchableOpacity onPress={() => router.push({ pathname: '/legal', params: { tab: 'terms' } } as any)}>
-                            <Text style={styles.link}>{t('auth.user_agreement', '用户协议')}</Text>
+                            <Text style={styles.link}>{t('auth.user_agreement', 'Terms')}</Text>
                         </TouchableOpacity>
-                        <Text style={styles.footerText}> {t('auth.and', '与')} </Text>
+                        <Text style={styles.footerText}> {t('auth.and', ' and ')} </Text>
                         <TouchableOpacity onPress={() => router.push({ pathname: '/legal', params: { tab: 'privacy' } } as any)}>
-                            <Text style={styles.link}>{t('auth.privacy_policy', '隐私政策')}</Text>
+                            <Text style={styles.link}>{t('auth.privacy_policy', 'Privacy Policy')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
             </ScrollView>
 
-            {/* Domain Picker Modal */}
             <Modal
                 visible={showDomainPicker}
                 transparent
@@ -256,10 +237,10 @@ export default function LoginScreen() {
                 >
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>{t('auth.select_domain', '选择域名')}</Text>
+                            <Text style={styles.modalTitle}>{t('auth.select_domain', 'Select Domain')}</Text>
                         </View>
                         <FlatList
-                            data={DOMAINS}
+                            data={[...AUTH_DOMAIN_OPTIONS]}
                             renderItem={renderDomainItem}
                             keyExtractor={item => item.value}
                         />
@@ -267,7 +248,6 @@ export default function LoginScreen() {
                 </TouchableOpacity>
             </Modal>
 
-            {/* Language Picker Modal */}
             <Modal
                 visible={showLangPicker}
                 transparent
@@ -284,7 +264,7 @@ export default function LoginScreen() {
                             <Text style={styles.modalTitle}>{t('auth.language_select')}</Text>
                         </View>
                         <FlatList
-                            data={LANGUAGES}
+                            data={[...AUTH_LANGUAGE_OPTIONS]}
                             renderItem={renderLangItem}
                             keyExtractor={item => item.value}
                         />

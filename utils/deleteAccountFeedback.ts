@@ -1,4 +1,4 @@
-type TranslateFn = (key: string, defaultValue?: string) => string;
+type TranslateFn = (...args: any[]) => any;
 
 type AlertCopy = {
     title: string;
@@ -6,14 +6,14 @@ type AlertCopy = {
 };
 
 export const getDeleteAccountSuccessAlertCopy = (t: TranslateFn): AlertCopy => ({
-    title: t('common.success', 'Success'),
-    message: t('profile.delete_account_success', 'Your account has been deleted.'),
+    title: String(t('common.success', { defaultValue: 'Success' })),
+    message: String(t('profile.delete_account_success', { defaultValue: 'Your account has been deleted.' })),
 });
 
 export const getDeleteAccountErrorAlertCopy = (t: TranslateFn): AlertCopy => ({
-    title: t('common.error', 'Error'),
-    message: t(
+    title: String(t('common.error', { defaultValue: 'Error' })),
+    message: String(t(
         'profile.delete_account_failed_logged_in',
-        'Account deletion failed. You are still signed in. Please try again.'
-    ),
+        { defaultValue: 'Account deletion failed. You are still signed in. Please try again.' }
+    )),
 });
