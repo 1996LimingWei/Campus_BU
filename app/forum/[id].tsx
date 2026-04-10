@@ -72,6 +72,12 @@ export default function ForumPostDetailScreen() {
     const ugcActions = useUgcEntryActions({
         currentUserId: user?.uid,
         ensureLoggedIn: () => !!checkLogin(user),
+        onBlockedUser: (blockedUserId) => {
+            setComments((prev) => prev.filter((comment) => comment.authorId !== blockedUserId));
+            if (post?.authorId === blockedUserId) {
+                setPost(null);
+            }
+        },
     });
 
     const openPublicProfile = (authorId?: string) => {
@@ -88,7 +94,7 @@ export default function ForumPostDetailScreen() {
                 setUser(currentUser);
                 const [p, c] = await Promise.all([
                     fetchForumPostById(id as string, currentUser?.uid),
-                    fetchForumComments(id as string),
+                    fetchForumComments(id as string, currentUser?.uid),
                 ]);
                 if (p) setPost(p);
                 setComments(c);
@@ -256,7 +262,19 @@ export default function ForumPostDetailScreen() {
                         <MoreHorizontal size={22} color="#1E3A8A" />
                     </TouchableOpacity>
                 ) : (
-                    <View style={{ width: 40 }} />
+                    <TouchableOpacity
+                        style={styles.iconBtn}
+                        onPress={() => ugcActions.openActions({
+                            id: post.id,
+                            targetId: post.id,
+                            targetType: 'forum_post',
+                            content: `${post.title}\n${post.content || ''}`.trim(),
+                            authorId: post.authorId,
+                            authorName: post.authorName,
+                        })}
+                    >
+                        <MoreHorizontal size={22} color="#1E3A8A" />
+                    </TouchableOpacity>
                 )}
             </View>
 
@@ -354,13 +372,13 @@ export default function ForumPostDetailScreen() {
                             <TouchableOpacity
                                 style={styles.commentBody}
                                 activeOpacity={0.95}
-                                onLongPress={() => ugcActions.openActions({
-                                    id: c.id,
-                                    targetId: c.id,
-                                    targetType: 'comment',
-                                    content: c.content,
-                                    authorId: c.authorId,
-                                    authorName: c.authorName,
+                                    onLongPress={() => ugcActions.openActions({
+                                        id: c.id,
+                                        targetId: c.id,
+                                        targetType: 'forum_comment',
+                                        content: c.content,
+                                        authorId: c.authorId,
+                                        authorName: c.authorName,
                                 })}
                             >
                                 <View style={styles.commentHeader}>
@@ -415,7 +433,7 @@ export default function ForumPostDetailScreen() {
                                             onLongPress={() => ugcActions.openActions({
                                                 id: reply.id,
                                                 targetId: reply.id,
-                                                targetType: 'comment',
+                                                targetType: 'forum_comment',
                                                 content: reply.content,
                                                 authorId: reply.authorId,
                                                 authorName: reply.authorName,

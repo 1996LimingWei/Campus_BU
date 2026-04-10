@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react-native';
 import { CachedRemoteImage } from '../common/CachedRemoteImage';
@@ -36,6 +36,17 @@ export const ProfileMessages: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [conversations, setConversations] = useState<DirectConversationSummary[]>([]);
+    const SHARE_CARD_PREVIEW_MARKER = '[share_card]';
+
+    const localizePreviewText = useCallback((text?: string) => {
+        if (!text) {
+            return '';
+        }
+        if (text === SHARE_CARD_PREVIEW_MARKER) {
+            return t('messages.share_card_preview', '【分享卡片】');
+        }
+        return text;
+    }, [t]);
 
     const loadConversations = useCallback(async (silent = false) => {
         try {
@@ -111,12 +122,6 @@ export const ProfileMessages: React.FC = () => {
         };
     }, []);
 
-    useFocusEffect(
-        useCallback(() => {
-            loadConversations(true);
-        }, [loadConversations])
-    );
-
     const filteredConversations = useMemo(() => {
         const keyword = search.trim().toLowerCase();
         if (!keyword) {
@@ -125,11 +130,12 @@ export const ProfileMessages: React.FC = () => {
 
         return conversations.filter((conversation) => {
             const major = conversation.user.major || '';
+            const localizedLastMessage = localizePreviewText(conversation.lastMessage);
             return conversation.user.name.toLowerCase().includes(keyword)
                 || major.toLowerCase().includes(keyword)
-                || conversation.lastMessage.toLowerCase().includes(keyword);
+                || localizedLastMessage.toLowerCase().includes(keyword);
         });
-    }, [conversations, search]);
+    }, [conversations, localizePreviewText, search]);
 
     const handleOpenConversation = useCallback((item: DirectConversationSummary) => {
         setConversations((previous) => previous.map((conversation) => (
@@ -171,7 +177,7 @@ export const ProfileMessages: React.FC = () => {
                 </View>
                 <View style={styles.messageRow}>
                     <Text style={styles.lastMessage} numberOfLines={1}>
-                        {item.lastMessage || t('messages.say_hi')}
+                        {localizePreviewText(item.lastMessage) || t('messages.say_hi')}
                     </Text>
                     {item.unreadCount > 0 && (
                         <View style={styles.unreadBadge}>

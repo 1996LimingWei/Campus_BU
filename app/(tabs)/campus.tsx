@@ -24,11 +24,9 @@ import { ActionModal } from '../../components/campus/ActionModal';
 import MasonryGrid from '../../components/campus/MasonryGrid';
 import { MasonryPostCard } from '../../components/campus/MasonryPostCard';
 import { Toast, ToastType } from '../../components/campus/Toast';
-import { EULAModal } from '../../components/common/EULAModal';
 import { Skeleton } from '../../components/common/Skeleton';
 import { ForumPostRow } from '../../components/forum/ForumPostRow';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
-import storage from '../../lib/storage';
 import { getCurrentUser } from '../../services/auth';
 import { deletePost, fetchPosts, subscribeToPosts, togglePostLike } from '../../services/campus';
 import { fetchForumPosts } from '../../services/forum';
@@ -88,7 +86,6 @@ export default function CampusScreen() {
     message: '',
     type: 'success',
   });
-  const [eulaVisible, setEulaVisible] = useState(false);
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'latest' | 'top'>('latest');
 
@@ -137,9 +134,16 @@ export default function CampusScreen() {
         setForumPosts(prev => prev.map(p => p.id === data.id ? { ...p, ...data.updates } : p));
       }
     });
+    const blockSub = DeviceEventEmitter.addListener('user_blocked', (data) => {
+      if (data.userId) {
+        setPosts(prev => prev.filter(p => p.authorId !== data.userId));
+        setForumPosts(prev => prev.filter(p => p.authorId !== data.userId));
+      }
+    });
     return () => {
       campusSub.remove();
       forumSub.remove();
+      blockSub.remove();
     };
   }, []);
 
@@ -228,30 +232,11 @@ export default function CampusScreen() {
   }, []);
 
   useEffect(() => {
-    const checkEULA = async () => {
-      try {
-        const accepted = await storage.getItem('eula_accepted');
-        if (accepted !== 'true') setEulaVisible(true);
-      } catch (e) {
-        console.error('EULA check error:', e);
-      }
-    };
-    checkEULA();
     loadPosts();
 
     const unsubscribe = subscribeToPosts(() => loadPosts(true));
     return () => unsubscribe();
   }, [loadPosts]);
-
-  const handleAcceptEULA = async () => {
-    try {
-      await storage.setItem('eula_accepted', 'true');
-    } catch (e) {
-      console.error('EULA accept error:', e);
-    } finally {
-      setEulaVisible(false);
-    }
-  };
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -662,8 +647,6 @@ export default function CampusScreen() {
         type={toast.type}
         onHide={() => setToast(prev => ({ ...prev, visible: false }))}
       />
-
-      <EULAModal visible={eulaVisible} onAccept={handleAcceptEULA} />
 
       {/* Language switcher modal */}
       <Modal

@@ -2,7 +2,9 @@ import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import { CourseTeaming, TeamingComment } from '../types';
 import { IMMUTABLE_STORAGE_CACHE_CONTROL } from '../utils/remoteImage';
+import { ensureMultipleContentsSafety } from './contentFilter';
 import { getLocalCourses } from './courses';
+import { getBlockedUserIds } from './moderation';
 import { supabase } from './supabase';
 
 const TEAMING_TABLE = 'course_teaming';
@@ -163,7 +165,7 @@ const uploadTeamingAvatar = async (uri: string, prefix: string): Promise<string>
 /**
  * Fetch teaming requests for a specific course.
  */
-export const fetchTeamingRequests = async (courseId: string): Promise<CourseTeaming[]> => {
+export const fetchTeamingRequests = async (courseId: string, currentUserId?: string): Promise<CourseTeaming[]> => {
     try {
         const resolvedCourseId = await resolveCourseIdForTeamingQueries(courseId);
 
@@ -179,7 +181,17 @@ export const fetchTeamingRequests = async (courseId: string): Promise<CourseTeam
             return [];
         }
 
-        return (data || []).map(mapSupabaseToTeaming);
+        let rows = (data || []).map(mapSupabaseToTeaming);
+
+        if (currentUserId) {
+            const blockedIds = await getBlockedUserIds(currentUserId);
+            if (blockedIds.length > 0) {
+                const blockedSet = new Set(blockedIds);
+                rows = rows.filter((row) => !blockedSet.has(row.userId));
+            }
+        }
+
+        return rows;
     } catch (e) {
         console.error('Exception fetching teaming requests:', e);
         return [];
@@ -191,6 +203,12 @@ export const fetchTeamingRequests = async (courseId: string): Promise<CourseTeam
  */
 export const postTeamingRequest = async (request: Partial<CourseTeaming>): Promise<{ success: boolean; data?: CourseTeaming; error?: string }> => {
     try {
+        ensureMultipleContentsSafety([
+            request.section || '',
+            request.selfIntro || '',
+            request.targetTeammate || '',
+        ]);
+
         const { resolvedCourseId, error: courseError } = await ensureCourseExistsForTeaming(request.courseId);
         if (courseError || !resolvedCourseId) {
             return {
@@ -299,7 +317,7 @@ export const toggleTeamingLike = async (teamingId: string, userId: string): Prom
 /**
  * Fetch comments for a teaming request.
  */
-export const fetchTeamingComments = async (teamingId: string): Promise<TeamingComment[]> => {
+export const fetchTeamingComments = async (teamingId: string, currentUserId?: string): Promise<TeamingComment[]> => {
     try {
         const { data, error } = await supabase
             .from(TEAMING_COMMENTS_TABLE)
@@ -312,7 +330,17 @@ export const fetchTeamingComments = async (teamingId: string): Promise<TeamingCo
             return [];
         }
 
-        return (data || []).map(mapSupabaseToTeamingComment);
+        let rows = (data || []).map(mapSupabaseToTeamingComment);
+
+        if (currentUserId) {
+            const blockedIds = await getBlockedUserIds(currentUserId);
+            if (blockedIds.length > 0) {
+                const blockedSet = new Set(blockedIds);
+                rows = rows.filter((row) => !blockedSet.has(row.authorId));
+            }
+        }
+
+        return rows;
     } catch (e) {
         console.error('Exception fetching teaming comments:', e);
         return [];
@@ -330,6 +358,8 @@ export const postTeamingComment = async (
     replyToName?: string
 ): Promise<{ success: boolean; error?: string }> => {
     try {
+        ensureMultipleContentsSafety([content, replyToName || '']);
+
         // Support both naming conventions (uid/id, displayName/name, avatarUrl/avatar)
         const authorId = author.uid || author.id;
         const authorName = author.displayName || author.display_name || author.name || 'Anonymous';

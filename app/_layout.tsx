@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
+import { EULAModal } from '../components/common/EULAModal';
 import { StartupAnimation } from '../components/common/StartupAnimation';
 import { CourseActivityProvider } from '../context/CourseActivityContext';
 import { LoginPromptProvider } from '../context/LoginPromptContext';
@@ -13,6 +14,7 @@ import '../global.css';
 import { getUserProfile, onAuthChange, shouldSkipAuthRedirect } from '../services/auth';
 import { prefetchBuildings } from '../services/buildings';
 import { prefetchLocalCourses } from '../services/courses';
+import { acceptCommunityEula, hasAcceptedCommunityEula } from '../services/moderation';
 import './i18n/i18n'; // Initialize i18n
 import { i18nPromise } from './i18n/i18n';
 
@@ -27,6 +29,8 @@ export default function RootLayout() {
   const segmentsRef = useRef(segments);
   const [loading, setLoading] = useState(true);
   const [isAnimationFinished, setIsAnimationFinished] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [eulaVisible, setEulaVisible] = useState(false);
 
   // Keep segmentsRef in sync with latest segments
   useEffect(() => {
@@ -71,6 +75,8 @@ export default function RootLayout() {
       // Normal auth check
       const unsubscribe = onAuthChange(async (user) => {
         try {
+          setCurrentUser(user);
+
           // Skip all redirects if the flag is set (during password reset flow)
           if (shouldSkipAuthRedirect()) {
             setLoading(false);
@@ -132,6 +138,40 @@ export default function RootLayout() {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    const root = segments[0] || '';
+    const tab = segments[1] || '';
+
+    const requiresEula =
+      (root === '(tabs)' && ['campus', 'course', 'messages'].includes(tab))
+      || ['campus', 'forum', 'courses', 'teachers', 'messages'].includes(root);
+
+    if (!requiresEula) {
+      setEulaVisible(false);
+      return;
+    }
+
+    let cancelled = false;
+    const checkEulaGate = async () => {
+      const accepted = await hasAcceptedCommunityEula(currentUser?.uid || null);
+      if (!cancelled) {
+        setEulaVisible(!accepted);
+      }
+    };
+
+    void checkEulaGate();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.uid, segments]);
+
+  const handleAcceptEula = async () => {
+    const accepted = await acceptCommunityEula(currentUser?.uid || null);
+    if (accepted) {
+      setEulaVisible(false);
+    }
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       {(!isAnimationFinished || loading) && (
@@ -150,6 +190,7 @@ export default function RootLayout() {
                 headerShown: false,
               }}
             />
+            <EULAModal visible={eulaVisible} onAccept={handleAcceptEula} />
             <StatusBar style="auto" />
           </CourseActivityProvider>
         </NotificationProvider>

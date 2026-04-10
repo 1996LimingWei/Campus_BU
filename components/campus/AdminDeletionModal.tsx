@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export type DeletionReason =
     | 'spam'
@@ -12,12 +13,7 @@ export interface DeletionReasonOption {
     label: string;
 }
 
-export const DELETION_REASONS: DeletionReasonOption[] = [
-    { id: 'spam', label: '垃圾内容/广告' },
-    { id: 'unfriendly', label: '不友善/违规内容' },
-    { id: 'duplicate', label: '重复内容' },
-    { id: 'other', label: '其他' },
-];
+export const DELETION_REASONS: DeletionReason[] = ['spam', 'unfriendly', 'duplicate', 'other'];
 
 interface AdminDeletionModalProps {
     visible: boolean;
@@ -37,8 +33,23 @@ export const AdminDeletionModal: React.FC<AdminDeletionModalProps> = ({
     onConfirm,
     onCancel,
 }) => {
+    const { t } = useTranslation();
     const [selectedReason, setSelectedReason] = useState<DeletionReason>('spam');
     const [customReasonText, setCustomReasonText] = useState('');
+
+    const reasonOptions = useMemo<DeletionReasonOption[]>(() => {
+        const getReasonLabel = (reason: DeletionReason) => {
+            if (reason === 'spam') return t('campus_detail.deletion_reason_spam', '垃圾内容/广告');
+            if (reason === 'unfriendly') return t('campus_detail.deletion_reason_unfriendly', '不友善/违规内容');
+            if (reason === 'duplicate') return t('campus_detail.deletion_reason_duplicate', '重复内容');
+            return t('campus_detail.deletion_reason_other', '其他');
+        };
+
+        return DELETION_REASONS.map((reason) => ({
+            id: reason,
+            label: getReasonLabel(reason),
+        }));
+    }, [t]);
 
     const handleConfirm = () => {
         console.log('[AdminDeletionModal] Confirm pressed');
@@ -47,7 +58,10 @@ export const AdminDeletionModal: React.FC<AdminDeletionModalProps> = ({
         if (selectedReason === 'other') {
             if (!customReasonText.trim()) {
                 console.log('[AdminDeletionModal] Custom reason required but empty');
-                alert('请输入删除原因');
+                Alert.alert(
+                    t('common.tip', '提示'),
+                    t('campus_detail.delete_reason_required', '请输入删除原因'),
+                );
                 return;
             }
             console.log('[AdminDeletionModal] Custom reason:', customReasonText);
@@ -81,12 +95,12 @@ export const AdminDeletionModal: React.FC<AdminDeletionModalProps> = ({
         >
             <Pressable style={styles.overlay} onPress={handleCancel}>
                 <View style={styles.modalContent}>
-                    <Text style={styles.title}>删除帖子</Text>
-                    <Text style={styles.subtitle}>请选择删除原因</Text>
+                    <Text style={styles.title}>{t('campus_detail.delete_post_title', '删除帖子')}</Text>
+                    <Text style={styles.subtitle}>{t('campus_detail.delete_reason_prompt', '请选择删除原因')}</Text>
 
                     {/* Reason Options */}
                     <View style={styles.reasonsContainer}>
-                        {DELETION_REASONS.map((option) => (
+                        {reasonOptions.map((option) => (
                             <TouchableOpacity
                                 key={option.id}
                                 style={[
@@ -120,10 +134,10 @@ export const AdminDeletionModal: React.FC<AdminDeletionModalProps> = ({
                     {/* Custom Reason Input */}
                     {selectedReason === 'other' && (
                         <View style={styles.customReasonContainer}>
-                            <Text style={styles.customReasonLabel}>请输入具体原因：</Text>
+                            <Text style={styles.customReasonLabel}>{t('campus_detail.delete_reason_label', '请输入具体原因：')}</Text>
                             <TextInput
                                 style={styles.customReasonInput}
-                                placeholder="例如：违反社区准则..."
+                                placeholder={t('campus_detail.delete_reason_placeholder', '例如：违反社区准则...')}
                                 placeholderTextColor="#9CA3AF"
                                 value={customReasonText}
                                 onChangeText={setCustomReasonText}
@@ -139,14 +153,14 @@ export const AdminDeletionModal: React.FC<AdminDeletionModalProps> = ({
                             style={styles.button}
                             onPress={handleCancel}
                         >
-                            <Text style={styles.cancelText}>取消</Text>
+                            <Text style={styles.cancelText}>{t('common.cancel', '取消')}</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             style={[styles.button, styles.confirmButton]}
                             onPress={handleConfirm}
                         >
-                            <Text style={styles.confirmText}>确认删除</Text>
+                            <Text style={styles.confirmText}>{t('campus_detail.confirm_delete', '确认删除')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

@@ -24,6 +24,13 @@ export default function TabLayout() {
   const { t } = useTranslation('translation', { keyPrefix: 'tabs' });
   const scrollX = useRef(new Animated.Value(0)).current;
   const [containerWidth, setContainerWidth] = useState(0);
+  const routeLabelKeyMap: Partial<Record<string, 'home' | 'map' | 'agent' | 'course' | 'me'>> = {
+    campus: 'home',
+    map: 'map',
+    agent: 'agent',
+    course: 'course',
+    profile: 'me',
+  };
 
   // Custom TabBar Component to handle the sliding indicator
   const CustomTabBar = ({ state, descriptors, navigation }: any) => {
@@ -76,7 +83,10 @@ export default function TabLayout() {
 
           {visibleRoutes.map((route: any, index: number) => {
             const { options } = descriptors[route.key];
-            const label = options.tabBarLabel;
+            const routeLabelKey = routeLabelKeyMap[route.name];
+            const label = routeLabelKey
+              ? getTabLabel(t, routeLabelKey)
+              : (typeof options.tabBarLabel === 'string' ? options.tabBarLabel : route.name);
             const isFocused = activeIndex === index;
 
             const onPress = () => {

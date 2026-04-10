@@ -28,8 +28,9 @@ import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { useUgcEntryActions } from '../../hooks/useUgcEntryActions';
 import storage from '../../lib/storage';
 import { getCurrentUser } from '../../services/auth';
+import { ensureContentSafety } from '../../services/contentFilter';
 import { addReview, deleteReview, getCourseById, getReviewsAndHasReviewed, likeReview } from '../../services/courses';
-import { reportContent, ReportReason } from '../../services/moderation';
+import { blockUser, getBlockedUserIds, reportContent, ReportReason } from '../../services/moderation';
 import { supabase } from '../../services/supabase';
 import { deleteTeamingRequest, fetchTeamingComments, fetchTeamingRequests, postTeamingComment, postTeamingRequest, toggleTeamingLike } from '../../services/teaming';
 import { ContactMethod, Course, CourseTeaming, Review, TeamingComment } from '../../types';
@@ -78,9 +79,11 @@ export default function CourseDetailScreen() {
 
     // Chat State
     const [messages, setMessages] = useState<any[]>([]);
+    const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [user, setUser] = useState<any>(null);
     const flatListRef = useRef<FlatList>(null);
+    const blockedUserIdsRef = useRef<string[]>([]);
 
     const [hasReviewed, setHasReviewed] = useState(false);
 
@@ -112,6 +115,16 @@ export default function CourseDetailScreen() {
     const ugcActions = useUgcEntryActions({
         currentUserId: user?.uid,
         ensureLoggedIn: () => !!checkLogin(user),
+        onBlockedUser: (blockedUserId) => {
+            setBlockedUserIds((prev) => {
+                if (prev.includes(blockedUserId)) return prev;
+                return [...prev, blockedUserId];
+            });
+            setMessages((prev) => prev.filter((msg) => msg.sender_id !== blockedUserId));
+            setReviews((prev) => prev.filter((review) => review.authorId !== blockedUserId));
+            setTeamingRequests((prev) => prev.filter((request) => request.userId !== blockedUserId));
+            setTeamingComments((prev) => prev.filter((comment) => comment.authorId !== blockedUserId));
+        },
     });
 
     const roomId = `course_${id}`;
@@ -120,8 +133,14 @@ export default function CourseDetailScreen() {
         { label: '骚扰辱骂', value: 'harassment' },
         { label: '仇恨/歧视', value: 'hate_speech' },
         { label: '色情低俗', value: 'sexual_content' },
+        { label: '暴力威胁', value: 'violence' },
+        { label: '诈骗引流', value: 'scam' },
         { label: '其他', value: 'other' },
     ];
+
+    useEffect(() => {
+        blockedUserIdsRef.current = blockedUserIds;
+    }, [blockedUserIds]);
 
     useEffect(() => {
         loadData();
@@ -141,6 +160,14 @@ export default function CourseDetailScreen() {
             storage.getItem('hkcampus_liked_reviews').catch(() => null),
         ]);
         setUser(currentUser);
+        let blockedForCurrentUser: string[] = [];
+        if (currentUser?.uid) {
+            const blocked = await getBlockedUserIds(currentUser.uid);
+            setBlockedUserIds(blocked);
+            blockedForCurrentUser = blocked;
+        } else {
+            setBlockedUserIds([]);
+        }
         if (likedStr) {
             try { setLikedReviewIds(JSON.parse(likedStr)); } catch { }
         }
@@ -160,10 +187,13 @@ export default function CourseDetailScreen() {
         else console.warn('Course not found for ID:', id);
 
         if (messagesResult.data) {
-            setMessages(messagesResult.data.map((message: any) => ({
-                ...message,
-                users: normalizeChatUser(message.users),
-            })));
+            const blockedSet = new Set(blockedForCurrentUser);
+            setMessages(messagesResult.data
+                .filter((message: any) => !blockedSet.has(message.sender_id))
+                .map((message: any) => ({
+                    ...message,
+                    users: normalizeChatUser(message.users),
+                })));
         }
 
         // ── Phase 3: reviews + hasReviewed in one round-trip ──
@@ -180,12 +210,12 @@ export default function CourseDetailScreen() {
         }
 
         // Teaming can load in background (not blocking the main view)
-        loadTeaming();
+        loadTeaming(currentUser?.uid);
     };
 
-    const loadTeaming = async () => {
+    const loadTeaming = async (currentUserId?: string) => {
         setTeamingLoading(true);
-        const data = await fetchTeamingRequests(id as string);
+        const data = await fetchTeamingRequests(id as string, currentUserId);
         setTeamingRequests(data);
         setTeamingLoading(false);
     };
@@ -229,6 +259,9 @@ export default function CourseDetailScreen() {
                 };
 
                 setMessages(prev => {
+                    if (blockedUserIdsRef.current.includes(payload.new.sender_id)) {
+                        return prev;
+                    }
                     // Prevent duplicates if optimistic update already added it
                     if (prev.find(m => m.id === payload.new.id)) return prev;
                     return [...prev, messageWithUser];
@@ -248,6 +281,12 @@ export default function CourseDetailScreen() {
     const handleSendMessage = async () => {
         if (!checkLogin(user)) return;
         if (!newMessage.trim()) return;
+        try {
+            ensureContentSafety(newMessage.trim(), '消息包含不符合社区规范的内容，请修改后再发送。');
+        } catch (error: any) {
+            Alert.alert('发送失败', error?.message || '消息内容不符合社区规范。');
+            return;
+        }
 
         const { error } = await supabase
             .from('messages')
@@ -294,24 +333,34 @@ export default function CourseDetailScreen() {
         if (error) {
             console.error('Error deleting course chat message:', error);
             setMessages(previousMessages);
-            Alert.alert('撤回失败', '请稍后再试。');
+            Alert.alert(
+                t('messages.recall_failed_title', '撤回失败'),
+                t('messages.recall_failed_msg', '请稍后再试。'),
+            );
         }
     };
 
-    const handleReportCourseMessage = async (messageId: string, reason: ReportReason) => {
+    const handleReportCourseMessage = async (messageId: string, targetAuthorId: string, reason: ReportReason) => {
         if (!user?.uid) return;
 
         try {
             await reportContent({
                 reporterId: user.uid,
                 targetId: messageId,
-                targetType: 'comment',
+                targetType: 'course_message',
+                targetAuthorId,
                 reason,
             });
-            Alert.alert('已举报', '感谢你帮助维护社区安全。我们将核实此内容。');
+            Alert.alert(
+                t('moderation.ugc_reported_title', '已举报'),
+                t('moderation.ugc_reported_msg', '感谢你帮助维护社区安全。我们将核实此内容。'),
+            );
         } catch (error) {
             console.error('Error reporting course chat message:', error);
-            Alert.alert('举报失败', '请稍后再试。');
+            Alert.alert(
+                t('common.error', '错误'),
+                t('moderation.ugc_report_failed', '举报失败，请稍后再试。'),
+            );
         }
     };
 
@@ -321,46 +370,92 @@ export default function CourseDetailScreen() {
 
         const actions: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> = [
             {
-                text: '复制',
+                text: t('messages.action_copy', '复制'),
                 onPress: () => {
                     Clipboard.setStringAsync(copyText).then(() => {
-                        Alert.alert('已复制', '内容已复制到剪贴板。');
+                        Alert.alert(
+                            t('moderation.ugc_copied_title', '已复制'),
+                            t('moderation.ugc_copied_msg', '内容已复制到剪贴板。'),
+                        );
                     }).catch((error) => {
                         console.error('Error copying course chat message:', error);
-                        Alert.alert('复制失败', '请稍后再试。');
+                        Alert.alert(
+                            t('moderation.ugc_copy_failed_title', '复制失败'),
+                            t('moderation.ugc_copy_failed_msg', '请稍后再试。'),
+                        );
                     });
                 },
             },
             {
-                text: '举报',
+                text: t('messages.action_report', '举报'),
                 onPress: () => {
                     Alert.alert(
-                        '举报内容',
-                        '你为什么要举报这个消息？',
+                        t('moderation.ugc_report_title', '举报内容'),
+                        t('moderation.ugc_report_desc', '你为什么要举报这个内容？'),
                         [
                             ...REPORT_REASONS.map((reason) => ({
                                 text: reason.label,
-                                onPress: () => { void handleReportCourseMessage(msg.id, reason.value); },
+                                onPress: () => { void handleReportCourseMessage(msg.id, msg.sender_id, reason.value); },
                             })),
-                            { text: '取消', style: 'cancel' as const },
+                            { text: t('common.cancel', '取消'), style: 'cancel' as const },
                         ],
                     );
                 },
             },
         ];
 
-        if (isOwnMessage) {
+        if (!isOwnMessage && msg.sender_id && user?.uid) {
             actions.push({
-                text: '撤回',
+                text: t('moderation.block_user', '屏蔽用户'),
                 style: 'destructive',
                 onPress: () => {
                     Alert.alert(
-                        '撤回消息',
-                        '确定撤回这条消息吗？撤回即删除消息。',
+                        t('moderation.block_title', '屏蔽用户'),
+                        t('courses.course_chat_block_msg', '屏蔽后你将不再看到该用户在本课程聊天室中的消息。'),
                         [
-                            { text: '取消', style: 'cancel' },
+                            { text: t('common.cancel', '取消'), style: 'cancel' },
                             {
-                                text: '撤回',
+                                text: t('moderation.block_confirm', '屏蔽'),
+                                style: 'destructive',
+                                onPress: async () => {
+                                    try {
+                                        await blockUser(user.uid, msg.sender_id, {
+                                            source: 'course_chat',
+                                            reason: 'abusive_user',
+                                        });
+                                        setBlockedUserIds((prev) => prev.includes(msg.sender_id) ? prev : [...prev, msg.sender_id]);
+                                        setMessages((prev) => prev.filter((message) => message.sender_id !== msg.sender_id));
+                                        Alert.alert(
+                                            t('common.success', '成功'),
+                                            t('courses.course_chat_blocked_msg', '该用户消息已从当前列表隐藏。'),
+                                        );
+                                    } catch (error) {
+                                        console.error('Error blocking course chat user:', error);
+                                        Alert.alert(
+                                            t('common.error', '错误'),
+                                            t('moderation.ugc_block_failed', '屏蔽失败，请稍后再试。'),
+                                        );
+                                    }
+                                },
+                            },
+                        ],
+                    );
+                },
+            });
+        }
+
+        if (isOwnMessage) {
+            actions.push({
+                text: t('messages.action_recall', '撤回'),
+                style: 'destructive',
+                onPress: () => {
+                    Alert.alert(
+                        t('messages.recall_title', '撤回消息'),
+                        t('messages.recall_confirm', '确定撤回这条消息吗？撤回即删除消息。'),
+                        [
+                            { text: t('common.cancel', '取消'), style: 'cancel' },
+                            {
+                                text: t('messages.recall_action', '撤回'),
                                 style: 'destructive',
                                 onPress: () => { void handleDeleteChatMessage(msg.id); },
                             },
@@ -370,8 +465,12 @@ export default function CourseDetailScreen() {
             });
         }
 
-        actions.push({ text: '取消', style: 'cancel' });
-        Alert.alert('消息操作', '请选择操作', actions);
+        actions.push({ text: t('common.cancel', '取消'), style: 'cancel' });
+        Alert.alert(
+            t('messages.action_sheet_title', '消息操作'),
+            t('messages.action_sheet_desc', '请选择操作'),
+            actions,
+        );
     };
 
     const handleAddReview = async () => {
@@ -522,7 +621,7 @@ export default function CourseDetailScreen() {
                     }
 
                     setTeamingRequests(prev => prev.filter(item => item.id !== teaming.id));
-                    await loadTeaming();
+                    await loadTeaming(user?.uid);
                 }
             }
         ]);
@@ -621,7 +720,7 @@ export default function CourseDetailScreen() {
         setSelectedTeamingForComments(teaming);
         setIsTeamingCommentModalVisible(true);
         setTeamingCommentLoading(true);
-        const comments = await fetchTeamingComments(teaming.id);
+        const comments = await fetchTeamingComments(teaming.id, user?.uid);
         setTeamingComments(comments);
         setTeamingCommentLoading(false);
     };
@@ -640,7 +739,7 @@ export default function CourseDetailScreen() {
         if (success) {
             setNewTeamingComment('');
             setTeamingReplyTarget(null);
-            const comments = await fetchTeamingComments(selectedTeamingForComments.id);
+            const comments = await fetchTeamingComments(selectedTeamingForComments.id, user?.uid);
             setTeamingComments(comments);
 
             setTeamingRequests(prev => prev.map(req => {
@@ -682,7 +781,7 @@ export default function CourseDetailScreen() {
                 onLongPress={() => ugcActions.openActions({
                     id: item.id,
                     targetId: item.id,
-                    targetType: 'comment',
+                    targetType: 'course_review',
                     content: item.content,
                     authorId: item.isAnonymous ? undefined : item.authorId,
                     authorName: item.authorName,
@@ -783,7 +882,7 @@ export default function CourseDetailScreen() {
                 onLongPress={() => ugcActions.openActions({
                     id: item.id,
                     targetId: item.id,
-                    targetType: 'post',
+                    targetType: 'teaming_post',
                     content: [item.selfIntro, item.targetTeammate].filter(Boolean).join('\n'),
                     authorId: item.userId,
                     authorName: item.userName,
@@ -1474,7 +1573,7 @@ export default function CourseDetailScreen() {
                                                     onLongPress={() => ugcActions.openActions({
                                                         id: item.id,
                                                         targetId: item.id,
-                                                        targetType: 'comment',
+                                                        targetType: 'teaming_comment',
                                                         content: item.content,
                                                         authorId: item.authorId,
                                                         authorName: item.authorName,
@@ -1515,7 +1614,7 @@ export default function CourseDetailScreen() {
                                                                 onLongPress={() => ugcActions.openActions({
                                                                     id: reply.id,
                                                                     targetId: reply.id,
-                                                                    targetType: 'comment',
+                                                                    targetType: 'teaming_comment',
                                                                     content: reply.content,
                                                                     authorId: reply.authorId,
                                                                     authorName: reply.authorName,

@@ -82,6 +82,9 @@ export default function TeacherDetailScreen() {
     const ugcActions = useUgcEntryActions({
         currentUserId,
         ensureLoggedIn: () => !!checkLogin(currentUserId),
+        onBlockedUser: (blockedUserId) => {
+            setReviews((prev) => prev.filter((review) => review.authorId !== blockedUserId));
+        },
     });
 
     useEffect(() => {
@@ -99,7 +102,7 @@ export default function TeacherDetailScreen() {
             const teacherData = await getTeacherById(id as string);
             setTeacher(teacherData);
 
-            const reviewsData = await getTeacherReviews(id as string);
+            const reviewsData = await getTeacherReviews(id as string, user?.uid);
             setReviews(reviewsData);
 
             // Generate AI summary if enough reviews
@@ -278,7 +281,7 @@ export default function TeacherDetailScreen() {
                                         onLongPress={() => ugcActions.openActions({
                                             id: review.id,
                                             targetId: review.id,
-                                            targetType: 'comment',
+                                            targetType: 'teacher_review',
                                             content: review.content,
                                             authorId: review.authorName === '匿名的同学' ? undefined : review.authorId,
                                             authorName: review.authorName,

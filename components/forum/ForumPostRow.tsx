@@ -95,7 +95,7 @@ export const ForumPostRow: React.FC<ForumPostRowProps> = React.memo(({ post, onP
                         {post.isFollowingAuthor && (
                             <View style={styles.followingBadge}>
                                 <View style={styles.followingBadgeDot} />
-                                <Text style={styles.followingBadgeText}>你的关注</Text>
+                                <Text style={styles.followingBadgeText}>{t('campus.following_badge')}</Text>
                             </View>
                         )}
                     </TouchableOpacity>

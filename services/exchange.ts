@@ -1,4 +1,6 @@
 import { CourseExchange, ExchangeComment } from '../types';
+import { ensureMultipleContentsSafety } from './contentFilter';
+import { getBlockedUserIds } from './moderation';
 import { supabase } from './supabase';
 
 const EXCHANGES_TABLE = 'course_exchanges';
@@ -7,7 +9,7 @@ const EXCHANGE_COMMENTS_TABLE = 'exchange_comments';
 /**
  * Fetch all active course exchange requests.
  */
-export const fetchExchanges = async (): Promise<CourseExchange[]> => {
+export const fetchExchanges = async (currentUserId?: string): Promise<CourseExchange[]> => {
     try {
         const { data, error } = await supabase
             .from(EXCHANGES_TABLE)
@@ -20,7 +22,17 @@ export const fetchExchanges = async (): Promise<CourseExchange[]> => {
             return getMockExchanges();
         }
 
-        return (data || []).map(mapSupabaseToExchange);
+        let exchanges = (data || []).map(mapSupabaseToExchange);
+
+        if (currentUserId) {
+            const blockedIds = await getBlockedUserIds(currentUserId);
+            if (blockedIds.length > 0) {
+                const blockedSet = new Set(blockedIds);
+                exchanges = exchanges.filter((exchange) => !blockedSet.has(exchange.userId));
+            }
+        }
+
+        return exchanges;
     } catch (e) {
         console.error('Exception fetching exchanges:', e);
         return getMockExchanges();
@@ -32,6 +44,15 @@ export const fetchExchanges = async (): Promise<CourseExchange[]> => {
  */
 export const postExchange = async (exchange: Omit<CourseExchange, 'id' | 'createdAt' | 'status' | 'commentCount' | 'likes'>) => {
     try {
+        ensureMultipleContentsSafety([
+            exchange.haveCourse,
+            exchange.haveSection,
+            exchange.haveTeacher,
+            exchange.haveTime,
+            exchange.reason || '',
+            ...(exchange.wantCourses || []).map((item) => `${item.code || ''} ${item.section || ''} ${item.teacher || ''} ${item.time || ''}`),
+        ]);
+
         const exchangeData = {
             user_id: exchange.userId,
             user_name: exchange.userName,
@@ -66,7 +87,7 @@ export const postExchange = async (exchange: Omit<CourseExchange, 'id' | 'create
 /**
  * Fetch comments for a specific exchange request.
  */
-export const fetchExchangeComments = async (exchangeId: string): Promise<ExchangeComment[]> => {
+export const fetchExchangeComments = async (exchangeId: string, currentUserId?: string): Promise<ExchangeComment[]> => {
     try {
         const { data, error } = await supabase
             .from(EXCHANGE_COMMENTS_TABLE)
@@ -79,7 +100,17 @@ export const fetchExchangeComments = async (exchangeId: string): Promise<Exchang
             return getMockComments(exchangeId);
         }
 
-        return (data || []).map(mapSupabaseToComment);
+        let comments = (data || []).map(mapSupabaseToComment);
+
+        if (currentUserId) {
+            const blockedIds = await getBlockedUserIds(currentUserId);
+            if (blockedIds.length > 0) {
+                const blockedSet = new Set(blockedIds);
+                comments = comments.filter((comment) => !blockedSet.has(comment.authorId));
+            }
+        }
+
+        return comments;
     } catch (e) {
         console.error('Exception fetching comments:', e);
         return getMockComments(exchangeId);
@@ -97,6 +128,8 @@ export const postExchangeComment = async (
     replyToName?: string
 ) => {
     try {
+        ensureMultipleContentsSafety([content, replyToName || '']);
+
         const { data, error } = await supabase
             .from(EXCHANGE_COMMENTS_TABLE)
             .insert({

@@ -1,5 +1,12 @@
 import { DirectConversationSummary, DirectMessage, DirectMessagePeer } from '../types';
 import { IMMUTABLE_STORAGE_CACHE_CONTROL } from '../utils/remoteImage';
+import {
+    getPostShareFallbackText,
+    isPostShareMessageContent,
+    parsePostShareMessageContent,
+} from '../utils/shareUtils';
+import { ensureContentSafety } from './contentFilter';
+import { getBlockedUserIds, hasBlockingRelation } from './moderation';
 import { supabase } from './supabase';
 
 const CONVERSATIONS_TABLE = 'direct_conversations';
@@ -8,6 +15,7 @@ const USERS_TABLE = 'users';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DIRECT_IMAGE_PREFIX = '[image]';
 const DIRECT_FILE_PREFIX = '[file]';
+const DIRECT_SHARE_CARD_PREVIEW = '[share_card]';
 
 type ConversationRow = {
     id: string;
@@ -88,12 +96,25 @@ export const getDirectMessagePreviewText = (content?: string | null): string => 
         return '';
     }
 
+    const trimmed = content.trim();
+    if (trimmed.toLowerCase().startsWith('[post_share]')) {
+        return DIRECT_SHARE_CARD_PREVIEW;
+    }
+
+    if (/https?:\/\/[^\s]+\/post\/[0-9a-zA-Z-]+/i.test(trimmed)) {
+        return DIRECT_SHARE_CARD_PREVIEW;
+    }
+
     if (content.startsWith(DIRECT_IMAGE_PREFIX)) {
         return '[图片]';
     }
 
     if (content.startsWith(DIRECT_FILE_PREFIX)) {
         return '[文件]';
+    }
+
+    if (isPostShareMessageContent(content)) {
+        return DIRECT_SHARE_CARD_PREVIEW;
     }
 
     return content;
@@ -111,6 +132,11 @@ export const getDirectMessageCopyText = (content?: string | null): string => {
     const filePayload = parseDirectFilePayload(content);
     if (filePayload) {
         return `${filePayload.name}\n${filePayload.url}`;
+    }
+
+    const postSharePayload = parsePostShareMessageContent(content);
+    if (postSharePayload) {
+        return getPostShareFallbackText(postSharePayload);
     }
 
     return content;
@@ -183,9 +209,25 @@ export const fetchDirectConversations = async (
         return [];
     }
 
-    const conversationIds = conversations.map((conversation) => conversation.id);
+    const blockedIds = await getBlockedUserIds(currentUserId);
+    let visibleConversations = conversations;
+    if (blockedIds.length > 0) {
+        const blockedSet = new Set(blockedIds);
+        visibleConversations = conversations.filter((conversation) => {
+            const otherUserId = conversation.participant_one === currentUserId
+                ? conversation.participant_two
+                : conversation.participant_one;
+            return !blockedSet.has(otherUserId);
+        });
+    }
+
+    if (visibleConversations.length === 0) {
+        return [];
+    }
+
+    const conversationIds = visibleConversations.map((conversation) => conversation.id);
     const otherUserIds = Array.from(new Set(
-        conversations.map((conversation) =>
+        visibleConversations.map((conversation) =>
             conversation.participant_one === currentUserId
                 ? conversation.participant_two
                 : conversation.participant_one
@@ -227,7 +269,7 @@ export const fetchDirectConversations = async (
         unreadCountMap.set(conversationId, (unreadCountMap.get(conversationId) || 0) + 1);
     });
 
-    return conversations
+    return visibleConversations
         .map((conversation) => {
             const otherUserId = conversation.participant_one === currentUserId
                 ? conversation.participant_two
@@ -329,6 +371,15 @@ export const fetchDirectMessages = async (
         };
     }
 
+    const blockedIds = await getBlockedUserIds(currentUserId);
+    if (blockedIds.includes(otherUserId)) {
+        return {
+            conversationId: null,
+            peer: null,
+            messages: [],
+        };
+    }
+
     const [conversationId, profileResult] = await Promise.all([
         getDirectConversationId(currentUserId, otherUserId),
         supabase
@@ -405,6 +456,18 @@ export const sendDirectMessage = async (
     const trimmedContent = content.trim();
     if (!trimmedContent) {
         throw new Error('Message content cannot be empty');
+    }
+    if (
+        !isDirectImageContent(trimmedContent)
+        && !isDirectFileContent(trimmedContent)
+        && !isPostShareMessageContent(trimmedContent)
+    ) {
+        ensureContentSafety(trimmedContent, '消息包含不符合社区规范的内容，请修改后再发送。');
+    }
+
+    const blocked = await hasBlockingRelation(senderId, receiverId);
+    if (blocked) {
+        throw new Error('You cannot message this user because one of you has blocked the other.');
     }
 
     const conversationId = await ensureDirectConversation(senderId, receiverId);

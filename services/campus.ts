@@ -1,4 +1,5 @@
 import { Post, PostCategory, PostComment, PostType } from '../types';
+import { ensureContentSafety } from './contentFilter';
 import { compressImageForUpload } from '../utils/image';
 import { IMMUTABLE_STORAGE_CACHE_CONTROL } from '../utils/remoteImage';
 import { getFollowingUserIds } from './follows';
@@ -390,6 +391,13 @@ export const fetchPostById = async (postId: string, currentUserId?: string): Pro
 
     const post = mapSupabaseToPost(data);
 
+    if (currentUserId) {
+        const blockedIds = await getBlockedUserIds(currentUserId);
+        if (blockedIds.includes(post.authorId)) {
+            return null;
+        }
+    }
+
     // Mark following status
     if (currentUserId) {
         const followingIds = await getFollowingUserIds(currentUserId);
@@ -414,6 +422,8 @@ export const createPost = async (postData: {
     isAnonymous: boolean;
     location?: { lat: number; lng: number; name?: string };
 }) => {
+    ensureContentSafety(postData.content, '帖子包含不符合社区规范的内容，请修改后再发布。');
+
     const insertData = {
         author_id: postData.authorId,
         author_name: postData.isAnonymous ? '匿名用户' : postData.authorName,
@@ -559,7 +569,7 @@ export const togglePostLike = async (postId: string, userId: string) => {
 /**
  * Fetch comments for a post
  */
-export const fetchPostComments = async (postId: string): Promise<PostComment[]> => {
+export const fetchPostComments = async (postId: string, currentUserId?: string): Promise<PostComment[]> => {
     const [{ data, error }, { data: postMeta, error: postError }] = await Promise.all([
         supabase
             .from(COMMENTS_TABLE)
@@ -577,7 +587,17 @@ export const fetchPostComments = async (postId: string): Promise<PostComment[]> 
     if (postError) throw postError;
 
     const anonymousPostAuthorId = postMeta?.is_anonymous ? postMeta.author_id : undefined;
-    return (data || []).map(row => mapCommentRow(row, anonymousPostAuthorId));
+    let rows = data || [];
+
+    if (currentUserId) {
+        const blockedIds = await getBlockedUserIds(currentUserId);
+        if (blockedIds.length > 0) {
+            const blockedSet = new Set(blockedIds);
+            rows = rows.filter((row: any) => !blockedSet.has(row.author_id));
+        }
+    }
+
+    return rows.map(row => mapCommentRow(row, anonymousPostAuthorId));
 };
 
 /**
@@ -593,6 +613,8 @@ export const addPostComment = async (commentData: {
     parentCommentId?: string;
     replyToName?: string;
 }): Promise<PostComment> => {
+    ensureContentSafety(commentData.content, '评论包含不符合社区规范的内容，请修改后再发布。');
+
     const { data: post, error: postError } = await supabase
         .from(POSTS_TABLE)
         .select('author_id, content, is_anonymous')

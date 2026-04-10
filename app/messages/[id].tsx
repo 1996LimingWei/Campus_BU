@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Camera, FileText, Image as ImageIcon, MoreVertical, Plus, Send } from 'lucide-react-native';
+import { ArrowLeft, Camera, FileText, Image as ImageIcon, MoreVertical, Plus, Send, Share2 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -42,9 +42,10 @@ import {
     subscribeToDirectConversation,
     uploadDirectMessageImage,
 } from '../../services/messages';
-import { reportContent, ReportReason } from '../../services/moderation';
+import { blockUser, reportContent, ReportReason } from '../../services/moderation';
 import { DirectMessage, DirectMessagePeer } from '../../types';
 import { isRemoteImageUrl } from '../../utils/remoteImage';
+import { parseLegacyPostShareMessage, parsePostShareMessageContent } from '../../utils/shareUtils';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -86,6 +87,8 @@ export default function ChatScreen() {
         { label: '骚扰辱骂', value: 'harassment' },
         { label: '仇恨/歧视', value: 'hate_speech' },
         { label: '色情低俗', value: 'sexual_content' },
+        { label: '暴力威胁', value: 'violence' },
+        { label: '诈骗引流', value: 'scam' },
         { label: '其他', value: 'other' },
     ];
 
@@ -198,6 +201,7 @@ export default function ChatScreen() {
         } catch (error) {
             console.error('Error sending direct attachment message:', error);
             setMessages((previous) => previous.filter((message) => message.id !== optimisticMessage.id));
+            Alert.alert('发送失败', (error as any)?.message || '请稍后再试。');
             throw error;
         } finally {
             setSending(false);
@@ -327,6 +331,7 @@ export default function ChatScreen() {
             console.error('Error sending direct message:', error);
             setMessages((previous) => previous.filter((message) => message.id !== optimisticMessage.id));
             setInputText(trimmed);
+            Alert.alert('发送失败', (error as any)?.message || '请稍后再试。');
         } finally {
             setSending(false);
         }
@@ -376,29 +381,36 @@ export default function ChatScreen() {
         reportContent({
             reporterId: currentUser.uid,
             targetId: message.id,
-            targetType: 'comment',
+            targetType: 'direct_message',
+            targetAuthorId: message.senderId,
             reason,
         }).then(() => {
-            Alert.alert('已举报', '感谢你帮助维护社区安全。我们将核实此内容。');
+            Alert.alert(
+                t('moderation.ugc_reported_title', '已举报'),
+                t('moderation.ugc_reported_msg', '感谢你帮助维护社区安全。我们将核实此内容。'),
+            );
         }).catch((error) => {
             console.error('Error reporting direct message:', error);
-            Alert.alert('举报失败', '请稍后再试。');
+            Alert.alert(
+                t('common.error', '错误'),
+                t('moderation.ugc_report_failed', '举报失败，请稍后再试。'),
+            );
         });
-    }, [currentUser?.uid]);
+    }, [currentUser?.uid, t]);
 
     const promptReportDirectMessage = useCallback((message: DirectMessage) => {
         Alert.alert(
-            '举报内容',
-            '你为什么要举报这个消息？',
+            t('moderation.ugc_report_title', '举报内容'),
+            t('moderation.ugc_report_desc', '你为什么要举报这个内容？'),
             [
                 ...REPORT_REASONS.map((reason) => ({
                     text: reason.label,
                     onPress: () => handleReportDirectMessage(message, reason.value),
                 })),
-                { text: '取消', style: 'cancel' as const },
+                { text: t('common.cancel', '取消'), style: 'cancel' as const },
             ],
         );
-    }, [handleReportDirectMessage]);
+    }, [handleReportDirectMessage, t]);
 
     const handleRecallDirectMessage = useCallback(async (message: DirectMessage) => {
         if (!currentUser?.uid || message.senderId !== currentUser.uid) {
@@ -411,42 +423,96 @@ export default function ChatScreen() {
         } catch (error) {
             console.error('Error recalling direct message:', error);
             await loadThread(true);
-            Alert.alert('撤回失败', '请稍后再试。');
+            Alert.alert(
+                t('messages.recall_failed_title', '撤回失败'),
+                t('messages.recall_failed_msg', '请稍后再试。'),
+            );
         }
-    }, [currentUser?.uid, loadThread]);
+    }, [currentUser?.uid, loadThread, t]);
+
+    const handleBlockPeer = useCallback(async () => {
+        if (!currentUser?.uid || !peerUserId) {
+            return;
+        }
+
+        try {
+            await blockUser(currentUser.uid, peerUserId, {
+                source: 'direct_message',
+                reason: 'abusive_user',
+            });
+            Alert.alert(
+                t('moderation.ugc_blocked_title', '已屏蔽'),
+                t('messages.dm_blocked_msg', '该用户内容会立即从你的消息列表中隐藏。'),
+            );
+            router.back();
+        } catch (error) {
+            console.error('Error blocking direct message peer:', error);
+            Alert.alert(
+                t('common.error', '错误'),
+                t('moderation.ugc_block_failed', '屏蔽失败，请稍后再试。'),
+            );
+        }
+    }, [currentUser?.uid, peerUserId, router, t]);
 
     const openDirectMessageActions = useCallback((message: DirectMessage) => {
         const copyText = getDirectMessageCopyText(message.content);
         const actions: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> = [
             {
-                text: '复制',
+                text: t('messages.action_copy', '复制'),
                 onPress: () => {
                     Clipboard.setStringAsync(copyText).then(() => {
-                        Alert.alert('已复制', '内容已复制到剪贴板。');
+                        Alert.alert(
+                            t('moderation.ugc_copied_title', '已复制'),
+                            t('moderation.ugc_copied_msg', '内容已复制到剪贴板。'),
+                        );
                     }).catch((error) => {
                         console.error('Error copying direct message:', error);
-                        Alert.alert('复制失败', '请稍后再试。');
+                        Alert.alert(
+                            t('moderation.ugc_copy_failed_title', '复制失败'),
+                            t('moderation.ugc_copy_failed_msg', '请稍后再试。'),
+                        );
                     });
                 },
             },
             {
-                text: '举报',
+                text: t('messages.action_report', '举报'),
                 onPress: () => promptReportDirectMessage(message),
             },
         ];
 
-        if (message.senderId === currentUser?.uid) {
+        if (message.senderId !== currentUser?.uid) {
             actions.push({
-                text: '撤回',
+                text: t('moderation.block_user', '屏蔽用户'),
                 style: 'destructive',
                 onPress: () => {
                     Alert.alert(
-                        '撤回消息',
-                        '确定撤回这条消息吗？撤回即删除消息。',
+                        t('moderation.block_title', '屏蔽用户'),
+                        t('moderation.block_msg', '屏蔽后你将不再看到该用户的任何内容。'),
                         [
-                            { text: '取消', style: 'cancel' },
+                            { text: t('common.cancel', '取消'), style: 'cancel' },
                             {
-                                text: '撤回',
+                                text: t('moderation.block_confirm', '屏蔽'),
+                                style: 'destructive',
+                                onPress: () => { void handleBlockPeer(); },
+                            },
+                        ],
+                    );
+                },
+            });
+        }
+
+        if (message.senderId === currentUser?.uid) {
+            actions.push({
+                text: t('messages.action_recall', '撤回'),
+                style: 'destructive',
+                onPress: () => {
+                    Alert.alert(
+                        t('messages.recall_title', '撤回消息'),
+                        t('messages.recall_confirm', '确定撤回这条消息吗？撤回即删除消息。'),
+                        [
+                            { text: t('common.cancel', '取消'), style: 'cancel' },
+                            {
+                                text: t('messages.recall_action', '撤回'),
                                 style: 'destructive',
                                 onPress: () => { void handleRecallDirectMessage(message); },
                             },
@@ -456,9 +522,13 @@ export default function ChatScreen() {
             });
         }
 
-        actions.push({ text: '取消', style: 'cancel' });
-        Alert.alert('消息操作', '请选择操作', actions);
-    }, [currentUser?.uid, handleRecallDirectMessage, promptReportDirectMessage]);
+        actions.push({ text: t('common.cancel', '取消'), style: 'cancel' });
+        Alert.alert(
+            t('messages.action_sheet_title', '消息操作'),
+            t('messages.action_sheet_desc', '请选择操作'),
+            actions,
+        );
+    }, [currentUser?.uid, handleBlockPeer, handleRecallDirectMessage, promptReportDirectMessage, t]);
 
     const renderMessage = ({ item }: { item: DirectMessage }) => {
         const isMe = item.senderId === currentUser?.uid;
@@ -466,26 +536,31 @@ export default function ChatScreen() {
         const isImageMessage = isDirectImageContent(item.content) && !!imageUrl;
         const filePayload = getDirectMessageFilePayload(item.content);
         const isFileMessage = isDirectFileContent(item.content) && !!filePayload;
+        const postSharePayload = parsePostShareMessageContent(item.content) || parseLegacyPostShareMessage(item.content);
+        const isPostShareMessage = !!postSharePayload;
         const fileExtensionLabel = filePayload ? getFileExtensionLabel(filePayload.name) : 'FILE';
+        const avatarUri = isMe ? (currentUser?.avatarUrl || currentUser?.photoURL || '') : item.senderAvatar;
+        const avatarLabel = isMe
+            ? (currentUser?.displayName || 'Me')
+            : (item.senderName || peer?.name || '?');
 
         return (
             <View style={[styles.messageContainer, isMe ? styles.myMessage : styles.theirMessage]}>
-                {!isMe && (
-                    isRemoteImageUrl(item.senderAvatar) ? (
-                        <CachedRemoteImage uri={item.senderAvatar} style={styles.avatarMini} />
-                    ) : (
-                        <View style={[styles.avatarMini, styles.avatarMiniFallback]}>
-                            <Text style={styles.avatarMiniFallbackText}>
-                                {(item.senderName || peer?.name || '?').charAt(0).toUpperCase()}
-                            </Text>
-                        </View>
-                    )
+                {isRemoteImageUrl(avatarUri) ? (
+                    <CachedRemoteImage uri={avatarUri} style={[styles.avatarMini, isMe && styles.avatarMiniMine]} />
+                ) : (
+                    <View style={[styles.avatarMini, styles.avatarMiniFallback, isMe && styles.avatarMiniMine]}>
+                        <Text style={styles.avatarMiniFallbackText}>
+                            {avatarLabel.charAt(0).toUpperCase()}
+                        </Text>
+                    </View>
                 )}
                 <View style={[
                     styles.bubble,
                     isMe ? styles.myBubble : styles.theirBubble,
                     isImageMessage && styles.imageBubble,
                     isFileMessage && styles.fileBubble,
+                    isPostShareMessage && styles.postShareBubble,
                 ]}>
                     <Pressable onLongPress={() => openDirectMessageActions(item)}>
                     {isImageMessage ? (
@@ -530,6 +605,39 @@ export default function ChatScreen() {
                                     </View>
                                 </View>
                             </TouchableOpacity>
+                        </>
+                    ) : isPostShareMessage && postSharePayload ? (
+                        <>
+                            {!!postSharePayload.message && (
+                                <Text style={[styles.messageText, styles.postShareNote, isMe ? styles.myText : styles.theirText]}>
+                                    {postSharePayload.message}
+                                </Text>
+                            )}
+                            <TouchableOpacity
+                                activeOpacity={0.85}
+                                onPress={() => {
+                                    router.push({ pathname: '/campus/[id]' as any, params: { id: postSharePayload.postId } });
+                                }}
+                                style={[styles.postShareCard, isMe ? styles.postShareCardMine : styles.postShareCardTheirs]}
+                            >
+                                <View style={styles.postShareCardHeader}>
+                                    <Share2 size={14} color={isMe ? '#1E3A8A' : '#2563EB'} />
+                                    <Text style={styles.postShareCardTitle}>
+                                        {t('profile.share.share_post', '分享帖子')}
+                                    </Text>
+                                </View>
+                                {!!postSharePayload.imageUrl && isRemoteImageUrl(postSharePayload.imageUrl) && (
+                                    <CachedRemoteImage uri={postSharePayload.imageUrl} style={styles.postShareImage} />
+                                )}
+                                <Text style={styles.postShareExcerpt} numberOfLines={3}>
+                                    {(postSharePayload.excerpt || '').trim() || postSharePayload.url}
+                                </Text>
+                            </TouchableOpacity>
+                            <View style={styles.textTimeRow}>
+                                <Text style={[styles.timeText, isMe ? styles.myTime : styles.theirTime]}>
+                                    {formatMessageTime(item.createdAt)}
+                                </Text>
+                            </View>
                         </>
                     ) : (
                         <>
@@ -585,7 +693,27 @@ export default function ChatScreen() {
                         </Text>
                     </View>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.moreButton} activeOpacity={0.7}>
+                <TouchableOpacity
+                    style={styles.moreButton}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                        if (!currentUser?.uid || !peerUserId) {
+                            return;
+                        }
+                        Alert.alert(
+                            t('messages.conversation_actions_title', '会话操作'),
+                            t('messages.action_sheet_desc', '请选择操作'),
+                            [
+                                {
+                                    text: t('moderation.block_user', '屏蔽用户'),
+                                    style: 'destructive',
+                                    onPress: () => { void handleBlockPeer(); },
+                                },
+                                { text: t('common.cancel', '取消'), style: 'cancel' },
+                            ],
+                        );
+                    }}
+                >
                     <MoreVertical size={24} color="#111827" />
                 </TouchableOpacity>
             </View>
@@ -834,6 +962,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#E5E7EB',
         marginRight: 10,
     },
+    avatarMiniMine: {
+        marginRight: 0,
+        marginLeft: 10,
+    },
     avatarMiniFallback: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -873,15 +1005,57 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 15,
     },
+    postShareBubble: {
+        paddingHorizontal: 10,
+        paddingVertical: 10,
+    },
     messageText: {
         fontSize: 16,
         lineHeight: 22,
+    },
+    postShareNote: {
+        marginBottom: 8,
     },
     myText: {
         color: '#fff',
     },
     theirText: {
         color: '#111827',
+    },
+    postShareCard: {
+        borderRadius: 14,
+        padding: 10,
+        minWidth: 200,
+        maxWidth: 250,
+    },
+    postShareCardMine: {
+        backgroundColor: 'rgba(255,255,255,0.96)',
+    },
+    postShareCardTheirs: {
+        backgroundColor: '#F8FAFC',
+    },
+    postShareCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    postShareCardTitle: {
+        marginLeft: 6,
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#1E3A8A',
+    },
+    postShareImage: {
+        width: '100%',
+        height: 110,
+        borderRadius: 10,
+        backgroundColor: '#E5E7EB',
+        marginBottom: 8,
+    },
+    postShareExcerpt: {
+        fontSize: 14,
+        lineHeight: 20,
+        color: '#1F2937',
     },
     textTimeRow: {
         alignItems: 'flex-end',

@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { ChevronRight, Flag, Heart, MapPin, MessageCircle, MoreVertical, Share2, Trash2, UserMinus, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Dimensions, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, DeviceEventEmitter, Dimensions, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
     CurvedTransition,
     FadeIn,
@@ -135,6 +135,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onLike, onC
                     onPress: async () => {
                         try {
                             await blockUser(currentUserId, post.authorId);
+                            DeviceEventEmitter.emit('user_blocked', { userId: post.authorId });
                             Alert.alert(t('common.success'), t('moderation.block_success'));
                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         } catch (e) {
@@ -273,9 +274,9 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onLike, onC
                         currentUserId={currentUserId}
                         postId={post.id}
                         postContent={post.content}
+                        postImageUrl={post.imageUrl}
                         onShare={async (receiverId, message) => {
                             await sendDirectMessage(currentUserId, receiverId, message);
-                            Alert.alert(t('common.success'), t('share.success', '帖子已分享'));
                         }}
                     />
                 )}
@@ -323,7 +324,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onLike, onC
                                                 <View style={[styles.menuIcon, { backgroundColor: '#EFF6FF' }]}>
                                                     <Share2 size={20} color="#1E3A8A" />
                                                 </View>
-                                                <Text style={styles.menuItemText}>{t('share.share_post', '分享帖子')}</Text>
+                                                <Text style={styles.menuItemText}>{t('profile.share.share_post', '分享帖子')}</Text>
                                                 <ChevronRight size={18} color="#D1D5DB" />
                                             </TouchableOpacity>
                                         )}

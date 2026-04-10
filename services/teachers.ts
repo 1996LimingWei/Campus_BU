@@ -1,5 +1,7 @@
 
 import { Teacher, TeacherReview } from '../types';
+import { ensureContentSafety } from './contentFilter';
+import { getBlockedUserIds } from './moderation';
 import { supabase } from './supabase';
 
 /**
@@ -96,7 +98,16 @@ export const getTeacherReviews = async (teacherId: string, userId?: string): Pro
     }
     if (!data) return [];
 
-    return data.map(r => ({
+    let rows = data;
+    if (userId) {
+        const blockedIds = await getBlockedUserIds(userId);
+        if (blockedIds.length > 0) {
+            const blockedSet = new Set(blockedIds);
+            rows = rows.filter((row: any) => !blockedSet.has(row.author_id));
+        }
+    }
+
+    return rows.map(r => ({
         id: r.id,
         teacherId: r.teacher_id,
         authorId: r.author_id,
@@ -118,6 +129,8 @@ export const getTeacherReviews = async (teacherId: string, userId?: string): Pro
  * 提交针对教师的评价
  */
 export const submitTeacherReview = async (review: Partial<TeacherReview>) => {
+    ensureContentSafety(review.content || '', '评价包含不符合社区规范的内容，请修改后再发布。');
+
     const { data, error } = await supabase
         .from('teacher_reviews')
         .insert([{

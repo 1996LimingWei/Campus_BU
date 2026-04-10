@@ -5,6 +5,15 @@
 
 // Get the base URL from environment variable
 const SHARE_BASE_URL = process.env.EXPO_PUBLIC_SHARE_BASE_URL || 'http://localhost:3000';
+const DIRECT_POST_SHARE_PREFIX = '[post_share]';
+
+export type DirectPostSharePayload = {
+    postId: string;
+    url: string;
+    message?: string;
+    excerpt?: string;
+    imageUrl?: string;
+};
 
 /**
  * Generate a shareable URL for a post
@@ -38,6 +47,91 @@ export const generatePostShareMessage = (postId: string, customMessage?: string)
     }
 
     return shareUrl;
+};
+
+const normalizeExcerpt = (content?: string): string => {
+    const text = (content || '').trim().replace(/\s+/g, ' ');
+    if (!text) {
+        return '';
+    }
+    return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+};
+
+export const generatePostShareMessageContent = (
+    postId: string,
+    options?: {
+        customMessage?: string;
+        postContent?: string;
+        postImageUrl?: string;
+    },
+): string => {
+    const payload: DirectPostSharePayload = {
+        postId,
+        url: generatePostShareUrl(postId),
+        message: options?.customMessage?.trim() || undefined,
+        excerpt: normalizeExcerpt(options?.postContent),
+        imageUrl: options?.postImageUrl?.trim() || undefined,
+    };
+
+    return `${DIRECT_POST_SHARE_PREFIX}${JSON.stringify(payload)}`;
+};
+
+export const parsePostShareMessageContent = (content?: string | null): DirectPostSharePayload | null => {
+    if (!content || !content.startsWith(DIRECT_POST_SHARE_PREFIX)) {
+        return null;
+    }
+
+    try {
+        const payload = JSON.parse(content.slice(DIRECT_POST_SHARE_PREFIX.length)) as DirectPostSharePayload;
+        if (!payload?.postId || !payload?.url) {
+            return null;
+        }
+
+        return {
+            postId: payload.postId,
+            url: payload.url,
+            message: payload.message?.trim() || undefined,
+            excerpt: normalizeExcerpt(payload.excerpt),
+            imageUrl: payload.imageUrl?.trim() || undefined,
+        };
+    } catch {
+        return null;
+    }
+};
+
+export const isPostShareMessageContent = (content?: string | null): boolean =>
+    !!parsePostShareMessageContent(content);
+
+export const getPostShareFallbackText = (payload: DirectPostSharePayload): string => {
+    if (payload.message?.trim()) {
+        return `${payload.message.trim()}\n\n${payload.url}`;
+    }
+    return payload.url;
+};
+
+export const parseLegacyPostShareMessage = (
+    content?: string | null,
+): DirectPostSharePayload | null => {
+    if (!content) {
+        return null;
+    }
+
+    const urlMatch = content.match(/https?:\/\/[^\s]+\/post\/([0-9a-zA-Z-]+)/i);
+    if (!urlMatch) {
+        return null;
+    }
+
+    const postId = parsePostIdFromUrl(urlMatch[0]);
+    if (!postId) {
+        return null;
+    }
+
+    const note = content.replace(urlMatch[0], '').trim();
+    return {
+        postId,
+        url: urlMatch[0],
+        message: note || undefined,
+    };
 };
 
 /**

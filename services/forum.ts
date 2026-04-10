@@ -1,7 +1,9 @@
 import { ForumCategory, ForumComment, ForumPost, ForumSort } from '../types';
+import { ensureContentSafety } from './contentFilter';
 import { compressImageForUpload } from '../utils/image';
 import { IMMUTABLE_STORAGE_CACHE_CONTROL } from '../utils/remoteImage';
 import { getFollowingUserIds } from './follows';
+import { getBlockedUserIds } from './moderation';
 import { supabase } from './supabase';
 
 const FORUM_POSTS = 'forum_posts';
@@ -66,7 +68,15 @@ export const fetchForumPosts = async (
     const { data, error } = await query;
     if (error) throw error;
 
-    const posts = (data || []).map(mapRow);
+    let posts = (data || []).map(mapRow);
+
+    if (currentUserId) {
+        const blockedIds = await getBlockedUserIds(currentUserId);
+        if (blockedIds.length > 0) {
+            const blockedSet = new Set(blockedIds);
+            posts = posts.filter((post) => !blockedSet.has(post.authorId));
+        }
+    }
 
     if (currentUserId && posts.length > 0) {
         const ids = posts.map(p => p.id);
@@ -101,7 +111,15 @@ export const searchForumPosts = async (
     const { data, error } = await query.order('created_at', { ascending: false }).limit(20);
     if (error) throw error;
 
-    const posts = (data || []).map(mapRow);
+    let posts = (data || []).map(mapRow);
+
+    if (currentUserId) {
+        const blockedIds = await getBlockedUserIds(currentUserId);
+        if (blockedIds.length > 0) {
+            const blockedSet = new Set(blockedIds);
+            posts = posts.filter((post) => !blockedSet.has(post.authorId));
+        }
+    }
 
     if (currentUserId && posts.length > 0) {
         const ids = posts.map(p => p.id);
@@ -138,6 +156,11 @@ export const fetchForumPostById = async (
     const post = mapRow(data);
 
     if (currentUserId) {
+        const blockedIds = await getBlockedUserIds(currentUserId);
+        if (blockedIds.includes(post.authorId)) {
+            return null;
+        }
+
         const { data: upvote } = await supabase
             .from(FORUM_UPVOTES)
             .select('post_id')
@@ -165,6 +188,9 @@ export const createForumPost = async (data: {
     category: ForumCategory;
     images?: string[];
 }): Promise<ForumPost> => {
+    ensureContentSafety(data.title, '帖子标题包含不符合社区规范的内容，请修改后再发布。');
+    ensureContentSafety(data.content || '', '帖子内容包含不符合社区规范的内容，请修改后再发布。');
+
     const { data: row, error } = await supabase
         .from(FORUM_POSTS)
         .insert([{
@@ -195,6 +221,8 @@ export const addForumComment = async (data: {
     parentCommentId?: string;
     replyToName?: string;
 }): Promise<ForumComment> => {
+    ensureContentSafety(data.content, '评论包含不符合社区规范的内容，请修改后再发布。');
+
     const { data: row, error } = await supabase
         .from(FORUM_COMMENTS)
         .insert([{
@@ -242,7 +270,7 @@ export const addForumComment = async (data: {
 };
 
 // ── Fetch comments ────────────────────────────────────────────────────────────
-export const fetchForumComments = async (postId: string): Promise<ForumComment[]> => {
+export const fetchForumComments = async (postId: string, currentUserId?: string): Promise<ForumComment[]> => {
     const { data, error } = await supabase
         .from(FORUM_COMMENTS)
         .select('*')
@@ -251,7 +279,17 @@ export const fetchForumComments = async (postId: string): Promise<ForumComment[]
 
     if (error) throw error;
 
-    return (data || []).map(row => ({
+    let rows = data || [];
+
+    if (currentUserId) {
+        const blockedIds = await getBlockedUserIds(currentUserId);
+        if (blockedIds.length > 0) {
+            const blockedSet = new Set(blockedIds);
+            rows = rows.filter((row: any) => !blockedSet.has(row.author_id));
+        }
+    }
+
+    return rows.map(row => ({
         id: row.id,
         postId: row.post_id,
         authorId: row.author_id,

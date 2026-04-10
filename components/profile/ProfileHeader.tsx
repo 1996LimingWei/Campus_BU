@@ -11,6 +11,7 @@ import { EduBadge } from '../common/EduBadge';
 
 interface ProfileHeaderProps {
     user: User | null;
+    loading?: boolean;
     isCurrentUser: boolean;
     onEditPress?: () => void;
     onSettingsPress?: () => void;
@@ -24,6 +25,7 @@ interface ProfileHeaderProps {
 
 export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     user,
+    loading = false,
     isCurrentUser,
     onEditPress,
     onSettingsPress,
@@ -35,6 +37,22 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     onFollowStatsPress,
 }) => {
     const { t } = useTranslation();
+
+    if (loading) {
+        return (
+            <View style={styles.cardContainer}>
+                <View style={styles.avatarSection}>
+                    <View style={[styles.avatar, styles.loadingAvatar]} />
+                    <View style={styles.loadingContent}>
+                        <View style={styles.loadingNameBar} />
+                        <View style={styles.loadingMetaBar} />
+                        <View style={styles.loadingMetaBarShort} />
+                    </View>
+                </View>
+            </View>
+        );
+    }
+
     const displayName = user?.displayName || t('profile.guest_name');
     const isGuest = !user;
     const subtitle = isGuest
@@ -201,6 +219,33 @@ const styles = StyleSheet.create({
     contentSection: {
         flex: 1,
         minWidth: 0,
+    },
+    loadingAvatar: {
+        marginRight: 16,
+        backgroundColor: '#E5E7EB',
+    },
+    loadingContent: {
+        flex: 1,
+        justifyContent: 'center',
+        gap: 10,
+    },
+    loadingNameBar: {
+        width: '55%',
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: '#E5E7EB',
+    },
+    loadingMetaBar: {
+        width: '72%',
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: '#EEF2FF',
+    },
+    loadingMetaBarShort: {
+        width: '42%',
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: '#F1F5F9',
     },
     topRow: {
         flexDirection: 'row',

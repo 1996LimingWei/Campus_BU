@@ -1,28 +1,22 @@
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Send, Share2, User as UserIcon, X } from 'lucide-react-native';
+import { ChevronLeft, User as UserIcon, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
-    KeyboardAvoidingView,
     Modal,
-    Platform,
     Pressable,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
-import Animated, {
-    SlideInDown,
-    SlideOutDown
-} from 'react-native-reanimated';
 import { getFollowersList, getFollowingList } from '../../services/follows';
 import { fetchDirectConversations } from '../../services/messages';
 import { isRemoteImageUrl } from '../../utils/remoteImage';
-import { generatePostShareMessage } from '../../utils/shareUtils';
+import { generatePostShareMessageContent } from '../../utils/shareUtils';
 import { CachedRemoteImage } from '../common/CachedRemoteImage';
 
 interface ShareUser {
@@ -36,10 +30,11 @@ interface ShareUser {
 interface SharePostModalProps {
     visible: boolean;
     onClose: () => void;
-    onBack?: () => void; // Optional callback to go back to settings sheet
+    onBack?: () => void;
     currentUserId: string;
     postId: string;
     postContent: string;
+    postImageUrl?: string;
     onShare: (receiverId: string, message: string) => Promise<void>;
 }
 
@@ -50,57 +45,46 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
     currentUserId,
     postId,
     postContent,
+    postImageUrl,
     onShare,
 }) => {
     const { t } = useTranslation();
     const router = useRouter();
     const [users, setUsers] = useState<ShareUser[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedUser, setSelectedUser] = useState<ShareUser | null>(null);
-    const [messageText, setMessageText] = useState('');
-    const [showMessageInput, setShowMessageInput] = useState(false);
-    const [sending, setSending] = useState(false);
+    const [sendingUserId, setSendingUserId] = useState<string | null>(null);
 
     useEffect(() => {
         if (visible) {
-            loadShareUsers();
-        } else {
-            // Reset state when modal closes
-            setSelectedUser(null);
-            setShowMessageInput(false);
-            setMessageText('');
+            void loadShareUsers();
+            return;
         }
+        setSendingUserId(null);
     }, [visible]);
 
     const loadShareUsers = async () => {
         if (!currentUserId) {
             return;
         }
+
         setLoading(true);
         try {
-            // Load users from three sources:
-            // 1. Users I'm following
-            // 2. Users who follow me
-            // 3. Users I've messaged with
             const [followingList, followersList, conversations] = await Promise.all([
                 getFollowingList(currentUserId),
                 getFollowersList(currentUserId),
                 fetchDirectConversations(currentUserId),
             ]);
 
-            // Create a map to deduplicate users
             const userMap = new Map<string, ShareUser>();
 
-            // Add following users
-            followingList.forEach(user => {
+            followingList.forEach((user) => {
                 userMap.set(user.uid, {
                     ...user,
                     source: 'following',
                 });
             });
 
-            // Add followers
-            followersList.forEach(user => {
+            followersList.forEach((user) => {
                 if (!userMap.has(user.uid)) {
                     userMap.set(user.uid, {
                         ...user,
@@ -109,24 +93,21 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
                 }
             });
 
-            // Add users from conversations
-            conversations.forEach(conv => {
-                if (!userMap.has(conv.user.id)) {
-                    userMap.set(conv.user.id, {
-                        uid: conv.user.id,
-                        displayName: conv.user.name,
-                        avatarUrl: conv.user.avatar,
-                        major: conv.user.major,
+            conversations.forEach((conversation) => {
+                if (!userMap.has(conversation.user.id)) {
+                    userMap.set(conversation.user.id, {
+                        uid: conversation.user.id,
+                        displayName: conversation.user.name,
+                        avatarUrl: conversation.user.avatar,
+                        major: conversation.user.major,
                         source: 'message',
                     });
                 }
             });
 
-            // Convert to array and sort by display name
             const userList = Array.from(userMap.values()).sort((a, b) =>
-                a.displayName.localeCompare(b.displayName)
+                a.displayName.localeCompare(b.displayName),
             );
-
             setUsers(userList);
         } catch (error) {
             console.error('[SharePostModal] Error loading share users:', error);
@@ -135,65 +116,100 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
         }
     };
 
-    const handleUserSelect = (user: ShareUser) => {
-        setSelectedUser(user);
-        setShowMessageInput(true);
-    };
+    const handleShareToUser = async (user: ShareUser) => {
+        if (sendingUserId) {
+            return;
+        }
 
-    const handleSend = async () => {
-        if (!selectedUser || sending) return;
-        setSending(true);
+        setSendingUserId(user.uid);
         try {
-            // Create share message using utility function with environment-based URL
-            const shareMessage = generatePostShareMessage(postId, messageText);
-            await onShare(selectedUser.uid, shareMessage);
-            // Close modal after successful share
+            const shareMessage = generatePostShareMessageContent(postId, {
+                postContent,
+                postImageUrl,
+            });
+
+            await onShare(user.uid, shareMessage);
             onClose();
+            router.push({
+                pathname: '/messages/[id]' as any,
+                params: { id: user.uid },
+            });
         } catch (error) {
             console.error('[SharePostModal] Error sharing post:', error);
+            Alert.alert(
+                t('common.error', 'Error'),
+                t('profile.share.failed', '分享失败'),
+            );
         } finally {
-            setSending(false);
+            setSendingUserId(null);
         }
     };
 
-    const handleCloseMessageInput = () => {
-        setShowMessageInput(false);
-        setSelectedUser(null);
-        setMessageText('');
+    const handleUserSelect = (user: ShareUser) => {
+        if (sendingUserId) {
+            return;
+        }
+
+        Alert.alert(
+            t('profile.share.confirm_share_title', '确认分享'),
+            t('profile.share.confirm_share_desc', {
+                defaultValue: '将这条帖子分享给 {{name}}？',
+                name: user.displayName,
+            }),
+            [
+                { text: t('common.cancel', '取消'), style: 'cancel' },
+                {
+                    text: t('profile.share.send', '发送'),
+                    onPress: () => { void handleShareToUser(user); },
+                },
+            ],
+        );
     };
 
-    const renderUserItem = ({ item }: { item: ShareUser }) => (
-        <TouchableOpacity
-            style={styles.userItem}
-            onPress={() => handleUserSelect(item)}
-            activeOpacity={0.7}
-        >
-            {isRemoteImageUrl(item.avatarUrl) ? (
-                <CachedRemoteImage uri={item.avatarUrl} style={styles.avatar} />
-            ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                    <UserIcon size={20} color="#fff" />
-                </View>
-            )}
-            <View style={styles.userInfo}>
-                <Text style={styles.userName} numberOfLines={1}>{item.displayName}</Text>
-                {!!item.major && (
-                    <Text style={styles.userMajor} numberOfLines={1}>{item.major}</Text>
+    const renderUserItem = ({ item }: { item: ShareUser }) => {
+        const isSending = sendingUserId === item.uid;
+        const disabled = !!sendingUserId;
+
+        return (
+            <TouchableOpacity
+                style={[styles.userItem, disabled && styles.userItemDisabled]}
+                onPress={() => handleUserSelect(item)}
+                activeOpacity={0.7}
+                disabled={disabled}
+            >
+                {isRemoteImageUrl(item.avatarUrl) ? (
+                    <CachedRemoteImage uri={item.avatarUrl} style={styles.avatar} />
+                ) : (
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                        <UserIcon size={20} color="#fff" />
+                    </View>
                 )}
-            </View>
-        </TouchableOpacity>
-    );
+                <View style={styles.userInfo}>
+                    <Text style={styles.userName} numberOfLines={1}>{item.displayName}</Text>
+                    {!!item.major && (
+                        <Text style={styles.userMajor} numberOfLines={1}>{item.major}</Text>
+                    )}
+                </View>
+                <View style={styles.userAction}>
+                    {isSending ? (
+                        <ActivityIndicator size="small" color="#1E3A8A" />
+                    ) : (
+                        <Text style={styles.userActionText}>{t('profile.share.send', '发送')}</Text>
+                    )}
+                </View>
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <Modal
             visible={visible}
-            transparent={true}
+            transparent
             animationType="slide"
             onRequestClose={onClose}
         >
             <Pressable style={styles.overlay} onPress={onClose}>
-                <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-                    {/* Header */}
+                <Pressable style={styles.modalContent} onPress={(event) => event.stopPropagation()}>
                     <View style={styles.header}>
                         {onBack ? (
                             <TouchableOpacity style={styles.backBtn} onPress={onBack}>
@@ -203,14 +219,13 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
                             <View style={styles.headerPlaceholder} />
                         )}
                         <Text style={styles.headerTitle}>
-                            {t('share.title', '分享帖子')}
+                            {t('profile.share.title', '分享帖子')}
                         </Text>
                         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
                             <X size={24} color="#6B7280" />
                         </TouchableOpacity>
                     </View>
 
-                    {/* User List */}
                     <View style={styles.listContainer}>
                         {loading ? (
                             <View style={styles.centerContainer}>
@@ -220,7 +235,7 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
                             <View style={styles.centerContainer}>
                                 <UserIcon size={48} color="#D1D5DB" />
                                 <Text style={styles.emptyText}>
-                                    {t('share.no_users', '暂无可分享的用户')}
+                                    {t('profile.share.no_users', '暂无可分享的用户')}
                                 </Text>
                             </View>
                         ) : (
@@ -233,86 +248,6 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
                             />
                         )}
                     </View>
-
-                    {/* Message Input Modal (slides up from bottom) */}
-                    {showMessageInput && selectedUser && (
-                        <Animated.View
-                            entering={SlideInDown.duration(300)}
-                            exiting={SlideOutDown.duration(200)}
-                            style={styles.messageInputContainer}
-                        >
-                            <KeyboardAvoidingView
-                                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                                style={styles.keyboardView}
-                            >
-                                {/* Selected User Header */}
-                                <View style={styles.selectedUserHeader}>
-                                    <View style={styles.selectedUserInfo}>
-                                        {isRemoteImageUrl(selectedUser.avatarUrl) ? (
-                                            <CachedRemoteImage uri={selectedUser.avatarUrl} style={styles.selectedAvatar} />
-                                        ) : (
-                                            <View style={[styles.selectedAvatar, styles.avatarPlaceholder]}>
-                                                <UserIcon size={16} color="#fff" />
-                                            </View>
-                                        )}
-                                        <Text style={styles.selectedUserName} numberOfLines={1}>
-                                            {selectedUser.displayName}
-                                        </Text>
-                                    </View>
-                                    <TouchableOpacity onPress={handleCloseMessageInput}>
-                                        <X size={20} color="#6B7280" />
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Message Input */}
-                                <View style={styles.inputContainer}>
-                                    <Text style={styles.inputLabel}>
-                                        {t('share.message_label', '和朋友说点什么吧')}
-                                    </Text>
-                                    <TextInput
-                                        style={styles.textInput}
-                                        value={messageText}
-                                        onChangeText={setMessageText}
-                                        placeholder={t('share.message_placeholder', '输入消息...')}
-                                        placeholderTextColor="#9CA3AF"
-                                        multiline
-                                        maxLength={500}
-                                        autoFocus
-                                    />
-                                    <Text style={styles.charCount}>
-                                        {messageText.length}/500
-                                    </Text>
-                                </View>
-
-                                {/* Post Preview */}
-                                <View style={styles.postPreview}>
-                                    <Share2 size={16} color="#6B7280" />
-                                    <Text style={styles.postPreviewText} numberOfLines={2}>
-                                        {postContent}
-                                    </Text>
-                                </View>
-
-                                {/* Send Button */}
-                                <TouchableOpacity
-                                    style={[styles.sendButton, sending && styles.sendButtonDisabled]}
-                                    onPress={handleSend}
-                                    disabled={sending}
-                                    activeOpacity={0.7}
-                                >
-                                    {sending ? (
-                                        <ActivityIndicator size="small" color="#fff" />
-                                    ) : (
-                                        <>
-                                            <Send size={18} color="#fff" />
-                                            <Text style={styles.sendButtonText}>
-                                                {t('share.send', '发送')}
-                                            </Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-                            </KeyboardAvoidingView>
-                        </Animated.View>
-                    )}
                 </Pressable>
             </Pressable>
         </Modal>
@@ -389,6 +324,9 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
+    userItemDisabled: {
+        opacity: 0.55,
+    },
     avatar: {
         width: 48,
         height: 48,
@@ -414,104 +352,14 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         marginTop: 2,
     },
-    messageInputContainer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: '#fff',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 10,
-    },
-    keyboardView: {
-        width: '100%',
-    },
-    selectedUserHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    selectedUserInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    selectedAvatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#E5E7EB',
-    },
-    selectedUserName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#111827',
-        marginLeft: 10,
-        flex: 1,
-    },
-    inputContainer: {
-        marginBottom: 16,
-    },
-    inputLabel: {
-        fontSize: 14,
-        color: '#6B7280',
-        marginBottom: 8,
-    },
-    textInput: {
-        backgroundColor: '#F9FAFB',
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 12,
-        fontSize: 15,
-        color: '#111827',
-        minHeight: 80,
-        textAlignVertical: 'top',
-    },
-    charCount: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        textAlign: 'right',
-        marginTop: 4,
-    },
-    postPreview: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F3F4F6',
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        marginBottom: 16,
-    },
-    postPreviewText: {
-        fontSize: 14,
-        color: '#6B7280',
-        marginLeft: 8,
-        flex: 1,
-    },
-    sendButton: {
-        backgroundColor: '#1E3A8A',
-        borderRadius: 12,
-        paddingVertical: 14,
-        flexDirection: 'row',
-        alignItems: 'center',
+    userAction: {
+        minWidth: 44,
+        alignItems: 'flex-end',
         justifyContent: 'center',
-        gap: 8,
     },
-    sendButtonDisabled: {
-        opacity: 0.6,
-    },
-    sendButtonText: {
-        color: '#fff',
-        fontSize: 16,
+    userActionText: {
+        fontSize: 14,
         fontWeight: '600',
+        color: '#1E3A8A',
     },
 });

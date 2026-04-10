@@ -180,6 +180,12 @@ export default function PostDetailScreen() {
         currentUserId: currentUser?.uid,
         ensureLoggedIn: () => !!checkLogin(currentUser),
         onFlash: triggerCommentFlash,
+        onBlockedUser: (blockedUserId) => {
+            setComments((prev) => prev.filter((comment) => comment.authorId !== blockedUserId));
+            if (post?.authorId === blockedUserId) {
+                setPost(null);
+            }
+        },
     });
 
     // Fire zoom animation immediately on mount
@@ -209,7 +215,7 @@ export default function PostDetailScreen() {
             const postData = await fetchPostById(id as string, user?.uid);
             if (postData) {
                 setPost(postData);
-                const commentsData = await fetchPostComments(id as string);
+                const commentsData = await fetchPostComments(id as string, user?.uid);
                 setComments(commentsData);
             }
         } catch (error) {
@@ -303,10 +309,10 @@ export default function PostDetailScreen() {
                 setCommentText('');
                 setReplyTarget(null);
                 Keyboard.dismiss();
-                setToast({ visible: true, message: '评论成功！', type: 'success' });
+                setToast({ visible: true, message: t('campus_detail.comment_success', '评论成功！'), type: 'success' });
             }
         } catch (error) {
-            setToast({ visible: true, message: '评论失败', type: 'error' });
+            setToast({ visible: true, message: t('campus_detail.comment_error', '评论失败'), type: 'error' });
         } finally {
             setSubmitting(false);
         }
@@ -329,7 +335,7 @@ export default function PostDetailScreen() {
             try {
                 await deletePost(post.id);
                 setDeleteModalVisible(false);
-                setToast({ visible: true, message: '已删除', type: 'success' });
+                setToast({ visible: true, message: t('campus_detail.deleted', '已删除'), type: 'success' });
                 // Global sync for deletion
                 DeviceEventEmitter.emit('campus_post_updated', { id: post.id, deleted: true });
                 setTimeout(() => {
@@ -340,7 +346,7 @@ export default function PostDetailScreen() {
                     }
                 }, 1000);
             } catch {
-                setToast({ visible: true, message: '删除失败', type: 'error' });
+                setToast({ visible: true, message: t('campus_detail.delete_failed', '删除失败'), type: 'error' });
                 setDeleteModalVisible(false);
             }
         } else {
@@ -349,9 +355,9 @@ export default function PostDetailScreen() {
                 await deleteComment(selectedCommentId);
                 setComments(prev => prev.filter(c => c.id !== selectedCommentId));
                 setPost(prev => prev ? { ...prev, comments: Math.max(0, prev.comments - 1) } : null);
-                setToast({ visible: true, message: '评论已删除', type: 'success' });
+                setToast({ visible: true, message: t('campus_detail.comment_deleted', '评论已删除'), type: 'success' });
             } catch {
-                setToast({ visible: true, message: '删除失败', type: 'error' });
+                setToast({ visible: true, message: t('campus_detail.delete_failed', '删除失败'), type: 'error' });
             } finally {
                 setDeleteModalVisible(false);
                 setSelectedCommentId(null);
@@ -382,11 +388,14 @@ export default function PostDetailScreen() {
 
             // Show success toast
             const reasonText = reason === 'other' && customReason
-                ? `原因：${customReason}`
+                ? t('campus_detail.deletion_reason_custom', { defaultValue: '原因：{{reason}}', reason: customReason })
                 : getReasonDisplayText(reason);
             setToast({
                 visible: true,
-                message: `帖子已删除 (${reasonText})`,
+                message: t('campus_detail.post_deleted_with_reason', {
+                    defaultValue: '帖子已删除（{{reason}}）',
+                    reason: reasonText,
+                }),
                 type: 'success'
             });
 
@@ -410,7 +419,7 @@ export default function PostDetailScreen() {
             console.error('[PostDetail] Error deleting post:', error);
             setToast({
                 visible: true,
-                message: '删除失败，请重试',
+                message: t('campus_detail.delete_failed_retry', '删除失败，请重试'),
                 type: 'error'
             });
             setAdminDeletionModalVisible(false);
@@ -447,7 +456,7 @@ export default function PostDetailScreen() {
             // Show success toast
             setToast({
                 visible: true,
-                message: '帖子已删除',
+                message: t('campus_detail.post_deleted', '帖子已删除'),
                 type: 'success'
             });
 
@@ -470,7 +479,7 @@ export default function PostDetailScreen() {
             console.error('[PostDetail] Error deleting post (user deletion):', error);
             setToast({
                 visible: true,
-                message: '删除失败，请重试',
+                message: t('campus_detail.delete_failed_retry', '删除失败，请重试'),
                 type: 'error'
             });
             setLoading(false);
@@ -485,15 +494,15 @@ export default function PostDetailScreen() {
     const getReasonDisplayText = (reason: DeletionReason): string => {
         switch (reason) {
             case 'spam':
-                return '垃圾内容/广告';
+                return t('campus_detail.deletion_reason_spam', '垃圾内容/广告');
             case 'unfriendly':
-                return '不友善/违规内容';
+                return t('campus_detail.deletion_reason_unfriendly', '不友善/违规内容');
             case 'duplicate':
-                return '重复内容';
+                return t('campus_detail.deletion_reason_duplicate', '重复内容');
             case 'other':
-                return '其他';
+                return t('campus_detail.deletion_reason_other', '其他');
             default:
-                return '未知原因';
+                return t('campus_detail.deletion_reason_unknown', '未知原因');
         }
     };
 
@@ -503,9 +512,9 @@ export default function PostDetailScreen() {
     if (!loading && !post) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={{ color: '#6B7280', fontSize: 16 }}>帖子不存在</Text>
+                <Text style={{ color: '#6B7280', fontSize: 16 }}>{t('campus_detail.post_not_found', '帖子不存在')}</Text>
                 <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
-                    <Text style={{ color: '#1E3A8A', fontSize: 15 }}>返回</Text>
+                    <Text style={{ color: '#1E3A8A', fontSize: 15 }}>{t('common.back', '返回')}</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -677,8 +686,8 @@ export default function PostDetailScreen() {
                             {loading
                                 ? ''
                                 : organizedComments.length > 0
-                                    ? `共 ${comments.length} 条评论`
-                                    : '暂无评论，来说点什么吧 👇'}
+                                    ? t('campus_detail.comments_count', '{{count}} 条评论', { count: comments.length })
+                                    : t('campus_detail.empty_comments', '暂无评论，来说点什么吧 👇')}
                         </Text>
 
                         {!loading && organizedComments.map(comment => (
@@ -919,7 +928,31 @@ export default function PostDetailScreen() {
                             <View style={styles.shareIconContainer}>
                                 <Share2 size={20} color="#1E3A8A" />
                             </View>
-                            <Text style={styles.shareText}>{t('share.share_post', '分享帖子')}</Text>
+                            <Text style={styles.shareText}>{t('profile.share.share_post', '分享帖子')}</Text>
+                        </TouchableOpacity>
+                    )}
+
+                    {!!post && !isOwnPost && (
+                        <TouchableOpacity
+                            style={styles.shareOption}
+                            onPress={() => {
+                                setSettingsSheetVisible(false);
+                                ugcActions.openActions({
+                                    id: post.id,
+                                    targetId: post.id,
+                                    targetType: 'post',
+                                    content: post.content,
+                                    authorId: post.authorId,
+                                    authorName: post.authorName,
+                                    isAnonymous: post.isAnonymous,
+                                });
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.shareIconContainer}>
+                                <MoreHorizontal size={20} color="#1E3A8A" />
+                            </View>
+                            <Text style={styles.shareText}>{t('moderation.ugc_actions_entry', '举报 / 屏蔽')}</Text>
                         </TouchableOpacity>
                     )}
 
@@ -933,7 +966,7 @@ export default function PostDetailScreen() {
                             <View style={styles.adminDeleteIconContainer}>
                                 <Trash2 size={20} color="#DC2626" />
                             </View>
-                            <Text style={styles.adminDeleteText}>管理员删除</Text>
+                            <Text style={styles.adminDeleteText}>{t('campus_detail.admin_delete', '管理员删除')}</Text>
                         </TouchableOpacity>
                     )}
 
@@ -947,7 +980,7 @@ export default function PostDetailScreen() {
                             <View style={styles.adminDeleteIconContainer}>
                                 <Trash2 size={20} color="#111827" />
                             </View>
-                            <Text style={[styles.adminDeleteText, { color: '#111827' }]}>删除帖子</Text>
+                            <Text style={[styles.adminDeleteText, { color: '#111827' }]}>{t('campus_detail.delete_post_title', '删除帖子')}</Text>
                         </TouchableOpacity>
                     )}
 
@@ -961,7 +994,7 @@ export default function PostDetailScreen() {
                             <View style={styles.adminDeleteIconContainer}>
                                 <Trash2 size={20} color="#DC2626" />
                             </View>
-                            <Text style={styles.adminDeleteText}>管理员删除</Text>
+                            <Text style={styles.adminDeleteText}>{t('campus_detail.admin_delete', '管理员删除')}</Text>
                         </TouchableOpacity>
                     )}
 
@@ -975,19 +1008,26 @@ export default function PostDetailScreen() {
                 />
                 <ActionModal
                     visible={userDeletionConfirmVisible}
-                    title="删除帖子"
-                    message="确定删除你的帖子吗？此操作不可撤销。"
+                    title={t('campus_detail.delete_post_title', '删除帖子')}
+                    message={t('campus_detail.delete_own_post_msg', '确定删除你的帖子吗？此操作不可撤销。')}
                     onConfirm={handleUserDeleteConfirm}
                     onCancel={handleUserDeleteCancel}
-                    confirmText="删除"
+                    confirmText={t('campus_detail.delete_confirm', '删除')}
                 />
                 <ActionModal
                     visible={deleteModalVisible}
-                    title={deleteType === 'post' ? '删除帖子' : '删除评论'}
-                    message={`确定删除这条${deleteType === 'post' ? '帖子' : '评论'}吗？此操作不可撤销。`}
+                    title={deleteType === 'post'
+                        ? t('campus_detail.delete_post_title', '删除帖子')
+                        : t('campus_detail.delete_comment_title', '删除评论')}
+                    message={t('campus_detail.delete_post_or_comment_msg', {
+                        defaultValue: '确定删除这条{{type}}吗？此操作不可撤销。',
+                        type: deleteType === 'post'
+                            ? t('campus_detail.type_post', '帖子')
+                            : t('campus_detail.type_comment', '评论'),
+                    })}
                     onConfirm={confirmDelete}
                     onCancel={() => setDeleteModalVisible(false)}
-                    confirmText="删除"
+                    confirmText={t('campus_detail.delete_confirm', '删除')}
                 />
                 <Toast
                     visible={toast.visible}
@@ -1008,14 +1048,9 @@ export default function PostDetailScreen() {
                     currentUserId={currentUser?.uid || ''}
                     postId={id}
                     postContent={post?.content || ''}
+                    postImageUrl={post?.imageUrl}
                     onShare={async (receiverId: string, message: string) => {
-                        try {
-                            await sendDirectMessage(currentUser?.uid || '', receiverId, message);
-                            setToast({ visible: true, message: t('share.success', '帖子已分享'), type: 'success' });
-                        } catch (error) {
-                            console.error('[PostDetail] Failed to send message:', error);
-                            setToast({ visible: true, message: t('share.failed', '分享失败'), type: 'error' });
-                        }
+                        await sendDirectMessage(currentUser?.uid || '', receiverId, message);
                     }}
                 />
             </Animated.View>

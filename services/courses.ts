@@ -1,6 +1,8 @@
 import { SEM2_COURSES_DATA } from '../constants/courses_sem2';
 import storage from '../lib/storage';
 import { Course, Review } from '../types';
+import { ensureContentSafety } from './contentFilter';
+import { getBlockedUserIds } from './moderation';
 import { supabase } from './supabase';
 
 const LOCAL_COURSES_KEY = 'hkcampus_local_courses';
@@ -383,7 +385,7 @@ export const getCourseById = async (id: string): Promise<Course | null> => {
     };
 };
 
-export const getReviews = async (courseId: string, courseCode?: string): Promise<Review[]> => {
+export const getReviews = async (courseId: string, courseCode?: string, currentUserId?: string): Promise<Review[]> => {
     const candidateCourseIds = await buildReviewCourseIdCandidates(courseId, courseCode);
 
     // Query Supabase for all courses (including local_ ones)
@@ -398,7 +400,17 @@ export const getReviews = async (courseId: string, courseCode?: string): Promise
         return [];
     }
     if (!data) return [];
-    return data.map(r => {
+
+    let rows = data;
+    if (currentUserId) {
+        const blockedIds = await getBlockedUserIds(currentUserId);
+        if (blockedIds.length > 0) {
+            const blockedSet = new Set(blockedIds);
+            rows = rows.filter((row: any) => !blockedSet.has(row.author_id));
+        }
+    }
+
+    return rows.map(r => {
         const author = r.author || {};
         return {
             id: r.id,
@@ -460,7 +472,16 @@ export const getReviewsAndHasReviewed = async (
             : Promise.resolve({ count: 0, error: null })
     ]);
 
-    const reviews: Review[] = (reviewsResult.data || []).map(r => {
+    let reviewRows = reviewsResult.data || [];
+    if (userId) {
+        const blockedIds = await getBlockedUserIds(userId);
+        if (blockedIds.length > 0) {
+            const blockedSet = new Set(blockedIds);
+            reviewRows = reviewRows.filter((row: any) => !blockedSet.has(row.author_id));
+        }
+    }
+
+    const reviews: Review[] = reviewRows.map(r => {
         const author = r.author;
         return {
             id: r.id,
@@ -678,6 +699,8 @@ const ensureCourseExistsForReview = async (courseId?: string): Promise<{ resolve
 };
 
 export const addReview = async (reviewData: Partial<Review>): Promise<{ error: any }> => {
+    ensureContentSafety(reviewData.content || '', '评价包含不符合社区规范的内容，请修改后再发布。');
+
     const requestedCourseId = reviewData.courseId;
 
     const { resolvedCourseId, error: ensureCourseError } = await ensureCourseExistsForReview(requestedCourseId);

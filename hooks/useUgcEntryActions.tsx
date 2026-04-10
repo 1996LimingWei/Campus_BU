@@ -4,6 +4,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Animated,
+    DeviceEventEmitter,
     Modal,
     Pressable,
     StyleSheet,
@@ -11,13 +12,14 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Copy, MessageCircleWarning, Send, ShieldAlert } from 'lucide-react-native';
-import { reportContent, ReportReason } from '../services/moderation';
+import { Ban, Copy, MessageCircleWarning, Send, ShieldAlert } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+import { blockUser, ModerationTargetType, reportContent, ReportReason } from '../services/moderation';
 
 export type UgcActionTarget = {
     id: string;
     targetId: string;
-    targetType: 'post' | 'comment';
+    targetType: ModerationTargetType;
     content?: string;
     authorId?: string;
     authorName?: string;
@@ -28,18 +30,22 @@ type UseUgcEntryActionsOptions = {
     currentUserId?: string | null;
     ensureLoggedIn: () => boolean;
     onFlash?: (id: string) => void;
+    onBlockedUser?: (blockedUserId: string) => void;
 };
 
-const REPORT_REASONS: Array<{ label: string; value: ReportReason }> = [
-    { label: '垃圾内容', value: 'spam' },
-    { label: '骚扰辱骂', value: 'harassment' },
-    { label: '仇恨/歧视', value: 'hate_speech' },
-    { label: '色情低俗', value: 'sexual_content' },
-    { label: '其他', value: 'other' },
+const REPORT_REASONS: Array<{ key: string; value: ReportReason }> = [
+    { key: 'moderation.ugc_report_reasons.spam', value: 'spam' },
+    { key: 'moderation.ugc_report_reasons.harassment', value: 'harassment' },
+    { key: 'moderation.ugc_report_reasons.hate_speech', value: 'hate_speech' },
+    { key: 'moderation.ugc_report_reasons.sexual_content', value: 'sexual_content' },
+    { key: 'moderation.ugc_report_reasons.violence', value: 'violence' },
+    { key: 'moderation.ugc_report_reasons.scam', value: 'scam' },
+    { key: 'moderation.ugc_report_reasons.other', value: 'other' },
 ];
 
 export function useUgcEntryActions(options: UseUgcEntryActionsOptions) {
-    const { currentUserId, ensureLoggedIn, onFlash } = options;
+    const { t } = useTranslation();
+    const { currentUserId, ensureLoggedIn, onFlash, onBlockedUser } = options;
     const router = useRouter();
     const flashAnim = useRef(new Animated.Value(0)).current;
     const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -91,6 +97,12 @@ export function useUgcEntryActions(options: UseUgcEntryActionsOptions) {
         && target.authorId !== currentUserId
     ), [currentUserId, target]);
 
+    const canBlock = useMemo(() => (
+        !!target?.authorId
+        && !target?.isAnonymous
+        && target.authorId !== currentUserId
+    ), [currentUserId, target]);
+
     const handleReportReason = useCallback(async (reason: ReportReason) => {
         if (!currentUserId || !target) {
             return;
@@ -102,35 +114,75 @@ export function useUgcEntryActions(options: UseUgcEntryActionsOptions) {
                 reporterId: currentUserId,
                 targetId: target.targetId,
                 targetType: target.targetType,
+                targetAuthorId: target.authorId,
                 reason,
             });
 
             if (result.success) {
-                Alert.alert('已举报', '感谢你帮助维护社区安全。我们将核实此内容。');
+                Alert.alert(t('moderation.ugc_reported_title'), t('moderation.ugc_reported_msg'));
             } else {
-                Alert.alert('举报失败', '请稍后再试。');
+                Alert.alert(t('common.error'), t('moderation.ugc_report_failed'));
             }
         } catch (error) {
             console.error('Error reporting UGC item:', error);
-            Alert.alert('举报失败', '请稍后再试。');
+            Alert.alert(t('common.error'), t('moderation.ugc_report_failed'));
         }
-    }, [closeActions, currentUserId, target]);
+    }, [closeActions, currentUserId, target, t]);
 
     const handleReport = useCallback(() => {
         Alert.alert(
-            '举报内容',
-            '你为什么要举报这个内容？',
+            t('moderation.ugc_report_title'),
+            t('moderation.ugc_report_desc'),
             [
                 ...REPORT_REASONS.map((reason) => ({
-                    text: reason.label,
+                    text: t(reason.key),
                     onPress: () => {
                         void handleReportReason(reason.value);
                     },
                 })),
-                { text: '取消', style: 'cancel' as const },
+                { text: t('common.cancel'), style: 'cancel' as const },
             ],
         );
-    }, [handleReportReason]);
+    }, [handleReportReason, t]);
+
+    const handleBlock = useCallback(() => {
+        if (!currentUserId || !target?.authorId || !canBlock) {
+            return;
+        }
+        const blockedAuthorId = target.authorId;
+
+        Alert.alert(
+            t('moderation.ugc_block_title'),
+            target.authorName 
+                ? t('moderation.ugc_block_msg_named', { name: target.authorName })
+                : t('moderation.ugc_block_msg_default'),
+            [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                    text: t('moderation.ugc_block_confirm'),
+                    style: 'destructive',
+                    onPress: () => {
+                        closeActions();
+                        blockUser(currentUserId, blockedAuthorId, {
+                            source: 'ugc_actions_sheet',
+                            reason: 'abusive_user',
+                        }).then((result) => {
+                            if (result.success) {
+                                Alert.alert(t('moderation.ugc_blocked_title'), t('moderation.ugc_blocked_msg'));
+                                DeviceEventEmitter.emit('user_blocked', { userId: blockedAuthorId });
+                                onBlockedUser?.(blockedAuthorId);
+                            } else {
+                                Alert.alert(t('common.error'), t('moderation.ugc_block_failed'));
+                            }
+                        }).catch((error) => {
+                            console.error('Error blocking user from UGC actions:', error);
+                            Alert.alert(t('common.error'), t('moderation.ugc_block_failed'));
+                        });
+                    },
+                },
+            ],
+        );
+    }, [canBlock, closeActions, currentUserId, onBlockedUser, target, t]);
 
     const handleMessage = useCallback(() => {
         if (!target?.authorId || !canMessage) {
@@ -147,19 +199,19 @@ export function useUgcEntryActions(options: UseUgcEntryActionsOptions) {
     const handleCopy = useCallback(async () => {
         const content = target?.content?.trim();
         if (!content) {
-            Alert.alert('无法复制', '这条内容暂无可复制文本。');
+            Alert.alert(t('moderation.ugc_copy_empty_title'), t('moderation.ugc_copy_empty_msg'));
             return;
         }
 
         try {
             await Clipboard.setStringAsync(content);
             closeActions();
-            Alert.alert('已复制', '内容已复制到剪贴板。');
+            Alert.alert(t('moderation.ugc_copied_title'), t('moderation.ugc_copied_msg'));
         } catch (error) {
             console.error('Error copying UGC content:', error);
-            Alert.alert('复制失败', '请稍后再试。');
+            Alert.alert(t('moderation.ugc_copy_failed_title'), t('moderation.ugc_copy_failed_msg'));
         }
-    }, [closeActions, target?.content]);
+    }, [closeActions, target?.content, t]);
 
     const getHighlightStyle = useCallback((id: string) => {
         if (highlightedId !== id || onFlash) {
@@ -189,25 +241,33 @@ export function useUgcEntryActions(options: UseUgcEntryActionsOptions) {
                             <View style={[styles.iconWrap, styles.messageIconWrap]}>
                                 <Send size={18} color="#2563EB" />
                             </View>
-                            <Text style={styles.actionText}>私信</Text>
+                            <Text style={styles.actionText}>{t('moderation.ugc_action_message')}</Text>
                         </TouchableOpacity>
                     )}
                     <TouchableOpacity style={styles.actionButton} activeOpacity={0.85} onPress={handleCopy}>
                         <View style={[styles.iconWrap, styles.copyIconWrap]}>
                             <Copy size={18} color="#0F766E" />
                         </View>
-                        <Text style={styles.actionText}>复制</Text>
+                        <Text style={styles.actionText}>{t('moderation.ugc_action_copy')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.actionButton} activeOpacity={0.85} onPress={handleReport}>
                         <View style={[styles.iconWrap, styles.reportIconWrap]}>
                             <ShieldAlert size={18} color="#DC2626" />
                         </View>
-                        <Text style={styles.actionText}>举报</Text>
+                        <Text style={styles.actionText}>{t('moderation.ugc_action_report')}</Text>
                     </TouchableOpacity>
+                    {canBlock && (
+                        <TouchableOpacity style={styles.actionButton} activeOpacity={0.85} onPress={handleBlock}>
+                            <View style={[styles.iconWrap, styles.blockIconWrap]}>
+                                <Ban size={18} color="#7C2D12" />
+                            </View>
+                            <Text style={styles.actionText}>{t('moderation.ugc_action_block')}</Text>
+                        </TouchableOpacity>
+                    )}
                     {target?.isAnonymous && (
                         <View style={styles.hintRow}>
                             <MessageCircleWarning size={14} color="#94A3B8" />
-                            <Text style={styles.hintText}>匿名内容仅支持举报</Text>
+                            <Text style={styles.hintText}>{t('moderation.ugc_anonymous_hint')}</Text>
                         </View>
                     )}
                 </Pressable>
@@ -266,6 +326,9 @@ const styles = StyleSheet.create({
     },
     reportIconWrap: {
         backgroundColor: '#FEE2E2',
+    },
+    blockIconWrap: {
+        backgroundColor: '#FFEDD5',
     },
     actionText: {
         fontSize: 16,

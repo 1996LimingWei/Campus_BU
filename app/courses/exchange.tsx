@@ -78,6 +78,10 @@ export default function ExchangeScreen() {
     const ugcActions = useUgcEntryActions({
         currentUserId,
         ensureLoggedIn: () => !!checkLogin(currentUserId),
+        onBlockedUser: (blockedUserId) => {
+            setExchanges((prev) => prev.filter((exchange) => exchange.userId !== blockedUserId));
+            setComments((prev) => prev.filter((comment) => comment.authorId !== blockedUserId));
+        },
     });
 
     // Post Form State
@@ -133,6 +137,12 @@ export default function ExchangeScreen() {
         loadExchanges();
     }, []);
 
+    useEffect(() => {
+        if (currentUserId) {
+            loadExchanges();
+        }
+    }, [currentUserId]);
+
     const organizedComments = React.useMemo(() => {
         const rootComments = comments.filter(c => !c.parentCommentId);
         const replyMap: Record<string, ExchangeComment[]> = {};
@@ -152,7 +162,7 @@ export default function ExchangeScreen() {
 
     const loadExchanges = async () => {
         setLoading(true);
-        const data = await fetchExchanges();
+        const data = await fetchExchanges(currentUserId || undefined);
         setExchanges(data);
         setLoading(false);
     };
@@ -314,7 +324,7 @@ export default function ExchangeScreen() {
         setSelectedExchange(exchange);
         setIsCommentModalVisible(true);
         setLoadingComments(true);
-        const data = await fetchExchangeComments(exchange.id);
+        const data = await fetchExchangeComments(exchange.id, currentUserId || undefined);
         setComments(data);
         setLoadingComments(false);
     };
@@ -338,7 +348,7 @@ export default function ExchangeScreen() {
 
             setNewComment('');
             setReplyTarget(null);
-            const data = await fetchExchangeComments(selectedExchange.id);
+            const data = await fetchExchangeComments(selectedExchange.id, currentUserId || undefined);
             setComments(data);
             setExchanges(prev => prev.map(e =>
                 e.id === selectedExchange.id ? { ...e, commentCount: e.commentCount + 1 } : e
@@ -373,7 +383,7 @@ export default function ExchangeScreen() {
                 onLongPress={() => ugcActions.openActions({
                     id: item.id,
                     targetId: item.id,
-                    targetType: 'post',
+                    targetType: 'exchange_post',
                     content: [item.haveCourse, ...item.wantCourses.map((want) => want.code), item.reason || ''].filter(Boolean).join('\n'),
                     authorId: item.userId,
                     authorName: item.userName,
@@ -468,7 +478,7 @@ export default function ExchangeScreen() {
                 onLongPress={() => ugcActions.openActions({
                     id: item.id,
                     targetId: item.id,
-                    targetType: 'post',
+                    targetType: 'exchange_post',
                     content: [item.haveCourse, ...item.wantCourses.map((want) => want.code), item.reason || ''].filter(Boolean).join('\n'),
                     authorId: item.userId,
                     authorName: item.userName,
@@ -846,7 +856,7 @@ export default function ExchangeScreen() {
                                                     onLongPress={() => ugcActions.openActions({
                                                         id: item.id,
                                                         targetId: item.id,
-                                                        targetType: 'comment',
+                                                        targetType: 'exchange_comment',
                                                         content: item.content,
                                                         authorId: item.authorId,
                                                         authorName: item.authorName,
@@ -878,7 +888,7 @@ export default function ExchangeScreen() {
                                                                 onLongPress={() => ugcActions.openActions({
                                                                     id: reply.id,
                                                                     targetId: reply.id,
-                                                                    targetType: 'comment',
+                                                                    targetType: 'exchange_comment',
                                                                     content: reply.content,
                                                                     authorId: reply.authorId,
                                                                     authorName: reply.authorName,

@@ -1,9 +1,9 @@
 import { formatDistanceToNow } from 'date-fns';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Bell, ChevronRight, Copy, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Shield, Sparkles, X } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, InteractionManager, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { FollowListModal } from '../../components/profile/FollowListModal';
 import MyScheduleCard from '../../components/profile/MyScheduleCard';
 import { ProfileHeader } from '../../components/profile/ProfileHeader';
@@ -19,6 +19,7 @@ import { getFollowCounts } from '../../services/follows';
 import { fetchNotifications, markAllAsRead, markAsRead, Notification, subscribeToNotifications } from '../../services/notifications';
 import { getPushNotificationsEnabled, setPushNotificationsEnabled as updatePushNotificationsEnabled } from '../../services/push_notifications';
 import { supabase } from '../../services/supabase';
+import { fetchUnreadModerationAlertCount } from '../../services/moderation';
 import { Post, User as UserProfile } from '../../types';
 import { isAdmin } from '../../utils/userUtils';
 import { getDeleteAccountErrorAlertCopy, getDeleteAccountSuccessAlertCopy } from '../../utils/deleteAccountFeedback';
@@ -36,56 +37,68 @@ const LANGUAGE_OPTIONS = [
     { key: 'en', label: 'EN' },
 ];
 
+type ProfileScreenCache = {
+    profile: UserProfile | null;
+    userId: string | null;
+    userEmail: string;
+    notifications: Notification[];
+    pushNotificationsEnabled: boolean;
+    dailyDigestEnabled: boolean;
+    isAdminUser: boolean;
+    adminModerationUnreadCount: number;
+};
+
+let profileScreenCache: ProfileScreenCache | null = null;
+
 export default function ProfileScreen() {
     const router = useRouter();
     const { t, i18n } = useTranslation();
     const currentLang = i18n.language;
     const [showNotifications, setShowNotifications] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [loadingNotifications, setLoadingNotifications] = useState(true);
-    const [loadingProfile, setLoadingProfile] = useState(true);
-    const [pushNotificationsEnabled, setPushNotificationsEnabledState] = useState(false);
+    const [notifications, setNotifications] = useState<Notification[]>(() => profileScreenCache?.notifications || []);
+    const [loadingNotifications, setLoadingNotifications] = useState(() => !profileScreenCache);
+    const [loadingProfile, setLoadingProfile] = useState(() => !profileScreenCache);
+    const [pushNotificationsEnabled, setPushNotificationsEnabledState] = useState(() => profileScreenCache?.pushNotificationsEnabled || false);
     const [pushNotificationsLoading, setPushNotificationsLoading] = useState(false);
-    const [dailyDigestEnabled, setDailyDigestEnabledState] = useState(false);
+    const [dailyDigestEnabled, setDailyDigestEnabledState] = useState(() => profileScreenCache?.dailyDigestEnabled || false);
     const [dailyDigestLoading, setDailyDigestLoading] = useState(false);
-    const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [userId, setUserId] = useState<string | null>(null);
-    const [userEmail, setUserEmail] = useState('');
+    const [profile, setProfile] = useState<UserProfile | null>(() => profileScreenCache?.profile || null);
+    const [userId, setUserId] = useState<string | null>(() => profileScreenCache?.userId || null);
+    const [userEmail, setUserEmail] = useState(() => profileScreenCache?.userEmail || '');
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
-    const [isAdminUser, setIsAdminUser] = useState(false);
+    const [isAdminUser, setIsAdminUser] = useState(() => profileScreenCache?.isAdminUser || false);
+    const [adminModerationUnreadCount, setAdminModerationUnreadCount] = useState(() => profileScreenCache?.adminModerationUnreadCount || 0);
+    const loadTokenRef = useRef(0);
     const { checkLogin } = useLoginPrompt();
 
     const { unreadCount: globalUnreadCount, messageUnreadCount, refreshCount: refreshGlobalCount } = useNotifications();
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     const loadData = async () => {
+        const loadToken = ++loadTokenRef.current;
         try {
+            if (!profile && !userId) {
+                setLoadingProfile(true);
+            }
+            setLoadingNotifications(true);
             const user = await getCurrentUser();
+            if (loadToken !== loadTokenRef.current) {
+                return;
+            }
 
             if (user) {
                 setUserId(user.uid);
                 setUserEmail(user.email || '');
-                const [enabled, digestEnabled] = await Promise.all([
-                    getPushNotificationsEnabled(user.uid),
-                    getDailyDigestEnabled(user.uid),
-                ]);
-                setPushNotificationsEnabledState(enabled);
-                setDailyDigestEnabledState(digestEnabled);
 
-                // Check admin status
-                const adminStatus = await isAdmin(user.uid);
-                setIsAdminUser(adminStatus);
-
-                // Load Notifications
-                const notifData = await fetchNotifications(user.uid);
-                setNotifications(notifData);
-
-                // Load Profile
+                // Critical path first: render real profile quickly, avoid Guest flicker.
                 const [userProfile, followCounts] = await Promise.all([
                     getUserProfile(user.uid),
                     getFollowCounts(user.uid),
                 ]);
+                if (loadToken !== loadTokenRef.current) {
+                    return;
+                }
                 if (userProfile) {
                     setProfile({
                         ...userProfile,
@@ -97,29 +110,126 @@ export default function ProfileScreen() {
                             appreciationCount: 0,
                         },
                     });
+                } else {
+                    setProfile(null);
                 }
+                setLoadingProfile(false);
+
+                // Non-critical data in parallel: avoid blocking first paint.
+                const [enabled, digestEnabled, adminStatus, notifData] = await Promise.all([
+                    getPushNotificationsEnabled(user.uid),
+                    getDailyDigestEnabled(user.uid),
+                    isAdmin(user.uid),
+                    fetchNotifications(user.uid),
+                ]);
+                if (loadToken !== loadTokenRef.current) {
+                    return;
+                }
+
+                setPushNotificationsEnabledState(enabled);
+                setDailyDigestEnabledState(digestEnabled);
+                setIsAdminUser(adminStatus);
+                setNotifications(notifData);
+
+                let adminUnreadCount = 0;
+                if (adminStatus) {
+                    const unreadCount = await fetchUnreadModerationAlertCount(user.uid);
+                    if (loadToken !== loadTokenRef.current) {
+                        return;
+                    }
+                    setAdminModerationUnreadCount(unreadCount);
+                    adminUnreadCount = unreadCount;
+                } else {
+                    setAdminModerationUnreadCount(0);
+                }
+
+                profileScreenCache = {
+                    profile: userProfile ? {
+                        ...userProfile,
+                        email: userProfile.email || user.email || '',
+                        stats: {
+                            postsCount: 0,
+                            followersCount: followCounts.followersCount,
+                            followingCount: followCounts.followingCount,
+                            appreciationCount: 0,
+                        },
+                    } : null,
+                    userId: user.uid,
+                    userEmail: user.email || '',
+                    notifications: notifData,
+                    pushNotificationsEnabled: enabled,
+                    dailyDigestEnabled: digestEnabled,
+                    isAdminUser: adminStatus,
+                    adminModerationUnreadCount: adminUnreadCount,
+                };
             } else {
+                setProfile(null);
+                setUserId(null);
+                setUserEmail('');
+                setNotifications([]);
                 setPushNotificationsEnabledState(false);
                 setDailyDigestEnabledState(false);
+                setIsAdminUser(false);
+                setAdminModerationUnreadCount(0);
+                setLoadingProfile(false);
+                profileScreenCache = {
+                    profile: null,
+                    userId: null,
+                    userEmail: '',
+                    notifications: [],
+                    pushNotificationsEnabled: false,
+                    dailyDigestEnabled: false,
+                    isAdminUser: false,
+                    adminModerationUnreadCount: 0,
+                };
             }
         } catch (error) {
             console.error('[Profile] Error loading data:', error);
+            if (loadToken === loadTokenRef.current) {
+                setLoadingProfile(false);
+            }
         } finally {
-            setLoadingNotifications(false);
-            setLoadingProfile(false);
+            if (loadToken === loadTokenRef.current) {
+                setLoadingNotifications(false);
+            }
         }
     };
 
-    useFocusEffect(
-        useCallback(() => {
-            const task = InteractionManager.runAfterInteractions(() => {
-                loadData();
-            });
-            return () => {
-                task.cancel();
-            };
-        }, [])
-    );
+    useEffect(() => {
+        if (!profileScreenCache || !profileScreenCache.userId) {
+            void loadData();
+        }
+        return () => {
+            loadTokenRef.current += 1;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (loadingProfile || loadingNotifications) {
+            return;
+        }
+        profileScreenCache = {
+            profile,
+            userId,
+            userEmail,
+            notifications,
+            pushNotificationsEnabled,
+            dailyDigestEnabled,
+            isAdminUser,
+            adminModerationUnreadCount,
+        };
+    }, [
+        adminModerationUnreadCount,
+        dailyDigestEnabled,
+        isAdminUser,
+        loadingNotifications,
+        loadingProfile,
+        notifications,
+        profile,
+        pushNotificationsEnabled,
+        userEmail,
+        userId,
+    ]);
 
     useEffect(() => {
         let subscription: any;
@@ -261,6 +371,7 @@ export default function ProfileScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         await signOut();
+                        profileScreenCache = null;
                         router.replace('/(auth)/login');
                     }
                 }
@@ -281,6 +392,7 @@ export default function ProfileScreen() {
                         try {
                             await deleteAccount();
                             const successCopy = getDeleteAccountSuccessAlertCopy(t);
+                            profileScreenCache = null;
                             Alert.alert(successCopy.title, successCopy.message, [
                                 {
                                     text: t('common.ok'),
@@ -458,6 +570,9 @@ export default function ProfileScreen() {
     };
 
     const [activeTab, setActiveTab] = useState<ProfileTabType>('posts');
+    const [hasLoadedContent, setHasLoadedContent] = useState(false);
+    const [hasLoadedMessages, setHasLoadedMessages] = useState(false);
+    const [profileMode, setProfileMode] = useState<'overview' | 'messages' | 'content'>('overview');
     const [posts, setPosts] = useState<Post[]>([]);
     const [privatePosts, setPrivatePosts] = useState<Post[]>([]);
     const [likedPosts, setLikedPosts] = useState<Post[]>([]);
@@ -500,16 +615,27 @@ export default function ProfileScreen() {
     };
 
     useEffect(() => {
-        if (userId) {
+        if (profileMode === 'content' && !hasLoadedContent) {
+            setHasLoadedContent(true);
+        }
+    }, [hasLoadedContent, profileMode]);
+
+    useEffect(() => {
+        if (profileMode === 'messages' && !hasLoadedMessages) {
+            setHasLoadedMessages(true);
+        }
+    }, [hasLoadedMessages, profileMode]);
+
+    useEffect(() => {
+        if (userId && hasLoadedContent) {
             Promise.all([loadUserPosts(userId), loadPrivatePosts(userId), loadLikedPosts(userId)]);
         } else {
             setPosts([]);
             setPrivatePosts([]);
             setLikedPosts([]);
         }
-    }, [userId]);
+    }, [hasLoadedContent, userId]);
 
-    const [profileMode, setProfileMode] = useState<'overview' | 'messages' | 'content'>('overview');
     const pagerRef = React.useRef<ScrollView>(null);
     const scrollX = React.useRef(new Animated.Value(0)).current;
     const { width: SCREEN_W } = Dimensions.get('window');
@@ -544,6 +670,7 @@ export default function ProfileScreen() {
             {/* Profile Header Card */}
             <ProfileHeader
                 user={profile}
+                loading={loadingProfile}
                 isCurrentUser={true}
                 onEditPress={() => router.push('/(auth)/setup')}
                 onSettingsPress={() => { }}
@@ -750,6 +877,36 @@ export default function ProfileScreen() {
 
                     {/* Settings */}
                     <View style={styles.section}>
+                        {isAdminUser && (
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={() => router.push('/admin/moderation' as any)}
+                            >
+                                <Shield size={20} color="#1E3A8A" />
+                                <Text style={styles.menuText}>{t('profile.moderation_workbench', '审核工作台')}</Text>
+                                <View style={styles.menuRight}>
+                                    {adminModerationUnreadCount > 0 && (
+                                        <View style={styles.menuAlertBadge}>
+                                            <Text style={styles.menuAlertBadgeText}>
+                                                {adminModerationUnreadCount > 99 ? '99+' : adminModerationUnreadCount}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    <ChevronRight size={20} color="#9CA3AF" />
+                                </View>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={() => {
+                                if (!checkLogin(userId)) return;
+                                router.push('/profile/blocked-users' as any);
+                            }}
+                        >
+                            <Shield size={20} color="#6B7280" />
+                            <Text style={styles.menuText}>{t('profile.blocked_users', '已屏蔽用户')}</Text>
+                            <ChevronRight size={20} color="#9CA3AF" />
+                        </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.menuItem}
                             onPress={() => router.push({ pathname: '/legal', params: { tab: 'privacy' } } as any)}
@@ -796,7 +953,13 @@ export default function ProfileScreen() {
 
                 {/* Page 1: Messages */}
                 <View style={{ width: SCREEN_W }}>
-                    <ProfileMessages />
+                    {hasLoadedMessages ? (
+                        <ProfileMessages />
+                    ) : (
+                        <View style={styles.lazyPagePlaceholder}>
+                            <Text style={styles.lazyPagePlaceholderText}>{t('messages.title')}</Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Page 2: My Content */}
@@ -1042,6 +1205,17 @@ const styles = StyleSheet.create({
     scrollContentPager: {
         paddingBottom: 40,
     },
+    lazyPagePlaceholder: {
+        flex: 1,
+        backgroundColor: '#fff',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    lazyPagePlaceholderText: {
+        fontSize: 16,
+        color: '#9CA3AF',
+        fontWeight: '600',
+    },
     blueHeader: {
         backgroundColor: '#1E3A8A',
         height: 160,
@@ -1278,6 +1452,25 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#374151',
         marginLeft: 12,
+    },
+    menuRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    menuAlertBadge: {
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: '#EF4444',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 5,
+        marginRight: 8,
+    },
+    menuAlertBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '700',
     },
     signOutButton: {
         flexDirection: 'row',
