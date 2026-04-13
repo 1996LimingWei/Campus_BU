@@ -613,7 +613,7 @@
             "other": "其他"
         },
         "ugc_reported_title": "已举报",
-        "ugc_reported_msg": "感谢你帮助维护社区安全。我们将核实此内容。",
+        "ugc_reported_msg": "感谢你帮助维护社区安全。我们将在 24 小时内核实此举报。",
         "ugc_report_failed": "举报失败，请稍后再试。",
         "ugc_block_title": "屏蔽用户",
         "ugc_block_msg_named": "确定屏蔽「{{name}}」吗？屏蔽后你将不再看到其内容。",

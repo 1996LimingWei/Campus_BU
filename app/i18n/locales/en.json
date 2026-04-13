@@ -613,7 +613,7 @@
             "other": "Other"
         },
         "ugc_reported_title": "Reported",
-        "ugc_reported_msg": "Thank you for helping keep the community safe. We will review this content.",
+        "ugc_reported_msg": "Thank you for helping keep the community safe. We will review this report within 24 hours.",
         "ugc_report_failed": "Report failed. Please try again later.",
         "ugc_block_title": "Block User",
         "ugc_block_msg_named": "Block \u300c{{name}}\u300d? You will no longer see their content.",

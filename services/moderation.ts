@@ -136,9 +136,22 @@ export const getLocalEulaAccepted = async (): Promise<boolean> => {
     }
 };
 
+export const clearLocalEulaConsent = async (): Promise<void> => {
+    try {
+        await Promise.all([
+            storage.removeItem(EULA_VERSION_STORAGE_KEY),
+            storage.removeItem(LEGACY_EULA_STORAGE_KEY),
+        ]);
+        console.log('[moderation.ts] Local EULA consent cleared');
+    } catch (e) {
+        console.error('[moderation.ts] Failed to clear local EULA consent:', e);
+    }
+};
+
 export const hasAcceptedCommunityEula = async (userId?: string | null): Promise<boolean> => {
     const localAccepted = await getLocalEulaAccepted();
 
+    // If no user ID, we rely entirely on device-level local storage.
     if (!userId) {
         return localAccepted;
     }
@@ -159,12 +172,15 @@ export const hasAcceptedCommunityEula = async (userId?: string | null): Promise<
         return localAccepted;
     }
 
+    // If server says they accepted this version, they are good.
     if (data?.eula_version === COMMUNITY_EULA_VERSION) {
         return true;
     }
 
+    // If server has no record but they accepted locally on this device,
+    // we assume it's the same person who just registered or migrated.
+    // We backfill the server-side consent.
     if (localAccepted) {
-        // Backfill server-side consent after login if user accepted locally before.
         void acceptCommunityEula(userId);
         return true;
     }

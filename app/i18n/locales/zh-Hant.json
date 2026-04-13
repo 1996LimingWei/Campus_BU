@@ -613,7 +613,7 @@
             "other": "其他"
         },
         "ugc_reported_title": "已舉報",
-        "ugc_reported_msg": "感謝你幫助維護社區安全。我們將核實此內容。",
+        "ugc_reported_msg": "感謝你幫助維護社區安全。我們將在 24 小時內核實此舉報。",
         "ugc_report_failed": "舉報失敗，請稍後再試。",
         "ugc_block_title": "封鎖用戶",
         "ugc_block_msg_named": "確定封鎖「{{name}}」嗎？封鎖後你將不再看到其內容。",

@@ -5,6 +5,7 @@ import { User } from '../types';
 import { compressImageForUpload } from '../utils/image';
 import { IMMUTABLE_STORAGE_CACHE_CONTROL } from '../utils/remoteImage';
 import { supabase } from './supabase';
+import { clearLocalEulaConsent } from './moderation';
 
 // Global flag to skip auth redirects during password reset flow
 let skipAuthRedirect = false;
@@ -124,6 +125,7 @@ export const deleteAccount = async () => {
     }
 
     await signOut();
+    await clearLocalEulaConsent();
 };
 
 /**
