@@ -90,6 +90,13 @@ const shouldUseCurrentLocation = (input: string): boolean => {
     return /闄勮繎|鏈€杩憒绂绘垜鏈€杩憒闆㈡垜鏈€杩憒near me|nearest|around me|鎴戝湪鍝獆鎴戝湪鍝効|鎴戝湪鍝！|where am i|current location|褰撳墠浣嶇疆|鐣跺墠浣嶇疆|鏈€杩戠殑寤虹瓚|鏈€杩戠殑寤虹瘔|鏈€杩戠殑椁愬巺|鏈€杩戠殑椁愬怀|nearest building|nearest restaurant/i.test(text);
 };
 
+const shouldUseLatestDigest = (input: string): boolean => {
+    const text = input.trim().toLowerCase();
+    if (!text) return false;
+
+    return /最新资讯|最新資訊|新鲜资讯|新鮮資訊|最近有什么新鲜资讯|最近有什麼新鮮資訊|today news|latest news|news digest|资讯摘要|資訊摘要|新聞摘要/.test(text);
+};
+
 export default function AgentChatScreen({ showBackButton = false }: AgentChatScreenProps) {
     const router = useRouter();
     const params = useLocalSearchParams<{ digestDate?: string }>();
@@ -258,64 +265,11 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         };
     }, []);
 
-    const handleSend = async (overrideText?: string) => {
-        if (!loadingSession && !currentUser) {
-            setShowGuestModal(true);
+    const loadLatestDigestResponse = async () => {
+        if (!currentUser?.uid) {
             return;
         }
 
-        const textToSend = overrideText || input;
-        if (!textToSend.trim() || loading) return;
-
-        const userMsg = textToSend.trim();
-        if (!overrideText) setInput('');
-        setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-        setLoading(true);
-
-        try {
-            if (shouldUseCurrentLocation(userMsg)) {
-                const coords = await ensureCurrentLocation();
-                agentRef.current.setDeviceLocation(coords);
-            }
-            const streamId = Date.now().toString();
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: '',
-                id: streamId
-            }]);
-
-            const onUpdate = (text: string) => {
-                setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content: text || '...' } : m));
-                scrollViewRef.current?.scrollToEnd({ animated: false });
-            };
-
-            const response = await agentRef.current.process(userMsg, onUpdate);
-
-            setMessages(prev => prev.map(m => m.id === streamId ? {
-                ...m,
-                content: response.finalAnswer || m.content,
-                steps: response.steps,
-                quickReplies: response.quickReplies
-            } : m));
-        } catch (error: any) {
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `鎶辨瓑锛屾垜鐜板湪閬囧埌浜嗕竴鐐归棶棰橈細${error.message || '鏈煡閿欒'}`
-            }]);
-        } finally {
-            setLoading(false);
-        }
-    };
-    const handleLatestDigestSuggestion = async () => {
-        if (!loadingSession && !currentUser) {
-            setShowGuestModal(true);
-            return;
-        }
-        if (!currentUser?.uid || loading) {
-            return;
-        }
-
-        setLoading(true);
         try {
             const { data } = await supabase
                 .from('notifications')
@@ -391,6 +345,73 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 },
             ]);
             scrollViewRef.current?.scrollToEnd({ animated: true });
+        }
+    };
+    const handleSend = async (overrideText?: string) => {
+        if (!loadingSession && !currentUser) {
+            setShowGuestModal(true);
+            return;
+        }
+
+        const textToSend = overrideText || input;
+        if (!textToSend.trim() || loading) return;
+
+        const userMsg = textToSend.trim();
+        if (!overrideText) setInput('');
+        setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+        setLoading(true);
+
+        try {
+            if (shouldUseLatestDigest(userMsg)) {
+                await loadLatestDigestResponse();
+                return;
+            }
+
+            if (shouldUseCurrentLocation(userMsg)) {
+                const coords = await ensureCurrentLocation();
+                agentRef.current.setDeviceLocation(coords);
+            }
+            const streamId = Date.now().toString();
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: '',
+                id: streamId
+            }]);
+
+            const onUpdate = (text: string) => {
+                setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content: text || '...' } : m));
+                scrollViewRef.current?.scrollToEnd({ animated: false });
+            };
+
+            const response = await agentRef.current.process(userMsg, onUpdate);
+
+            setMessages(prev => prev.map(m => m.id === streamId ? {
+                ...m,
+                content: response.finalAnswer || m.content,
+                steps: response.steps,
+                quickReplies: response.quickReplies
+            } : m));
+        } catch (error: any) {
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: `抱歉，我现在遇到了一点问题：${error.message || '未知错误'}`
+            }]);
+        } finally {
+            setLoading(false);
+        }
+    };
+    const handleLatestDigestSuggestion = async () => {
+        if (!loadingSession && !currentUser) {
+            setShowGuestModal(true);
+            return;
+        }
+        if (!currentUser?.uid || loading) {
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await loadLatestDigestResponse();
         } finally {
             setLoading(false);
         }
@@ -446,10 +467,10 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                     </Text>
                     <View style={styles.suggestions}>
                         <TouchableOpacity style={styles.suggestion} onPress={() => { void handleLatestDigestSuggestion(); }}>
-                            <Text style={styles.suggestionText}>鈥滄渶杩戞湁浠€涔堟柊椴滆祫璁€?/Text>
+                            <Text style={styles.suggestionText}>“最近有什么新鲜资讯”</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.suggestion} onPress={() => handleSend('鎴戠殑璇捐〃閲岄潰鏈変粈涔?)}>
-                            <Text style={styles.suggestionText}>鈥滄垜鐨勮琛ㄩ噷闈㈡湁浠€涔堚€?/Text>
+                        <TouchableOpacity style={styles.suggestion} onPress={() => handleSend('我的课表里面有什么')}>
+                            <Text style={styles.suggestionText}>“我的课表里面有什么”</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -801,7 +822,7 @@ function renderFormattedText(text: string, isUser: boolean = false) {
     if (!text) return null;
     const lines = text.split('\n');
     const textColor = isUser ? '#fff' : '#1F2937';
-    const tokenRegex = /(銆怽d+銆慭((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s]+)/g;
+    const tokenRegex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s]+)/g;
 
     const openUrl = async (url: string) => {
         try {
@@ -861,9 +882,10 @@ function renderFormattedText(text: string, isUser: boolean = false) {
                     }
 
                     const fullMatch = match[0];
-                    const referenceUrl = match[2];
+                    const markdownLabel = match[2];
+                    const referenceUrl = match[3];
                     const href = referenceUrl || fullMatch;
-                    const label = referenceUrl ? fullMatch.slice(0, fullMatch.indexOf('(')) : fullMatch;
+                    const label = markdownLabel || fullMatch;
 
                     renderedParts.push(
                         <Text
