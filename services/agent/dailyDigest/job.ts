@@ -54,7 +54,8 @@ const logDailyDigestDebug = (stage: string, payload: {
 
 export const runDailyDigestJobForUser = async (
     userId: string,
-    date: Date = new Date()
+    date: Date = new Date(),
+    options?: { ignoreEnabledCheck?: boolean }
 ): Promise<DigestJobResult> => {
     if (!userId) {
         return {
@@ -64,7 +65,7 @@ export const runDailyDigestJobForUser = async (
     }
 
     const digestEnabled = await getDailyDigestEnabled(userId);
-    if (!digestEnabled) {
+    if (!options?.ignoreEnabledCheck && !digestEnabled) {
         return {
             ok: false,
             reason: 'disabled',

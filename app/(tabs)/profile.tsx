@@ -3,7 +3,8 @@ import { useRouter } from 'expo-router';
 import { Bell, ChevronRight, Copy, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Shield, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Linking, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { FollowListModal } from '../../components/profile/FollowListModal';
 import MyScheduleCard from '../../components/profile/MyScheduleCard';
 import { ProfileHeader } from '../../components/profile/ProfileHeader';
@@ -320,6 +321,33 @@ export default function ProfileScreen() {
 
         setPushNotificationsLoading(true);
         try {
+            if (nextEnabled) {
+                const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                let finalStatus = existingStatus;
+
+                if (existingStatus !== 'granted') {
+                    const { status } = await Notifications.requestPermissionsAsync();
+                    finalStatus = status;
+                }
+
+                if (finalStatus !== 'granted') {
+                    Alert.alert(
+                        t('common.tip'),
+                        t('profile.push_notifications_permission_required', 'Push 权限未开启，请在系统设置中允许通知。'),
+                        [
+                            { text: t('common.cancel') },
+                            {
+                                text: t('profile.open_settings', '去设置'),
+                                onPress: () => {
+                                    void Linking.openSettings();
+                                },
+                            },
+                        ],
+                    );
+                    return;
+                }
+            }
+
             const ok = await updatePushNotificationsEnabled(userId, nextEnabled);
             if (!ok) {
                 Alert.alert(

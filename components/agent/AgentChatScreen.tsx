@@ -1,4 +1,4 @@
-import * as Location from 'expo-location';
+﻿import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Bot, Send, Sparkles, User } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
@@ -21,6 +21,7 @@ import { runDailyDigestJobForUser } from '../../services/agent/dailyDigest';
 import { AgentExecutor } from '../../services/agent/executor';
 import { AgentStep } from '../../services/agent/types';
 import { getCurrentUser } from '../../services/auth';
+import { supabase } from '../../services/supabase';
 import { GuestLoginModal } from '../common/GuestLoginModal';
 
 interface AgentChatScreenProps {
@@ -86,7 +87,7 @@ const shouldUseCurrentLocation = (input: string): boolean => {
     const text = input.trim().toLowerCase();
     if (!text) return false;
 
-    return /附近|最近|离我最近|離我最近|near me|nearest|around me|我在哪|我在哪儿|我在哪裡|where am i|current location|当前位置|當前位置|最近的建筑|最近的建築|最近的餐厅|最近的餐廳|nearest building|nearest restaurant/i.test(text);
+    return /闄勮繎|鏈€杩憒绂绘垜鏈€杩憒闆㈡垜鏈€杩憒near me|nearest|around me|鎴戝湪鍝獆鎴戝湪鍝効|鎴戝湪鍝！|where am i|current location|褰撳墠浣嶇疆|鐣跺墠浣嶇疆|鏈€杩戠殑寤虹瓚|鏈€杩戠殑寤虹瘔|鏈€杩戠殑椁愬巺|鏈€杩戠殑椁愬怀|nearest building|nearest restaurant/i.test(text);
 };
 
 export default function AgentChatScreen({ showBackButton = false }: AgentChatScreenProps) {
@@ -119,6 +120,24 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         if (Number.isNaN(parsed.getTime())) {
             return null;
         }
+        return parsed;
+    };
+
+    const parseDigestDateFromText = (value?: string | null): Date | null => {
+        if (!value) {
+            return null;
+        }
+
+        const match = value.match(/(\d{4}-\d{2}-\d{2})/);
+        if (!match) {
+            return null;
+        }
+
+        const parsed = new Date(`${match[1]}T00:00:00+08:00`);
+        if (Number.isNaN(parsed.getTime())) {
+            return null;
+        }
+
         return parsed;
     };
 
@@ -281,13 +300,101 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         } catch (error: any) {
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: `抱歉，我现在遇到了一点问题：${error.message || '未知错误'}`
+                content: `鎶辨瓑锛屾垜鐜板湪閬囧埌浜嗕竴鐐归棶棰橈細${error.message || '鏈煡閿欒'}`
             }]);
         } finally {
             setLoading(false);
         }
     };
+    const handleLatestDigestSuggestion = async () => {
+        if (!loadingSession && !currentUser) {
+            setShowGuestModal(true);
+            return;
+        }
+        if (!currentUser?.uid || loading) {
+            return;
+        }
 
+        setLoading(true);
+        try {
+            const { data } = await supabase
+                .from('notifications')
+                .select('title, content, created_at')
+                .eq('user_id', currentUser.uid)
+                .eq('type', 'system')
+                .order('created_at', { ascending: false })
+                .limit(20);
+
+            const digestNotification = (data || []).find((item) =>
+                /AI资讯摘要|AI資訊摘要|AI news digest/i.test(String(item.title || ''))
+            );
+
+            const digestDate =
+                parseDigestDateFromText(digestNotification?.title)
+                || parseDigestDateFromText(digestNotification?.content)
+                || (digestNotification?.created_at ? new Date(digestNotification.created_at) : new Date());
+
+            const digestResult = await runDailyDigestJobForUser(currentUser.uid, digestDate, {
+                ignoreEnabledCheck: true,
+            });
+
+            if (digestResult.ok && digestResult.payload) {
+                const payload = digestResult.payload;
+                const digestMessageId = `daily-digest-${payload.date}`;
+                setMessages((prev) => {
+                    if (prev.some((message) => message.id === digestMessageId)) {
+                        return prev;
+                    }
+
+                    return [
+                        ...prev,
+                        {
+                            role: 'assistant',
+                            content: payload.message,
+                            id: digestMessageId,
+                        },
+                    ];
+                });
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+                return;
+            }
+
+            if (digestNotification) {
+                const matchedDate = digestNotification.title?.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+                const fallbackHeader = matchedDate ? `最新资讯摘要 ${matchedDate}` : '最新资讯摘要';
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        role: 'assistant',
+                        content: `${fallbackHeader}\n${digestNotification.content || ''}`.trim(),
+                    },
+                ]);
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+                return;
+            }
+
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: '暂时没有读取到数据库里的最新资讯，请稍后再试。',
+                },
+            ]);
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+        } catch (error) {
+            console.warn('[AgentChat] Failed to load latest digest from database:', error);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: '读取最新资讯失败了，请稍后再试。',
+                },
+            ]);
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+        } finally {
+            setLoading(false);
+        }
+    };
     const bottomComposerOffset = showBackButton
         ? Math.max(insets.bottom, 16)
         : keyboardVisible
@@ -315,7 +422,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                         </View>
                         <View>
                             <Text style={styles.headerTitle}>Campus Agent</Text>
-                            <Text style={styles.headerSubtitle}>校园信息助手</Text>
+                            <Text style={styles.headerSubtitle}>鏍″洯淇℃伅鍔╂墜</Text>
                         </View>
                     </View>
                     <View style={styles.headerActions} />
@@ -333,16 +440,16 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
             >
                 <View style={styles.welcomeCard}>
                     <Sparkles size={32} color="#1E3A8A" />
-                    <Text style={styles.welcomeTitle}>你好！我是创新实验室校园生活 Agent</Text>
+                    <Text style={styles.welcomeTitle}>浣犲ソ锛佹垜鏄垱鏂板疄楠屽鏍″洯鐢熸椿 Agent</Text>
                     <Text style={styles.welcomeText}>
-                        我可以帮你查关于HKBU的任何问题，尽管来问我吧！你可以试着问我：
+                        鎴戝彲浠ュ府浣犳煡鍏充簬HKBU鐨勪换浣曢棶棰橈紝灏界鏉ラ棶鎴戝惂锛佷綘鍙互璇曠潃闂垜锛?
                     </Text>
                     <View style={styles.suggestions}>
-                        <TouchableOpacity style={styles.suggestion} onPress={() => handleSend('期末考试的A、B、C分别对应多少绩点？')}>
-                            <Text style={styles.suggestionText}>“期末考试的A、B、C分别对应多少绩点？”</Text>
+                        <TouchableOpacity style={styles.suggestion} onPress={() => { void handleLatestDigestSuggestion(); }}>
+                            <Text style={styles.suggestionText}>鈥滄渶杩戞湁浠€涔堟柊椴滆祫璁€?/Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.suggestion} onPress={() => handleSend('我的课表里面有什么')}>
-                            <Text style={styles.suggestionText}>“我的课表里面有什么”</Text>
+                        <TouchableOpacity style={styles.suggestion} onPress={() => handleSend('鎴戠殑璇捐〃閲岄潰鏈変粈涔?)}>
+                            <Text style={styles.suggestionText}>鈥滄垜鐨勮琛ㄩ噷闈㈡湁浠€涔堚€?/Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -403,7 +510,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 <View style={styles.inputShell}>
                     <TextInput
                         style={styles.input}
-                        placeholder="输入指令..."
+                        placeholder="杈撳叆鎸囦护..."
                         value={input}
                         onChangeText={setInput}
                         multiline
@@ -694,7 +801,7 @@ function renderFormattedText(text: string, isUser: boolean = false) {
     if (!text) return null;
     const lines = text.split('\n');
     const textColor = isUser ? '#fff' : '#1F2937';
-    const tokenRegex = /(【\d+】\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s]+)/g;
+    const tokenRegex = /(銆怽d+銆慭((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s]+)/g;
 
     const openUrl = async (url: string) => {
         try {
@@ -707,6 +814,7 @@ function renderFormattedText(text: string, isUser: boolean = false) {
             console.warn('[AgentChat] Failed to open url:', error);
         }
     };
+
 
     const renderTextWithBold = (segmentText: string, lineKey: number): React.ReactNode[] => {
         const boldRegex = /\*\*(.*?)\*\*/g;
@@ -740,7 +848,7 @@ function renderFormattedText(text: string, isUser: boolean = false) {
         <Text selectable style={{ fontSize: 15, color: textColor, lineHeight: 22 }}>
             {lines.map((line, i) => {
                 const displayLine = line.trim().startsWith('- ') || line.trim().startsWith('* ')
-                    ? `• ${line.trim().substring(2)}`
+                    ? `鈥?${line.trim().substring(2)}`
                     : line;
 
                 const renderedParts: React.ReactNode[] = [];
@@ -787,3 +895,4 @@ function renderFormattedText(text: string, isUser: boolean = false) {
         </Text>
     );
 }
+
