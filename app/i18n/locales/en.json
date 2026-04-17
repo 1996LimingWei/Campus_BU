@@ -412,6 +412,7 @@
             "error_content": "Please enter content",
             "error_login": "Please log in first",
             "success": "Published successfully!",
+            "community_notice": "Posts are subject to our Community Guidelines. Harassment, hate speech, and inappropriate content will be removed. Users can report and block content.",
             "category_label": {
                 "general": "General",
                 "activity": "Activity",

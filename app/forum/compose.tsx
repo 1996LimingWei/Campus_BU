@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { Image as ImageIcon, X } from 'lucide-react-native';
+import { AlertTriangle, Image as ImageIcon, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -151,6 +151,14 @@ export default function ForumComposeScreen() {
                     ))}
                 </View>
 
+                {/* Community Guidelines Notice */}
+                <View style={styles.communityNotice}>
+                    <AlertTriangle size={14} color="#92400E" />
+                    <Text style={styles.communityNoticeText}>
+                        {t('campus.compose.community_notice')}
+                    </Text>
+                </View>
+
                 {/* Title input */}
                 <View style={styles.titleContainer}>
                     <TextInput
@@ -262,6 +270,21 @@ const styles = StyleSheet.create({
 
     form: { padding: 20, paddingBottom: 60 },
 
+    communityNotice: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        backgroundColor: '#FFFBEB',
+        borderRadius: 8,
+        padding: 10,
+        marginBottom: 12,
+        gap: 8,
+    },
+    communityNoticeText: {
+        flex: 1,
+        fontSize: 12,
+        color: '#92400E',
+        lineHeight: 17,
+    },
     categoryRow: {
         flexDirection: 'row',
         gap: 8,
