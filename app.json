@@ -19,7 +19,7 @@
       "buildNumber": "10",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "HKCampus accesses your photo library so you can choose images for your avatar, posts, messages, food reviews, and schedule import.",
+        "NSPhotoLibraryUsageDescription": "HKCampus accesses your photo library so you can choose images for your avatar, posts, messages, and schedule import.",
         "NSCameraUsageDescription": "HKCampus accesses the camera so you can take and send photos in messages.",
         "NSLocationWhenInUseUsageDescription": "HKCampus accesses your location only when you choose location-based campus features such as centering the map or attaching a location to a post.",
         "NSFaceIDUsageDescription": "HKCampus uses Face ID to help you sign in securely on this device."
@@ -47,7 +47,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "HKCampus accesses your photo library so you can choose images for your avatar, posts, messages, food reviews, and schedule import.",
+          "photosPermission": "HKCampus accesses your photo library so you can choose images for your avatar, posts, messages, and schedule import.",
           "cameraPermission": "HKCampus accesses the camera so you can take and send photos in messages."
         }
       ],
