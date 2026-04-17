@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { CachedRemoteImage } from '../../components/common/CachedRemoteImage';
 import { EduBadge } from '../../components/common/EduBadge';
+import { SafetyNotice } from '../../components/common/SafetyNotice';
 import { TranslatableText } from '../../components/common/TranslatableText';
 import { useCourseActivity } from '../../context/CourseActivityContext';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
@@ -1302,6 +1303,8 @@ export default function CourseDetailScreen() {
                                         <Text style={styles.anonymousText}>Post anonymously</Text>
                                     </TouchableOpacity>
 
+                                    <SafetyNotice variant="compact" showAnonymousWarning={isAnonymous} />
+
                                     <TouchableOpacity style={styles.submitButton} onPress={handleAddReview}>
                                         <Text style={styles.submitText}>{hasReviewed ? 'Post Update' : 'Submit Review'}</Text>
                                     </TouchableOpacity>
@@ -1428,6 +1431,8 @@ export default function CourseDetailScreen() {
                                             />
                                         </View>
                                     ))}
+
+                                    <SafetyNotice variant="compact" />
 
                                     <TouchableOpacity
                                         style={[styles.submitButton, teamingSubmitting && { opacity: 0.7 }]}

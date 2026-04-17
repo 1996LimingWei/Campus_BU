@@ -39,6 +39,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CachedRemoteImage } from '../../components/common/CachedRemoteImage';
+import { SafetyNotice } from '../../components/common/SafetyNotice';
 import { TranslatableText } from '../../components/common/TranslatableText';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { useUgcEntryActions } from '../../hooks/useUgcEntryActions';
@@ -767,6 +768,8 @@ export default function ExchangeScreen() {
                                         onChangeText={setReason}
                                     />
                                 </View>
+
+                                <SafetyNotice variant="compact" />
 
                                 <TouchableOpacity
                                     style={[styles.submitButton, submitting && { opacity: 0.7 }]}

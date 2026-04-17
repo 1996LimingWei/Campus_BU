@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { AlertTriangle, Image as ImageIcon, MapPin, X } from 'lucide-react-native';
+import { Image as ImageIcon, MapPin, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -18,6 +18,7 @@ import {
     View
 } from 'react-native';
 import { Toast, ToastType } from '../../components/campus/Toast';
+import { SafetyNotice } from '../../components/common/SafetyNotice';
 import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { getCurrentUser } from '../../services/auth';
 import { createPost, uploadPostImage } from '../../services/campus';
@@ -194,13 +195,8 @@ export default function ComposeScreen() {
                     </ScrollView>
                 </View>
 
-                {/* Community Guidelines Notice */}
-                <View style={styles.communityNotice}>
-                    <AlertTriangle size={14} color="#92400E" />
-                    <Text style={styles.communityNoticeText}>
-                        {t('campus.compose.community_notice')}
-                    </Text>
-                </View>
+                {/* Community Safety Notice */}
+                <SafetyNotice variant="full" showAnonymousWarning={isAnonymous} />
 
                 {/* Input Area */}
                 <TextInput
@@ -356,21 +352,6 @@ const styles = StyleSheet.create({
     },
     categoryTextActive: {
         color: '#fff',
-    },
-    communityNotice: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        backgroundColor: '#FFFBEB',
-        borderRadius: 8,
-        padding: 10,
-        marginBottom: 12,
-        gap: 8,
-    },
-    communityNoticeText: {
-        flex: 1,
-        fontSize: 12,
-        color: '#92400E',
-        lineHeight: 17,
     },
     input: {
         fontSize: 18,

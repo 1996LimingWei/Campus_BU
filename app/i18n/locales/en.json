@@ -584,6 +584,14 @@
         "tags_limit": "Select up to 3 tags",
         "default_major": "Major not set"
     },
+    "safety": {
+        "title": "Community Safety",
+        "rule_filter": "All content is automatically filtered; violations will be removed",
+        "rule_report": "Report objectionable content; reviewed within 24 hours",
+        "rule_block": "You can block abusive users at any time",
+        "compact_notice": "Content is moderated. Report, block, or hide objectionable posts.",
+        "anonymous_warning": "Anonymous posts are still subject to Community Guidelines. Moderators can trace the source of violations."
+    },
     "moderation": {
         "options_title": "Options",
         "report_post": "Report Post",

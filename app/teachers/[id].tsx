@@ -37,6 +37,7 @@ import { CachedRemoteImage } from '../../components/common/CachedRemoteImage';
 import { isRemoteImageUrl } from '../../utils/remoteImage';
 import { isHKBUEmail } from '../../utils/userUtils';
 import { EduBadge } from '../../components/common/EduBadge';
+import { SafetyNotice } from '../../components/common/SafetyNotice';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { useUgcEntryActions } from '../../hooks/useUgcEntryActions';
 
@@ -422,6 +423,8 @@ export default function TeacherDetailScreen() {
                                 value={tags}
                                 onChangeText={setTags}
                             />
+
+                            <SafetyNotice variant="compact" showAnonymousWarning />
 
                             <TouchableOpacity
                                 style={[styles.submitBtn, submitting && styles.disabledBtn]}
