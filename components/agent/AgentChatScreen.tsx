@@ -87,7 +87,7 @@ const shouldUseCurrentLocation = (input: string): boolean => {
     const text = input.trim().toLowerCase();
     if (!text) return false;
 
-    return /闄勮繎|鏈€杩憒绂绘垜鏈€杩憒闆㈡垜鏈€杩憒near me|nearest|around me|鎴戝湪鍝獆鎴戝湪鍝効|鎴戝湪鍝！|where am i|current location|褰撳墠浣嶇疆|鐣跺墠浣嶇疆|鏈€杩戠殑寤虹瓚|鏈€杩戠殑寤虹瘔|鏈€杩戠殑椁愬巺|鏈€杩戠殑椁愬怀|nearest building|nearest restaurant/i.test(text);
+    return /附近|最近|离我最近|離我最近|near me|nearest|around me|我在哪|我在哪儿|我在哪裡|where am i|current location|当前位置|當前位置|最近的建筑|最近的建築|最近的餐厅|最近的餐廳|nearest building|nearest restaurant/i.test(text);
 };
 
 const shouldUseLatestDigest = (input: string): boolean => {
@@ -443,7 +443,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                         </View>
                         <View>
                             <Text style={styles.headerTitle}>Campus Agent</Text>
-                            <Text style={styles.headerSubtitle}>鏍″洯淇℃伅鍔╂墜</Text>
+                            <Text style={styles.headerSubtitle}>校园信息助手</Text>
                         </View>
                     </View>
                     <View style={styles.headerActions} />
@@ -461,9 +461,9 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
             >
                 <View style={styles.welcomeCard}>
                     <Sparkles size={32} color="#1E3A8A" />
-                    <Text style={styles.welcomeTitle}>浣犲ソ锛佹垜鏄垱鏂板疄楠屽鏍″洯鐢熸椿 Agent</Text>
+                    <Text style={styles.welcomeTitle}>你好！我是创新实验室校园生活 Agent</Text>
                     <Text style={styles.welcomeText}>
-                        鎴戝彲浠ュ府浣犳煡鍏充簬HKBU鐨勪换浣曢棶棰橈紝灏界鏉ラ棶鎴戝惂锛佷綘鍙互璇曠潃闂垜锛?
+                        我可以帮你查关于HKBU的任何问题，尽管来问我吧！你可以试着问我：
                     </Text>
                     <View style={styles.suggestions}>
                         <TouchableOpacity style={styles.suggestion} onPress={() => { void handleLatestDigestSuggestion(); }}>
@@ -531,7 +531,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 <View style={styles.inputShell}>
                     <TextInput
                         style={styles.input}
-                        placeholder="杈撳叆鎸囦护..."
+                        placeholder="输入指令..."
                         value={input}
                         onChangeText={setInput}
                         multiline
@@ -869,7 +869,7 @@ function renderFormattedText(text: string, isUser: boolean = false) {
         <Text selectable style={{ fontSize: 15, color: textColor, lineHeight: 22 }}>
             {lines.map((line, i) => {
                 const displayLine = line.trim().startsWith('- ') || line.trim().startsWith('* ')
-                    ? `鈥?${line.trim().substring(2)}`
+                    ? `• ${line.trim().substring(2)}`
                     : line;
 
                 const renderedParts: React.ReactNode[] = [];
