@@ -7,6 +7,7 @@ import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { AnimatedTabIcon } from '../../components/common/AnimatedTabIcon';
 import { useCourseActivity } from '../../context/CourseActivityContext';
 import { useNotifications } from '../../context/NotificationContext';
+import { getCurrentUser } from '../../services/auth';
 import { getTabLabel } from './tabLabels';
 
 const AgentTabIcon = ({ color, focused }: { color: string; focused: boolean }) => (
@@ -24,6 +25,7 @@ export default function TabLayout() {
   const { t } = useTranslation('translation', { keyPrefix: 'tabs' });
   const scrollX = useRef(new Animated.Value(0)).current;
   const [containerWidth, setContainerWidth] = useState(0);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const routeLabelKeyMap: Partial<Record<string, 'home' | 'map' | 'agent' | 'course' | 'me'>> = {
     campus: 'home',
     map: 'map',
@@ -31,6 +33,23 @@ export default function TabLayout() {
     course: 'course',
     profile: 'me',
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCurrentUser = async () => {
+      const user = await getCurrentUser();
+      if (!cancelled) {
+        setCurrentUser(user);
+      }
+    };
+
+    void loadCurrentUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Custom TabBar Component to handle the sliding indicator
   const CustomTabBar = ({ state, descriptors, navigation }: any) => {
@@ -175,6 +194,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="agent"
         options={{
+          href: currentUser ? undefined : null,
           tabBarLabel: getTabLabel(t, 'agent'),
           tabBarIcon: ({ color, focused }) => (
             <AgentTabIcon color={color} focused={focused} />

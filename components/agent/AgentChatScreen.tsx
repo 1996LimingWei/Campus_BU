@@ -117,7 +117,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
     const [deviceLocation, setDeviceLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const { t } = useTranslation();
     const scrollViewRef = useRef<ScrollView>(null);
-    const agentRef = useRef<AgentExecutor>(new AgentExecutor('guest-session'));
+    const agentRef = useRef<AgentExecutor | null>(null);
 
     const parseDigestDateParam = (value?: string): Date | null => {
         if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -149,8 +149,12 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
     };
 
     useEffect(() => {
-        const userId = currentUser?.uid || 'guest-session';
-        agentRef.current = new AgentExecutor(userId);
+        if (!currentUser?.uid) {
+            agentRef.current = null;
+            return;
+        }
+
+        agentRef.current = new AgentExecutor(currentUser.uid);
         agentRef.current.setDeviceLocation(deviceLocation);
     }, [currentUser?.uid]);
 
@@ -203,7 +207,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
     }, [currentUser?.uid, params.digestDate]);
 
     useEffect(() => {
-        agentRef.current.setDeviceLocation(deviceLocation);
+        agentRef.current?.setDeviceLocation(deviceLocation);
     }, [deviceLocation]);
 
     const ensureCurrentLocation = async () => {
@@ -251,6 +255,12 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         }
         loadSession();
     }, []);
+
+    useEffect(() => {
+        if (!loadingSession && !currentUser) {
+            setShowGuestModal(true);
+        }
+    }, [currentUser, loadingSession]);
 
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -434,7 +444,7 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
 
             if (shouldUseCurrentLocation(userMsg)) {
                 const coords = await ensureCurrentLocation();
-                agentRef.current.setDeviceLocation(coords);
+                agentRef.current?.setDeviceLocation(coords);
             }
             const streamId = Date.now().toString();
             setMessages(prev => [...prev, {
@@ -448,7 +458,11 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 scrollViewRef.current?.scrollToEnd({ animated: false });
             };
 
-            const response = await agentRef.current.process(userMsg, onUpdate);
+            const response = await agentRef.current?.process(userMsg, onUpdate);
+
+            if (!response) {
+                throw new Error('请先登录后再使用校园助手。');
+            }
 
             setMessages(prev => prev.map(m => m.id === streamId ? {
                 ...m,
@@ -597,15 +611,16 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                     <TextInput
                         style={styles.input}
                         placeholder="输入指令..."
+                        editable={!loadingSession && !!currentUser}
                         value={input}
                         onChangeText={setInput}
                         multiline
                     />
                 </View>
                 <TouchableOpacity
-                    style={[styles.sendButton, !input.trim() && styles.sendButtonDisabled]}
+                    style={[styles.sendButton, (!input.trim() || !currentUser) && styles.sendButtonDisabled]}
                     onPress={() => handleSend()}
-                    disabled={!input.trim() || loading}
+                    disabled={!input.trim() || loading || !currentUser}
                 >
                     <Send size={20} color="#fff" />
                 </TouchableOpacity>
