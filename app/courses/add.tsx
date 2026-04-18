@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafetyNotice } from '../../components/common/SafetyNotice';
 import { getCurrentUser } from '../../services/auth';
 import { submitCourseForReview } from '../../services/courses';
 
@@ -191,6 +192,8 @@ export default function AddCourseScreen() {
                             ))}
                         </View>
                     </View>
+
+                    <SafetyNotice variant="compact" />
 
                 </ScrollView>
 

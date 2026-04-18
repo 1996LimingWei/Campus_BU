@@ -34,6 +34,7 @@ import { SharePostModal } from '../../components/campus/SharePostModal';
 import { Toast, ToastType } from '../../components/campus/Toast';
 import { CachedRemoteImage } from '../../components/common/CachedRemoteImage';
 import { EduBadge } from '../../components/common/EduBadge';
+import { SafetyNotice } from '../../components/common/SafetyNotice';
 import { TranslatableText } from '../../components/common/TranslatableText';
 import { ZoomableImageCarousel } from '../../components/common/ZoomableImageCarousel';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
@@ -860,6 +861,9 @@ export default function PostDetailScreen() {
 
                 {/* ══ BOTTOM ACTION BAR ═══════════════════════════════════════════ */}
                 <View style={styles.bottomBarContainer}>
+                    <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
+                        <SafetyNotice variant="compact" />
+                    </View>
                     {replyTarget && (
                         <View style={styles.replyTargetBar}>
                             <Text style={styles.replyTargetText} numberOfLines={1}>

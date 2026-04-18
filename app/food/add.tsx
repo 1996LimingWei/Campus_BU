@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafetyNotice } from '../../components/common/SafetyNotice';
 import { getCurrentUser } from '../../services/auth';
 
 const { width } = Dimensions.get('window');
@@ -174,6 +175,8 @@ export default function AddFoodScreen() {
                         textAlignVertical="top"
                     />
                 </View>
+
+                <SafetyNotice variant="full" />
 
             </ScrollView>
 
