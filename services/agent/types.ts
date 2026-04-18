@@ -51,6 +51,34 @@ export type AgentSessionState = {
     summary?: string;
 };
 
+export type MemoryCandidateType =
+    | 'long_term_preference'
+    | 'background_fact'
+    | 'emotion'
+    | 'temporary_context'
+    | 'unknown';
+
+export type MemoryCandidateBase = {
+    should_store: boolean;
+    key: string;
+    value: string;
+    confidence: number;
+    reason: string;
+};
+
+export type MemoryCandidate = MemoryCandidateBase & {
+    memory_type: MemoryCandidateType;
+};
+
+export type DurableMemoryType = Exclude<
+    MemoryCandidateType,
+    'emotion' | 'temporary_context' | 'unknown'
+>;
+
+export type AcceptedMemoryWrite = {
+    memoryType: DurableMemoryType;
+} & MemoryCandidateBase;
+
 export interface AgentGeoPoint {
     latitude: number;
     longitude: number;
