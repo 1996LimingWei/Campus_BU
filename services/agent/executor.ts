@@ -1,9 +1,9 @@
+import { getCurrentUser } from '../auth';
+import { addReview, getCourseByCode, getReviews, searchCourses } from '../courses';
 import { FAQService } from '../faq';
-import { getCourseByCode, getReviews, searchCourses, addReview } from '../courses';
+import { getUserScheduleEntries, UserScheduleEntry } from '../schedule';
 import { supabase } from '../supabase';
 import { fetchTeamingRequests, postTeamingRequest } from '../teaming';
-import { getUserScheduleEntries, UserScheduleEntry } from '../schedule';
-import { getCurrentUser } from '../auth';
 import {
     formatBuildingInfo,
     formatNearbyPlaceInfo,
@@ -11,17 +11,21 @@ import {
     isNearbyPlaceQuery,
 } from './campus_queries';
 // import { CozeService } from './coze';
-import { callDeepSeekStream, resolveModelName } from './llm';
-import { getAllUserFacts, getMemoryFact, saveMemoryFact } from './memory';
+import { ContactMethod, Course, CourseTeaming, Review } from '../../types';
 import { getCachedValue, getOrSetCachedValue, setCachedValue } from './cache';
 import { buildResponseCacheKey, buildToolCacheKey } from './cache_keys';
+import { callDeepSeekStream, resolveModelName } from './llm';
+import { getAllUserFacts, getMemoryFact, saveMemoryFact } from './memory';
+import {
+    extractMemoryCandidatesFromConversation,
+    filterMemoryCandidates,
+} from './memory_extractor';
 import { classifyIntent, selectModelRoute } from './router';
 import { createInitialSessionState, formatSessionState, updateSessionStateWithTurn } from './session_state';
 import { inferStableTask } from './stable_tasks';
 import { refineHistorySummary, summarizeHistory } from './summarizer';
 import { TOOLS } from './tools';
 import { AgentContext, AgentGeoPoint, AgentResponse, AgentStep } from './types';
-import { ContactMethod, Course, CourseTeaming, Review } from '../../types';
 
 type ScheduleQueryIntent = 'today' | 'tomorrow' | 'next' | 'weekday' | 'all';
 
@@ -461,6 +465,8 @@ export class AgentExecutor {
     private context: AgentContext;
     private static readonly MAX_HISTORY_ITEMS = 12;
     private static readonly MAX_RECENT_HISTORY_ITEMS = 6;
+    private static readonly POST_RESPONSE_MEMORY_TURN_WINDOW = 3;
+    private static readonly POST_RESPONSE_MEMORY_WRITE_LIMIT = 3;
     private static readonly CACHE_TTLS = {
         read_user_schedule: 60 * 1000,
         read_campus_building: 10 * 60 * 1000,
@@ -539,6 +545,53 @@ export class AgentExecutor {
         return parts.join('\n\n');
     }
 
+    private async runPostResponseMemoryPass(): Promise<void> {
+        try {
+            const recentTurns = this.context.history.slice(-AgentExecutor.POST_RESPONSE_MEMORY_TURN_WINDOW);
+            const existingFacts = await getAllUserFacts(this.context.userId);
+            const candidates = await extractMemoryCandidatesFromConversation({ recentTurns });
+            const acceptedMemories = filterMemoryCandidates(candidates, existingFacts)
+                .slice(0, AgentExecutor.POST_RESPONSE_MEMORY_WRITE_LIMIT);
+
+            for (const memory of acceptedMemories) {
+                await saveMemoryFact(this.context.userId, memory.key, memory.value);
+            }
+        } catch (error) {
+            console.warn('[Agent] post-response memory pass skipped:', error);
+        }
+    }
+
+    private async finalizeAgentResponse(
+        response: AgentResponse,
+        options?: {
+            responseCacheKey?: string | null;
+            shouldCacheDirectReply?: boolean;
+            runPostResponseMemoryPass?: boolean;
+        }
+    ): Promise<AgentResponse> {
+        if (!response.finalAnswer) {
+            return response;
+        }
+
+        const normalizedAnswer = normalizeAssistantReply(response.finalAnswer);
+        response.finalAnswer = normalizedAnswer;
+        if (!normalizedAnswer) {
+            return response;
+        }
+
+        this.pushHistory('assistant', normalizedAnswer);
+
+        if (options?.shouldCacheDirectReply && options.responseCacheKey) {
+            setCachedValue(options.responseCacheKey, normalizedAnswer, AgentExecutor.CACHE_TTLS.direct_llm_reply);
+        }
+
+        if (options?.runPostResponseMemoryPass !== false) {
+            await this.runPostResponseMemoryPass();
+        }
+
+        return response;
+    }
+
     /**
      * Main entry point for user prompts
      */
@@ -548,77 +601,43 @@ export class AgentExecutor {
 
         const pendingWriteResponse = await this.continuePendingWriteAction(prompt);
         if (pendingWriteResponse) {
-            if (pendingWriteResponse.finalAnswer) {
-                const normalizedAnswer = normalizeAssistantReply(pendingWriteResponse.finalAnswer);
-                if (normalizedAnswer) {
-                    pendingWriteResponse.finalAnswer = normalizedAnswer;
-                    this.pushHistory('assistant', normalizedAnswer);
-                }
-            }
-            return pendingWriteResponse;
+            return this.finalizeAgentResponse(pendingWriteResponse, {
+                runPostResponseMemoryPass: false,
+            });
         }
 
         const pendingResponse = await this.continuePendingCourseAction(prompt);
         if (pendingResponse) {
-            if (pendingResponse.finalAnswer) {
-                const normalizedAnswer = normalizeAssistantReply(pendingResponse.finalAnswer);
-                if (normalizedAnswer) {
-                    pendingResponse.finalAnswer = normalizedAnswer;
-                    this.pushHistory('assistant', normalizedAnswer);
-                }
-            }
-            return pendingResponse;
+            return this.finalizeAgentResponse(pendingResponse);
         }
 
         const stableTaskResponse = await this.tryStableTaskRoute(prompt);
         if (stableTaskResponse) {
-            if (stableTaskResponse.finalAnswer) {
-                const normalizedAnswer = normalizeAssistantReply(stableTaskResponse.finalAnswer);
-                if (normalizedAnswer) {
-                    stableTaskResponse.finalAnswer = normalizedAnswer;
-                    this.pushHistory('assistant', normalizedAnswer);
-                }
-            }
-            return stableTaskResponse;
+            return this.finalizeAgentResponse(stableTaskResponse);
         }
 
         const routed = await this.tryLocalRoute(prompt);
         if (routed) {
-            if (routed.finalAnswer) {
-                const normalizedAnswer = normalizeAssistantReply(routed.finalAnswer);
-                if (normalizedAnswer) {
-                    routed.finalAnswer = normalizedAnswer;
-                    this.pushHistory('assistant', normalizedAnswer);
-                }
-            }
-            return routed;
+            return this.finalizeAgentResponse(routed);
         }
 
         const intentRouted = await this.tryIntentRoute(prompt);
         if (intentRouted) {
-            if (intentRouted.finalAnswer) {
-                const normalizedAnswer = normalizeAssistantReply(intentRouted.finalAnswer);
-                if (normalizedAnswer) {
-                    intentRouted.finalAnswer = normalizedAnswer;
-                    this.pushHistory('assistant', normalizedAnswer);
-                }
-            }
-            return intentRouted;
+            return this.finalizeAgentResponse(intentRouted);
         }
 
         const responseCacheKey = this.getResponseCacheKey(prompt);
         if (responseCacheKey) {
             const cachedReply = getCachedValue<string>(responseCacheKey);
             if (cachedReply) {
-                this.pushHistory('assistant', cachedReply);
-                return {
+                return this.finalizeAgentResponse({
                 steps: [{
                     thought: '命中低风险回复缓存',
                     reply: cachedReply,
                     path: 'cache',
                 }],
                 finalAnswer: cachedReply,
-            };
+            });
             }
         }
 
@@ -653,24 +672,18 @@ export class AgentExecutor {
             currentStep++;
         }
 
-        const finalAnswer = normalizeAssistantReply(steps[steps.length - 1].reply || steps[steps.length - 1].thought);
-        if (finalAnswer) {
-            this.pushHistory('assistant', finalAnswer);
-            const shouldCacheDirectReply = Boolean(
+        return this.finalizeAgentResponse({
+            steps,
+            finalAnswer: steps[steps.length - 1].reply || steps[steps.length - 1].thought,
+        }, {
+            responseCacheKey,
+            shouldCacheDirectReply: Boolean(
                 responseCacheKey
                 && steps.length === 1
                 && !steps[0].action
                 && steps[0].reply
-            );
-            if (shouldCacheDirectReply) {
-                setCachedValue(responseCacheKey!, finalAnswer, AgentExecutor.CACHE_TTLS.direct_llm_reply);
-            }
-        }
-
-        return {
-            steps,
-            finalAnswer
-        };
+            ),
+        });
     }
 
     private async tryLocalRoute(prompt: string): Promise<AgentResponse | null> {

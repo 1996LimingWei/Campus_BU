@@ -1,9 +1,9 @@
-import { AgentExecutor } from '../../../services/agent/executor';
-import { FAQService } from '../../../services/faq';
-import { AGENT_CONFIG } from '../../../services/agent/config';
-import { callDeepSeek, callDeepSeekStream } from '../../../services/agent/llm';
 import { clearAgentCache, getAgentCacheStats } from '../../../services/agent/cache';
-import { getMemoryFact } from '../../../services/agent/memory';
+import { AGENT_CONFIG } from '../../../services/agent/config';
+import { AgentExecutor } from '../../../services/agent/executor';
+import { callDeepSeek, callDeepSeekStream } from '../../../services/agent/llm';
+import { getMemoryFact, saveMemoryFact } from '../../../services/agent/memory';
+import { FAQService } from '../../../services/faq';
 
 jest.mock('../../../services/agent/llm', () => ({
     callDeepSeek: jest.fn(),
@@ -15,6 +15,11 @@ jest.mock('../../../services/agent/memory', () => ({
     getAllUserFacts: jest.fn().mockResolvedValue({}),
     getMemoryFact: jest.fn().mockResolvedValue(null),
     saveMemoryFact: jest.fn().mockResolvedValue(true),
+}));
+
+jest.mock('../../../services/agent/memory_extractor', () => ({
+    extractMemoryCandidatesFromConversation: jest.fn().mockResolvedValue([]),
+    filterMemoryCandidates: jest.fn().mockReturnValue([]),
 }));
 
 jest.mock('../../../services/faq', () => ({
@@ -590,6 +595,138 @@ describe('AgentExecutor course publishing flow', () => {
         expect(response.finalAnswer).toContain('Computer Science');
         expect(response.steps[0].routeReason).toContain('memory read');
         expect(callDeepSeekStream).not.toHaveBeenCalled();
+    });
+
+    it('runs the post-response memory pass after a normal non-LLM reply', async () => {
+        const extractor = jest.requireMock('../../../services/agent/memory_extractor');
+        extractor.extractMemoryCandidatesFromConversation.mockResolvedValue([
+            {
+                should_store: true,
+                key: 'preferred_name',
+                value: 'Tim',
+                memory_type: 'long_term_preference',
+                confidence: 0.96,
+                reason: 'durable naming preference',
+            },
+        ]);
+        extractor.filterMemoryCandidates.mockReturnValue([
+            {
+                key: 'nickname',
+                value: 'Tim',
+                memoryType: 'long_term_preference',
+                confidence: 0.96,
+                reason: 'durable naming preference',
+            },
+        ]);
+        (FAQService.searchFAQs as jest.Mock).mockReturnValue([
+            {
+                id: 'faq-6',
+                question: 'What is GPA?',
+                question_zh: 'GPA 怎么算？',
+                answer: 'Use grade points.',
+                answer_zh: 'GPA 按课程成绩对应绩点计算。',
+                keywords: ['gpa'],
+            },
+        ]);
+        (FAQService.searchKnowledgeBase as jest.Mock).mockResolvedValue([]);
+
+        const executor = new AgentExecutor('user-1');
+        const response = await executor.process('GPA 怎么算？');
+
+        expect(extractor.extractMemoryCandidatesFromConversation).toHaveBeenCalledWith({
+            recentTurns: [
+                { role: 'user', content: 'GPA 怎么算？' },
+                { role: 'assistant', content: response.finalAnswer },
+            ],
+        });
+        expect(saveMemoryFact).toHaveBeenCalledWith('user-1', 'nickname', 'Tim');
+    });
+
+    it('runs the post-response memory pass after a cached direct reply hit', async () => {
+        const extractor = jest.requireMock('../../../services/agent/memory_extractor');
+        (callDeepSeekStream as jest.Mock).mockResolvedValue('{"reply":"HKBU is known for its communication, business, and science programs."}');
+        extractor.extractMemoryCandidatesFromConversation.mockResolvedValue([]);
+
+        const firstExecutor = new AgentExecutor('user-1');
+        const first = await firstExecutor.process('HKBU 有什么特色？');
+
+        extractor.extractMemoryCandidatesFromConversation.mockClear();
+        (saveMemoryFact as jest.Mock).mockClear();
+
+        const secondExecutor = new AgentExecutor('user-1');
+        const second = await secondExecutor.process('HKBU 有什么特色？');
+
+        expect(first.finalAnswer).toContain('HKBU is known');
+        expect(second.finalAnswer).toContain('HKBU is known');
+        expect(callDeepSeekStream).toHaveBeenCalledTimes(1);
+        expect(extractor.extractMemoryCandidatesFromConversation).toHaveBeenCalledWith({
+            recentTurns: [
+                { role: 'user', content: 'HKBU 有什么特色？' },
+                { role: 'assistant', content: second.finalAnswer },
+            ],
+        });
+    });
+
+    it('does not break the main reply when memory extraction fails', async () => {
+        const extractor = jest.requireMock('../../../services/agent/memory_extractor');
+        extractor.extractMemoryCandidatesFromConversation.mockRejectedValue(new Error('llm down'));
+        extractor.filterMemoryCandidates.mockReturnValue([]);
+        (FAQService.searchFAQs as jest.Mock).mockReturnValue([
+            {
+                id: 'faq-7',
+                question: 'What is GPA?',
+                question_zh: 'GPA 怎么算？',
+                answer: 'Use grade points.',
+                answer_zh: 'GPA 按课程成绩对应绩点计算。',
+                keywords: ['gpa'],
+            },
+        ]);
+        (FAQService.searchKnowledgeBase as jest.Mock).mockResolvedValue([]);
+
+        const executor = new AgentExecutor('user-1');
+        const response = await executor.process('GPA 怎么算？');
+
+        expect(response.finalAnswer || '').toContain('GPA');
+    });
+
+    it('caps accepted memories to three writes per pass', async () => {
+        const extractor = jest.requireMock('../../../services/agent/memory_extractor');
+        extractor.extractMemoryCandidatesFromConversation.mockResolvedValue([]);
+        extractor.filterMemoryCandidates.mockReturnValue([
+            {
+                key: 'nickname',
+                value: 'Tim',
+                memoryType: 'long_term_preference',
+                confidence: 0.9,
+                reason: 'a',
+            },
+            {
+                key: 'major',
+                value: 'Computer Science',
+                memoryType: 'background_fact',
+                confidence: 0.9,
+                reason: 'b',
+            },
+            {
+                key: 'favorite_food',
+                value: 'spicy',
+                memoryType: 'long_term_preference',
+                confidence: 0.9,
+                reason: 'c',
+            },
+            {
+                key: 'future_plan.exchange',
+                value: 'next term',
+                memoryType: 'background_fact',
+                confidence: 0.9,
+                reason: 'd',
+            },
+        ]);
+
+        const executor = new AgentExecutor('user-1');
+        await executor.process('以后叫我 Tim，我读 CS，喜欢吃辣，下学期想交换');
+
+        expect(saveMemoryFact).toHaveBeenCalledTimes(3);
     });
 
     it('handles normalized FAQ lookup via stable subtask without calling the LLM', async () => {
