@@ -3,6 +3,7 @@ import { ArrowLeftRight, BookOpen, GraduationCap, Plus, Search, Star } from 'luc
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+    ActivityIndicator,
     FlatList,
     InteractionManager,
     RefreshControl,
@@ -24,6 +25,8 @@ import {
 } from '../../services/favorites';
 import { supabase } from '../../services/supabase';
 import { Course } from '../../types';
+
+const COURSES_PAGE_SIZE = 20;
 
 // Mock Data as fallback/initial
 const MOCK_COURSES: Course[] = [
@@ -49,6 +52,9 @@ export default function CoursesScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [allowRemoteFavorites, setAllowRemoteFavorites] = useState(false);
+    const [coursePage, setCoursePage] = useState(0);
+    const [hasMoreCourses, setHasMoreCourses] = useState(true);
+    const [loadingMoreCourses, setLoadingMoreCourses] = useState(false);
     const { checkLogin } = useLoginPrompt();
     const { unreadByCourse, refresh: refreshCourseActivity } = useCourseActivity();
 
@@ -68,18 +74,50 @@ export default function CoursesScreen() {
         </View>
     );
 
-    const fetchCourses = async (isSilent = false) => {
+    const normalizeCode = (value?: string) => (value || '').toUpperCase().replace(/\s+/g, '');
+    const keyOf = (c: Course) => normalizeCode(c.code) || c.id;
+
+    const mergeCourses = (base: Map<string, Course>, dbCourses: Course[]) => {
+        dbCourses.forEach(c => {
+            const key = keyOf(c);
+            const existing = base.get(key);
+            if (!existing) {
+                base.set(key, c);
+                return;
+            }
+            const merged: Course = {
+                ...existing,
+                ...c,
+                id: c.id || existing.id,
+                code: existing.code || c.code,
+                name: existing.name || c.name,
+                instructor: existing.instructor || c.instructor,
+                department: existing.department || c.department,
+                credits: existing.credits || c.credits,
+                reviewCount: Math.max(existing.reviewCount || 0, c.reviewCount || 0),
+                rating: (c.reviewCount || 0) > 0 ? c.rating : existing.rating,
+            };
+            base.set(key, merged);
+        });
+        return base;
+    };
+
+    const fetchCourses = async (isSilent = false, pageToLoad = 0) => {
         if (!isSilent && courses.length === 0) {
             setLoading(true);
         }
         try {
-            const normalizeCode = (value?: string) => (value || '').toUpperCase().replace(/\s+/g, '');
-
-            // 1. Fetch from Supabase (may fail if table missing)
-            const { data: dbData, error: dbError } = await supabase
+            // 1. Fetch from Supabase with pagination
+            let query = supabase
                 .from('courses')
                 .select('*')
                 .order('created_at', { ascending: false });
+
+            const from = pageToLoad * COURSES_PAGE_SIZE;
+            const to = from + COURSES_PAGE_SIZE - 1;
+            query = query.range(from, to);
+
+            const { data: dbData, error: dbError } = await query;
 
             let dbCourses: Course[] = [];
             if (dbData && !dbError) {
@@ -95,75 +133,61 @@ export default function CoursesScreen() {
                 }));
             }
 
-            // 2. Fetch from Local Storage
-            const localCourses = await getLocalCourses();
+            setHasMoreCourses((dbData?.length || 0) >= COURSES_PAGE_SIZE);
+            setCoursePage(pageToLoad);
 
-            // 3. Merge by course code first (preferred), fallback to id.
-            // This avoids duplicate local/db entries for the same course.
-            const courseMap = new Map<string, Course>();
-            const keyOf = (c: Course) => normalizeCode(c.code) || c.id;
-
-            localCourses.forEach(c => courseMap.set(keyOf(c), c));
-
-            dbCourses.forEach(c => {
-                const key = keyOf(c);
-                const existing = courseMap.get(key);
-                if (!existing) {
-                    courseMap.set(key, c);
-                    return;
-                }
-                // Prefer DB ID when available so downstream queries align with canonical rows.
-                const merged: Course = {
-                    ...existing,
-                    ...c,
-                    id: c.id || existing.id,
-                    code: existing.code || c.code,
-                    name: existing.name || c.name,
-                    instructor: existing.instructor || c.instructor,
-                    department: existing.department || c.department,
-                    credits: existing.credits || c.credits,
-                    reviewCount: Math.max(existing.reviewCount || 0, c.reviewCount || 0),
-                    rating: (c.reviewCount || 0) > 0 ? c.rating : existing.rating,
-                };
-                courseMap.set(key, merged);
-            });
-
-            MOCK_COURSES.forEach(mock => {
-                const key = keyOf(mock);
-                if (!courseMap.has(key)) {
-                    courseMap.set(key, mock);
-                }
-            });
-
-            const mergedCourses = Array.from(courseMap.values());
-            const coursesWithStats = await enrichCoursesWithReviewStats(mergedCourses);
-            setCourses(coursesWithStats);
+            if (pageToLoad === 0) {
+                // First page: merge local + static + DB
+                const localCourses = await getLocalCourses();
+                const courseMap = new Map<string, Course>();
+                localCourses.forEach(c => courseMap.set(keyOf(c), c));
+                mergeCourses(courseMap, dbCourses);
+                MOCK_COURSES.forEach(mock => {
+                    const key = keyOf(mock);
+                    if (!courseMap.has(key)) courseMap.set(key, mock);
+                });
+                const mergedCourses = Array.from(courseMap.values());
+                const coursesWithStats = await enrichCoursesWithReviewStats(mergedCourses);
+                setCourses(coursesWithStats);
+            } else {
+                // Subsequent pages: append new DB courses
+                const coursesWithStats = await enrichCoursesWithReviewStats(dbCourses);
+                setCourses(prev => {
+                    const existingIds = new Set(prev.map(c => keyOf(c)));
+                    const newCourses = coursesWithStats.filter(c => !existingIds.has(keyOf(c)));
+                    return [...prev, ...newCourses];
+                });
+            }
         } catch (err) {
             console.log('Fetch courses silent error (expected if table missing):', err);
-            // Fallback to local + mock if everything fails
-            const localOnly = await getLocalCourses();
-            const normalizeCode = (value?: string) => (value || '').toUpperCase().replace(/\s+/g, '');
-            const fallbackMap = new Map<string, Course>();
-            localOnly.forEach(c => fallbackMap.set(normalizeCode(c.code) || c.id, c));
-            MOCK_COURSES.forEach(mock => {
-                const key = normalizeCode(mock.code) || mock.id;
-                if (!fallbackMap.has(key)) {
-                    fallbackMap.set(key, mock);
-                }
-            });
-            const mergedFallback = Array.from(fallbackMap.values());
-            const fallbackWithStats = await enrichCoursesWithReviewStats(mergedFallback);
-            setCourses(fallbackWithStats);
+            if (pageToLoad === 0) {
+                const localOnly = await getLocalCourses();
+                const fallbackMap = new Map<string, Course>();
+                localOnly.forEach(c => fallbackMap.set(normalizeCode(c.code) || c.id, c));
+                MOCK_COURSES.forEach(mock => {
+                    const key = normalizeCode(mock.code) || mock.id;
+                    if (!fallbackMap.has(key)) fallbackMap.set(key, mock);
+                });
+                const mergedFallback = Array.from(fallbackMap.values());
+                const fallbackWithStats = await enrichCoursesWithReviewStats(mergedFallback);
+                setCourses(fallbackWithStats);
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     };
 
+    const loadMoreCourses = useCallback(() => {
+        if (loadingMoreCourses || !hasMoreCourses) return;
+        setLoadingMoreCourses(true);
+        fetchCourses(true, coursePage + 1).finally(() => setLoadingMoreCourses(false));
+    }, [coursePage, hasMoreCourses, loadingMoreCourses]);
+
     useFocusEffect(
         useCallback(() => {
             const task = InteractionManager.runAfterInteractions(() => {
-                fetchCourses(true); // Silent update on focus
+                fetchCourses(true, 0);
                 loadFavorites();
                 void refreshCourseActivity();
             });
@@ -328,13 +352,24 @@ export default function CoursesScreen() {
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.listContent}
                 renderItem={renderCourseItem}
+                onEndReached={loadMoreCourses}
+                onEndReachedThreshold={0.3}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
-                        onRefresh={() => fetchCourses(true)}
+                        onRefresh={() => {
+                            setCoursePage(0);
+                            setHasMoreCourses(true);
+                            fetchCourses(true, 0);
+                        }}
                         tintColor="#1E3A8A"
                     />
                 }
+                ListFooterComponent={loadingMoreCourses ? (
+                    <View style={styles.loadingMore}>
+                        <ActivityIndicator size="small" color="#1E3A8A" />
+                    </View>
+                ) : null}
                 initialNumToRender={8}
                 maxToRenderPerBatch={5}
                 windowSize={5}
@@ -454,6 +489,10 @@ const styles = StyleSheet.create({
     listContent: {
         padding: 20,
         paddingTop: 12,
+    },
+    loadingMore: {
+        paddingVertical: 20,
+        alignItems: 'center',
     },
     favoritesSection: { paddingTop: 12, paddingBottom: 8 },
     favoritesTitle: {
