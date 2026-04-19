@@ -107,7 +107,8 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         content: string,
         steps?: AgentStep[],
         quickReplies?: string[],
-        id?: string
+        id?: string,
+        isTyping?: boolean
     }[]>([]);
     const [loading, setLoading] = useState(false);
     const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -421,7 +422,9 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
         const userMsg = textToSend.trim();
         if (!overrideText) setInput('');
         setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-        setLoading(true);
+        
+        // 立即结束 loading，允许用户继续发送消息
+        setLoading(false);
 
         try {
             if (shouldUseLatestDigest(userMsg)) {
@@ -429,14 +432,15 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 setMessages(prev => [...prev, {
                     role: 'assistant',
                     content: '',
-                    id: digestStreamId
+                    id: digestStreamId,
+                    isTyping: true
                 }]);
                 scrollViewRef.current?.scrollToEnd({ animated: true });
 
                 const digestContent = await getDigestContent();
 
                 setMessages(prev => prev.map(m =>
-                    m.id === digestStreamId ? { ...m, content: digestContent } : m
+                    m.id === digestStreamId ? { ...m, content: digestContent, isTyping: false } : m
                 ));
                 scrollViewRef.current?.scrollToEnd({ animated: true });
                 return;
@@ -450,7 +454,8 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
             setMessages(prev => [...prev, {
                 role: 'assistant',
                 content: '',
-                id: streamId
+                id: streamId,
+                isTyping: true
             }]);
 
             const onUpdate = (text: string) => {
@@ -468,15 +473,14 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                 ...m,
                 content: response.finalAnswer || m.content,
                 steps: response.steps,
-                quickReplies: response.quickReplies
+                quickReplies: response.quickReplies,
+                isTyping: false
             } : m));
         } catch (error: any) {
             setMessages(prev => [...prev, {
                 role: 'assistant',
                 content: `抱歉，我现在遇到了一点问题：${error.message || '未知错误'}`
             }]);
-        } finally {
-            setLoading(false);
         }
     };
     const handleLatestDigestSuggestion = async () => {
@@ -575,17 +579,17 @@ export default function AgentChatScreen({ showBackButton = false }: AgentChatScr
                                 styles.bubble,
                                 msg.role === 'user' ? styles.userBubble : styles.botBubble
                             ]}>
-                                <View style={styles.messageContentWrapper}>
-                                    {msg.role === 'assistant' ? (
-                                        msg.content === '' ? (
-                                            <TypingDots />
-                                        ) : (
-                                            renderFormattedText(msg.content, false)
-                                        )
+                            <View style={styles.messageContentWrapper}>
+                                {msg.role === 'assistant' ? (
+                                    msg.isTyping || msg.content === '' ? (
+                                        <TypingDots />
                                     ) : (
-                                        renderFormattedText(msg.content, true)
-                                    )}
-                                </View>
+                                        renderFormattedText(msg.content, false)
+                                    )
+                                ) : (
+                                    renderFormattedText(msg.content, true)
+                                )}
+                            </View>
                             </View>
 
                             {msg.quickReplies && msg.quickReplies.length > 0 && (
