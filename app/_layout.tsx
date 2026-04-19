@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Stack, useNavigationContainerRef, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -23,6 +24,9 @@ void SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore when splash screen is already controlled by the runtime
 });
 
+// Check if running in Expo Go (where some features are limited)
+const isExpoGo = Constants.appOwnership === 'expo';
+
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
@@ -39,16 +43,22 @@ export default function RootLayout() {
   }, [segments]);
 
   useEffect(() => {
-    SplashScreen.setOptions({
-      fade: false,
-      duration: 0,
-    });
+    // SplashScreen.setOptions is not available in Expo Go
+    if (!isExpoGo) {
+      SplashScreen.setOptions({
+        fade: false,
+        duration: 0,
+      });
+    }
     void SplashScreen.hideAsync().catch(() => {
       // ignore if already hidden
     });
   }, []);
 
   useEffect(() => {
+    // Push notifications are not supported in Expo Go SDK 53+
+    if (isExpoGo) return;
+
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as { type?: string } | undefined;
       const title = String(response.notification.request.content.title || '');
