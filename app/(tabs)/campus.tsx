@@ -5,6 +5,7 @@ import { Check, X as CloseIcon, Globe, Plus, Search } from 'lucide-react-native'
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+    ActivityIndicator,
     Animated,
     DeviceEventEmitter,
     Dimensions,
@@ -29,7 +30,7 @@ import { ForumPostRow } from '../../components/forum/ForumPostRow';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
 import { useUgcEntryActions } from '../../hooks/useUgcEntryActions';
 import { getCurrentUser } from '../../services/auth';
-import { deletePost, fetchPosts, subscribeToPosts, togglePostLike } from '../../services/campus';
+import { deletePost, fetchPosts, POSTS_PAGE_SIZE, subscribeToPosts, togglePostLike } from '../../services/campus';
 import { addHiddenPostId, filterHiddenPosts, getHiddenPostIds } from '../../services/feedPreferences';
 import { fetchForumPosts } from '../../services/forum';
 import { ForumCategory, ForumPost, ForumSort, Post, PostCategory } from '../../types';
@@ -108,6 +109,9 @@ export default function CampusScreen() {
   });
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'latest' | 'top'>('latest');
+  const [postsPage, setPostsPage] = useState(0);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
 
   // Discover category/sort should feel immediate, so keep one in-memory list
   // and derive the visible result locally instead of refetching on every tap.
@@ -218,17 +222,28 @@ export default function CampusScreen() {
   // ─── Data loading ─────────────────────────────────────────────────────────
   const prefetchedCoverUrlsRef = useRef<Set<string>>(new Set());
 
-  const loadPosts = useCallback(async (isSilent = false) => {
+  const loadPosts = useCallback(async (isSilent = false, pageToLoad = 0) => {
     try {
       if (!isSilent) setLoading(true);
       const user = await getCurrentUser();
       setCurrentUser(user);
-      const data = await fetchPosts('All', user?.uid);
+      const data = await fetchPosts('All', user?.uid, pageToLoad, POSTS_PAGE_SIZE);
       const hiddenPostIds = await getHiddenPostIds();
       const filteredData = filterHiddenPosts(data, hiddenPostIds);
-      setPosts(filteredData);
 
-      if (__DEV__) {
+      if (pageToLoad === 0) {
+        setPosts(filteredData);
+      } else {
+        setPosts(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newPosts = filteredData.filter(p => !existingIds.has(p.id));
+          return [...prev, ...newPosts];
+        });
+      }
+      setPostsPage(pageToLoad);
+      setHasMorePosts(data.length >= POSTS_PAGE_SIZE);
+
+      if (__DEV__ || pageToLoad > 0) {
         return;
       }
 
@@ -271,8 +286,23 @@ export default function CampusScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadPosts(true);
+    setPostsPage(0);
+    setHasMorePosts(true);
+    loadPosts(true, 0);
   }, [loadPosts]);
+
+  const loadMorePosts = useCallback(() => {
+    if (loadingMorePosts || !hasMorePosts) return;
+    setLoadingMorePosts(true);
+    loadPosts(true, postsPage + 1).finally(() => setLoadingMorePosts(false));
+  }, [loadPosts, postsPage, hasMorePosts, loadingMorePosts]);
+
+  const handleDiscoverScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 300) {
+      loadMorePosts();
+    }
+  }, [loadMorePosts]);
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -524,6 +554,8 @@ export default function CampusScreen() {
             style={{ flex: 1 }}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            onScroll={handleDiscoverScroll}
+            scrollEventThrottle={400}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -562,6 +594,11 @@ export default function CampusScreen() {
                       />
                     )}
                 />
+                {currentUser && loadingMorePosts && (
+                  <View style={styles.loadingMore}>
+                    <ActivityIndicator size="small" color="#1E3A8A" />
+                  </View>
+                )}
                 {!currentUser && filteredPosts.length > 4 && (
                   <View style={styles.guestFooter}>
                     <Text style={styles.guestFooterText}>{t('campus.guest_more_posts', 'Log in to discover more updates')}</Text>
@@ -898,6 +935,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 100,
+  },
+  loadingMore: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
   guestFooter: {
     paddingVertical: 40,

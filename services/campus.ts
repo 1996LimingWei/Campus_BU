@@ -108,10 +108,17 @@ const markFollowingAuthors = async (posts: Post[], currentUserId?: string) => {
     });
 };
 
+export const POSTS_PAGE_SIZE = 20;
+
 /**
- * Fetch posts by category
+ * Fetch posts by category (supports pagination via page/pageSize)
  */
-export const fetchPosts = async (category?: PostCategory, currentUserId?: string): Promise<Post[]> => {
+export const fetchPosts = async (
+    category?: PostCategory,
+    currentUserId?: string,
+    page?: number,
+    pageSize: number = POSTS_PAGE_SIZE,
+): Promise<Post[]> => {
     let query = supabase.from(POSTS_TABLE).select('*, author:users!author_id(*)');
 
     const type = CATEGORY_TO_TYPE[category || 'All'];
@@ -119,7 +126,15 @@ export const fetchPosts = async (category?: PostCategory, currentUserId?: string
         query = query.eq('type', type);
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+    query = query.order('created_at', { ascending: false });
+
+    if (page !== undefined) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
         console.error('Error fetching posts:', error);
