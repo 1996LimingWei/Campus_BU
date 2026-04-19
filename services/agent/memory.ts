@@ -11,6 +11,14 @@ const isMissingAgentMemoryTable = (error: any): boolean => {
     return code === 'PGRST205' || message.includes('agent_memory');
 };
 
+let hasWarnedMissingAgentMemoryTable = false;
+
+const warnMissingAgentMemoryTableOnce = () => {
+    if (hasWarnedMissingAgentMemoryTable) return;
+    hasWarnedMissingAgentMemoryTable = true;
+    console.warn('[Memory] agent_memory table missing; memory persistence disabled (reads return empty, writes skipped).');
+};
+
 export const getMemoryFact = async (userId: string, key: string) => {
     const { data, error } = await supabase
         .from('agent_memory')
@@ -21,7 +29,7 @@ export const getMemoryFact = async (userId: string, key: string) => {
 
     if (error) {
         if (isMissingAgentMemoryTable(error)) {
-            console.warn('[Memory] agent_memory table missing; memory reads are disabled.');
+            warnMissingAgentMemoryTableOnce();
             return null;
         }
         console.warn(`[Memory] Fact not found for key: ${key}`, error);
@@ -42,7 +50,7 @@ export const saveMemoryFact = async (userId: string, key: string, value: any) =>
 
     if (error) {
         if (isMissingAgentMemoryTable(error)) {
-            console.warn('[Memory] agent_memory table missing; skipping memory write.');
+            warnMissingAgentMemoryTableOnce();
             return;
         }
         console.error(`[Memory] Failed to save fact for key: ${key}`, error);
@@ -58,7 +66,7 @@ export const getAllUserFacts = async (userId: string) => {
 
     if (error) {
         if (isMissingAgentMemoryTable(error)) {
-            console.warn('[Memory] agent_memory table missing; returning empty memory.');
+            warnMissingAgentMemoryTableOnce();
             return {};
         }
         console.error('[Memory] Failed to fetch all facts', error);
