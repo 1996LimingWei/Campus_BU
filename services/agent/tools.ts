@@ -13,6 +13,45 @@ export const TOOLS: ToolDefinition[] = [
         }
     },
     {
+        name: 'write_user_schedule_entry',
+        description: 'Write a course entry to the user schedule (weekly recurring classes). Confirm with user before writing. Required: title, dayOfWeek (1-7 for Monday-Sunday), and time information (startTime/endTime or startPeriod/endPeriod). Optional: courseCode, room/location.',
+        parameters: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Course title or class name (required).' },
+                dayOfWeek: { type: 'number', description: 'Day of week: 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday, 7=Sunday (required).' },
+                courseCode: { type: 'string', description: 'Course code like COMP3015 (optional but recommended).' },
+                startTime: { type: 'string', description: 'Start time in HH:MM format (24-hour, e.g., "09:00"). Either startTime/endTime OR startPeriod/endPeriod must be provided.' },
+                endTime: { type: 'string', description: 'End time in HH:MM format (24-hour, e.g., "10:30").' },
+                startPeriod: { type: 'number', description: 'Start period number for period-based scheduling (alternative to startTime).' },
+                endPeriod: { type: 'number', description: 'End period number for period-based scheduling (alternative to endTime).' },
+                room: { type: 'string', description: 'Classroom or location (optional).' },
+                weekText: { type: 'string', description: 'Week pattern like "1-16" or "odd/even weeks" (optional, defaults to all weeks).' },
+                confirmed: { type: 'boolean', description: 'Whether the user has confirmed the write operation. Must be true to actually write.' }
+            },
+            required: ['title', 'dayOfWeek']
+        }
+    },
+    {
+        name: 'create_user_calendar_event',
+        description: 'Create a one-time calendar event like exam, quiz, assignment deadline, or custom event. Confirm with user before creating. Required: title, eventType (exam/quiz/assignment/custom), eventDate (YYYY-MM-DD). Optional: startTime, endTime, location, courseCode, note.',
+        parameters: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Event title (required).' },
+                eventType: { type: 'string', enum: ['exam', 'quiz', 'assignment', 'custom'], description: 'Type of event (required).' },
+                eventDate: { type: 'string', description: 'Event date in YYYY-MM-DD format (required).' },
+                courseCode: { type: 'string', description: 'Related course code (optional).' },
+                startTime: { type: 'string', description: 'Start time in HH:MM format (optional).' },
+                endTime: { type: 'string', description: 'End time in HH:MM format (optional).' },
+                location: { type: 'string', description: 'Event location or room (optional).' },
+                note: { type: 'string', description: 'Additional notes (optional).' },
+                confirmed: { type: 'boolean', description: 'Whether the user has confirmed the creation. Must be true to actually create.' }
+            },
+            required: ['title', 'eventType', 'eventDate']
+        }
+    },
+    {
         name: 'read_course_community',
         description: 'Read a course community snapshot including reviews, chatroom activity, and teaming posts for a specific course.',
         parameters: {

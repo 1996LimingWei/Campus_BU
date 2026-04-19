@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { AlertTriangle, BookOpen, CalendarDays, CheckCircle2, ImageUp, MapPin, Pencil, Search, Trash2, X } from 'lucide-react-native';
+import { AlertTriangle, BookOpen, CalendarDays, CheckCircle2, Clock, ImageUp, MapPin, Pencil, Search, Trash2, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,6 +15,11 @@ import {
     View,
 } from 'react-native';
 import { searchCourses } from '../../services/courses';
+import {
+    getUpcomingUserCalendarEvents,
+    UserCalendarEvent,
+    deleteUserCalendarEvent,
+} from '../../services/calendar';
 import {
     ScheduleImportItemRecord,
     UserScheduleEntry,
@@ -138,6 +143,8 @@ export default function MyScheduleCard({ userId }: { userId: string | null }) {
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [showManualEntryEditor, setShowManualEntryEditor] = useState(false);
     const [showSampleExample, setShowSampleExample] = useState(false);
+    const [upcomingEvents, setUpcomingEvents] = useState<UserCalendarEvent[]>([]);
+    const [loadingUpcomingEvents, setLoadingUpcomingEvents] = useState(false);
     const dayOptions = [
         { key: 1, label: scheduleT('days.mon', '周一') },
         { key: 2, label: scheduleT('days.tue', '周二') },
@@ -179,8 +186,22 @@ export default function MyScheduleCard({ userId }: { userId: string | null }) {
         }
     };
 
+    const loadUpcomingEvents = async () => {
+        if (!userId) return;
+        setLoadingUpcomingEvents(true);
+        try {
+            const events = await getUpcomingUserCalendarEvents(userId, { days: 30, limit: 10 });
+            setUpcomingEvents(events);
+        } catch (error) {
+            console.error('Failed to load upcoming events:', error);
+        } finally {
+            setLoadingUpcomingEvents(false);
+        }
+    };
+
     useEffect(() => {
         loadEntries();
+        loadUpcomingEvents();
     }, [userId]);
 
     useEffect(() => {
@@ -596,6 +617,45 @@ export default function MyScheduleCard({ userId }: { userId: string | null }) {
                             </View>
                         </View>
                     ))}
+                </View>
+            )}
+
+            {/* Upcoming Calendar Events Section */}
+            {upcomingEvents.length > 0 && (
+                <View style={styles.upcomingSection}>
+                    <Text style={styles.upcomingTitle}>即将到期的日程</Text>
+                    <View style={styles.upcomingList}>
+                        {upcomingEvents.map(event => (
+                            <View key={event.id} style={styles.upcomingCard}>
+                                <View style={styles.upcomingHeader}>
+                                    <Text style={styles.upcomingEventTitle}>{event.title}</Text>
+                                    <View style={[styles.eventTypeBadge, styles[`${event.eventType}Badge`]]}>
+                                        <Text style={styles.eventTypeText}>
+                                            {event.eventType === 'exam' ? '考试' :
+                                             event.eventType === 'quiz' ? '测验' :
+                                             event.eventType === 'assignment' ? '作业' : '事件'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.upcomingMeta}>
+                                    <Clock size={12} color="#64748B" />
+                                    <Text style={styles.upcomingMetaText}>
+                                        {event.eventDate}
+                                        {event.startTime ? ` ${event.startTime}${event.endTime ? ` - ${event.endTime}` : ''}` : ''}
+                                    </Text>
+                                </View>
+                                {event.location && (
+                                    <View style={styles.upcomingMeta}>
+                                        <MapPin size={12} color="#64748B" />
+                                        <Text style={styles.upcomingMetaText}>{event.location}</Text>
+                                    </View>
+                                )}
+                                {event.courseCode && (
+                                    <Text style={styles.upcomingCourseCode}>{event.courseCode}</Text>
+                                )}
+                            </View>
+                        ))}
+                    </View>
                 </View>
             )}
 
@@ -1131,4 +1191,20 @@ const styles = StyleSheet.create({
     addCourseText: { marginTop: 4, fontSize: 13, lineHeight: 18, color: '#1E3A8A' },
     sampleInlineCard: { borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#DBEAFE', backgroundColor: '#fff' },
     sampleInlineImage: { width: '100%', height: 260, resizeMode: 'contain', backgroundColor: '#F8FAFC' },
+    // Upcoming events section styles
+    upcomingSection: { marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+    upcomingTitle: { fontSize: 15, fontWeight: '700', color: '#374151', marginBottom: 12 },
+    upcomingList: { gap: 10 },
+    upcomingCard: { padding: 12, borderRadius: 12, backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A' },
+    upcomingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    upcomingEventTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: '#92400E' },
+    eventTypeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+    examBadge: { backgroundColor: '#FECACA' },
+    quizBadge: { backgroundColor: '#BFDBFE' },
+    assignmentBadge: { backgroundColor: '#C6F6D5' },
+    customBadge: { backgroundColor: '#E9D5FF' },
+    eventTypeText: { fontSize: 11, fontWeight: '700', color: '#374151' },
+    upcomingMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+    upcomingMetaText: { fontSize: 12, color: '#A16207' },
+    upcomingCourseCode: { marginTop: 4, fontSize: 12, fontWeight: '600', color: '#92400E' },
 });

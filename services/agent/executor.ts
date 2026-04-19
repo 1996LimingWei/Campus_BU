@@ -1,9 +1,16 @@
 import { getCurrentUser } from '../auth';
 import { addReview, getCourseByCode, getReviews, searchCourses } from '../courses';
 import { FAQService } from '../faq';
-import { getUserScheduleEntries, UserScheduleEntry } from '../schedule';
+import { getUserScheduleEntries, UserScheduleEntry, createManualScheduleEntry } from '../schedule';
 import { supabase } from '../supabase';
 import { fetchTeamingRequests, postTeamingRequest } from '../teaming';
+import {
+    createUserCalendarEvent,
+    CreateUserCalendarEventInput,
+    CalendarEventType,
+    UserCalendarEvent,
+    getUpcomingUserCalendarEvents,
+} from '../calendar';
 import {
     formatBuildingInfo,
     formatNearbyPlaceInfo,
@@ -178,6 +185,14 @@ type PendingWriteAction =
         type: 'memory';
         key: string;
         value: any;
+    }
+    | {
+        type: 'schedule';
+        entry: Omit<UserScheduleEntry, 'id' | 'userId' | 'source'>;
+    }
+    | {
+        type: 'calendar_event';
+        event: Omit<CreateUserCalendarEventInput, 'userId'>;
     };
 
 const extractCourseCode = (query: string): string | null => {
@@ -204,6 +219,18 @@ const detectCourseCommunityScope = (query: string): CourseCommunityScope => {
 
 const isScheduleQuery = (query: string): boolean => {
     return /课表|課表|课程安排|課程安排|今天.*课|今天.*課|明天.*课|明天.*課|周[一二三四五六日天].*课|星期[一二三四五六日天].*课|下一节|下节|下一堂|next class|today.*class|tomorrow.*class/i.test(query);
+};
+
+const isScheduleWriteIntent = (query: string): boolean => {
+    // Intent to write a course to schedule: e.g., "帮我把这门课记进课表", "周二9点有课帮我记一下"
+    return /(?:帮我|幫我|替我|帮|幫).*(?:记|記|加|写|寫|放|存|添加).*(?:课表|課表|课程|課程|时间表|時間表)/i.test(query) ||
+           /(?:把|將).*(?:课|課|课程|課程).*(?:记到|記到|写到|寫到|加到|放到|存到|添加).*(?:课表|課表|时间表)/i.test(query);
+};
+
+const isCalendarEventWriteIntent = (query: string): boolean => {
+    // Intent to write a one-time event: exam, quiz, assignment deadline, etc.
+    return /(?:帮我|幫我|替我|帮|幫).*(?:记|記|加|写|寫|放|存|添加).*(?:考试|考試|quiz|midterm|final|exam|测验|測驗|作业|作業|assignment|deadline|due|presentation|pre)/i.test(query) ||
+           /(?:把|將).*(?:考试|考試|quiz|midterm|final|exam|测验|測驗|作业|作業|assignment|deadline|due).*(?:记到|記到|写到|寫到|加到|放到|存到|日历|日曆|日历|時間表)/i.test(query);
 };
 
 const isCourseCommunityQuery = (query: string): boolean => {
@@ -729,6 +756,40 @@ export class AgentExecutor {
             };
         }
 
+        if (isScheduleWriteIntent(prompt)) {
+            const response = await this.executeTool('write_user_schedule_entry', { query: prompt });
+            return {
+                steps: [{
+                    thought: '本地命中课程写入意图',
+                    action: {
+                        tool: 'write_user_schedule_entry',
+                        input: { query: prompt }
+                    },
+                    observation: response,
+                    reply: response,
+                    path: 'local_rule',
+                }],
+                finalAnswer: response
+            };
+        }
+
+        if (isCalendarEventWriteIntent(prompt)) {
+            const response = await this.executeTool('create_user_calendar_event', { query: prompt });
+            return {
+                steps: [{
+                    thought: '本地命中日历事件写入意图',
+                    action: {
+                        tool: 'create_user_calendar_event',
+                        input: { query: prompt }
+                    },
+                    observation: response,
+                    reply: response,
+                    path: 'local_rule',
+                }],
+                finalAnswer: response
+            };
+        }
+
         if (isNearbyPlaceQuery(prompt)) {
             const observation = await this.executeTool('find_nearby_place', { query: prompt });
             return {
@@ -1025,6 +1086,10 @@ export class AgentExecutor {
                 return JSON.stringify(facts);
             case 'save_user_preference':
                 return this.prepareMemoryWrite(input?.key, input?.value);
+            case 'write_user_schedule_entry':
+                return this.prepareScheduleWrite(input);
+            case 'create_user_calendar_event':
+                return this.prepareCalendarEventWrite(input);
             case 'search_canteen_menu':
                 return "Nearby Harmony Cafeteria has 'Spicy Chicken' on special today. It's only 5 mins from Hall 1.";
             case 'check_library_availability':
@@ -1234,6 +1299,14 @@ export class AgentExecutor {
             return `已经记住：${pending.key} = ${String(pending.value)}。`;
         }
 
+        if (pending.type === 'schedule') {
+            return this.executeScheduleWrite(pending.entry);
+        }
+
+        if (pending.type === 'calendar_event') {
+            return this.executeCalendarEventWrite(pending.event);
+        }
+
         const currentUser = await getCurrentUser();
         if (!currentUser?.uid) {
             return '要执行这次写入需要先登录。';
@@ -1262,6 +1335,173 @@ export class AgentExecutor {
         }
 
         return '这次写入信息还不完整，我先没有提交。你把缺的内容继续发我，我会重新生成确认稿。';
+    }
+
+    // ============== Schedule & Calendar Event Write Methods ==============
+
+    private async prepareScheduleWrite(input: any): Promise<string> {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.uid) {
+            return '要帮你写入课表的话需要先登录。你登录后再告诉我一次，我可以继续帮你处理。';
+        }
+
+        // Validate required fields
+        const title = input?.title?.trim();
+        const dayOfWeek = input?.dayOfWeek;
+        
+        if (!title) {
+            return '请告诉我课程名称，比如 "Data Communications"。';
+        }
+        
+        if (!dayOfWeek || dayOfWeek < 1 || dayOfWeek > 7) {
+            return '请告诉我星期几，比如 "周二" 或 "星期三"。';
+        }
+
+        // Must have either time or period
+        const hasTime = input?.startTime && input?.endTime;
+        const hasPeriod = input?.startPeriod && input?.endPeriod;
+        
+        if (!hasTime && !hasPeriod) {
+            return '请告诉我课程时间，可以是具体时间段（如 09:00-10:30）或节次（如第 3-4 节）。';
+        }
+
+        const entry = {
+            title,
+            courseCode: input?.courseCode?.trim() || undefined,
+            teacherName: undefined,
+            room: input?.room?.trim() || undefined,
+            dayOfWeek,
+            startTime: input?.startTime || undefined,
+            endTime: input?.endTime || undefined,
+            startPeriod: input?.startPeriod || undefined,
+            endPeriod: input?.endPeriod || undefined,
+            weekText: input?.weekText?.trim() || '1-16',
+            matchedCourseId: undefined,
+        };
+
+        const dayLabel = WEEKDAY_LABELS[dayOfWeek];
+        const timeText = hasTime 
+            ? `${input.startTime} - ${input.endTime}`
+            : `第 ${input.startPeriod}-${input.endPeriod} 节`;
+        const courseCodeText = entry.courseCode ? ` (${entry.courseCode})` : '';
+        
+        this.pendingWriteAction = { type: 'schedule', entry };
+        
+        return `我准备把以下课程写入你的课表：\n\n${title}${courseCodeText}\n${dayLabel} ${timeText}${entry.room ? ` @ ${entry.room}` : ''}\n\n如果确认无误，回复"确认"或"是"；如果要修改，请告诉我新的信息。`;
+    }
+
+    private async executeScheduleWrite(entry: Omit<UserScheduleEntry, 'id' | 'userId' | 'source'>): Promise<string> {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.uid) {
+            return '要执行这次写入需要先登录。';
+        }
+
+        try {
+            await createManualScheduleEntry(currentUser.uid, {
+                title: entry.title,
+                courseCode: entry.courseCode,
+                teacherName: entry.teacherName,
+                room: entry.room,
+                dayOfWeek: entry.dayOfWeek,
+                startTime: entry.startTime,
+                endTime: entry.endTime,
+                startPeriod: entry.startPeriod,
+                endPeriod: entry.endPeriod,
+                weekText: entry.weekText,
+            });
+            
+            return `已成功将 "${entry.title}" 添加到你的课表！`;
+        } catch (error) {
+            console.error('Error writing schedule entry:', error);
+            return '抱歉，写入课表时出现了问题。请稍后再试。';
+        }
+    }
+
+    private async prepareCalendarEventWrite(input: any): Promise<string> {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.uid) {
+            return '要帮你记录考试/事件的话需要先登录。你登录后再告诉我一次，我可以继续帮你处理。';
+        }
+
+        // Validate required fields
+        const title = input?.title?.trim();
+        const eventType = input?.eventType;
+        const eventDate = input?.eventDate;
+        
+        if (!title) {
+            return '请告诉我事件名称，比如 "COMP3015 Final Exam"。';
+        }
+        
+        if (!eventType || !['exam', 'quiz', 'assignment', 'custom'].includes(eventType)) {
+            return '请告诉我事件类型：exam（考试）、quiz（测验）、assignment（作业）或 custom（其他）。';
+        }
+
+        if (!eventDate) {
+            return '请告诉我日期，格式为 YYYY-MM-DD，比如 "2026-05-15"。';
+        }
+
+        // Validate date format
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(eventDate)) {
+            return '日期格式不正确，请使用 YYYY-MM-DD 格式，比如 "2026-05-15"。';
+        }
+
+        const event: Omit<CreateUserCalendarEventInput, 'userId'> = {
+            title,
+            eventType,
+            eventDate,
+            courseCode: input?.courseCode?.trim() || undefined,
+            startTime: input?.startTime || undefined,
+            endTime: input?.endTime || undefined,
+            location: input?.location?.trim() || undefined,
+            note: input?.note?.trim() || undefined,
+        };
+
+        const typeLabels: Record<string, string> = {
+            exam: '考试',
+            quiz: '测验',
+            assignment: '作业',
+            custom: '事件',
+        };
+
+        const timeText = event.startTime 
+            ? ` ${event.startTime}${event.endTime ? ` - ${event.endTime}` : ''}`
+            : '';
+        const locationText = event.location ? ` @ ${event.location}` : '';
+        const courseText = event.courseCode ? ` (${event.courseCode})` : '';
+        
+        this.pendingWriteAction = { type: 'calendar_event', event };
+        
+        return `我准备在你的日历中记录以下${typeLabels[eventType]}：\n\n${title}${courseText}\n日期：${eventDate}${timeText}${locationText}${event.note ? `\n备注：${event.note}` : ''}\n\n如果确认无误，回复"确认"或"是"；如果要修改，请告诉我新的信息。`;
+    }
+
+    private async executeCalendarEventWrite(event: Omit<CreateUserCalendarEventInput, 'userId'>): Promise<string> {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.uid) {
+            return '要执行这次写入需要先登录。';
+        }
+
+        const { data, error } = await createUserCalendarEvent({
+            userId: currentUser.uid,
+            title: event.title,
+            eventType: event.eventType as CalendarEventType,
+            eventDate: event.eventDate,
+            courseCode: event.courseCode,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            location: event.location,
+            note: event.note,
+        });
+
+        if (error) {
+            if (error.includes('already exists')) {
+                return '这个事件已经存在于你的日历中了，不需要重复添加。';
+            }
+            console.error('Error creating calendar event:', error);
+            return '抱歉，记录事件时出现了问题。请稍后再试。';
+        }
+
+        return `已成功记录 "${event.title}" 到你的日历！`;
     }
 
     private async handleCourseActionDraft(action: PendingCourseAction, currentUser: any): Promise<string> {

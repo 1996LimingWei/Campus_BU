@@ -760,4 +760,181 @@ describe('AgentExecutor course publishing flow', () => {
         expect(response.steps[0].action?.tool).toBe('find_nearby_place');
         expect(callDeepSeekStream).not.toHaveBeenCalled();
     });
+
+    // ============== Schedule & Calendar Event Write Tests ==============
+
+    describe('Schedule Write Intent', () => {
+        it('should detect schedule write intent and request confirmation', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            const response = await executor.process('帮我把COMP3015周二9点记进课表');
+
+            // Should ask for missing day of week or provide confirmation
+            expect(response.finalAnswer).toBeTruthy();
+            expect(
+                response.finalAnswer.includes('确认') ||
+                response.finalAnswer.includes('星期') ||
+                response.finalAnswer.includes('时间')
+            ).toBe(true);
+        });
+
+        it('should require day of week for schedule write', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            // Without day of week
+            const response = await executor.process('帮我记一门课到课表');
+
+            // Should ask for day of week
+            expect(response.finalAnswer).toBeTruthy();
+        });
+
+        it('should not write schedule without user confirmation', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            // First request to write
+            const response1 = await executor.process('周二9点COMP3015记进课表');
+            expect(response1.finalAnswer).toBeTruthy();
+
+            // User doesn't confirm, instead asks a question
+            const response2 = await executor.process('这门课什么时候考试');
+            // Should not have written anything
+            expect(response2.finalAnswer).toBeTruthy();
+        });
+    });
+
+    describe('Calendar Event Write Intent', () => {
+        it('should detect exam write intent and request confirmation', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            const response = await executor.process('我5月15号有COMP3015 final，帮我记一下');
+
+            // Should detect exam intent and ask for confirmation
+            expect(response.finalAnswer).toBeTruthy();
+            expect(
+                response.finalAnswer.includes('考试') ||
+                response.finalAnswer.includes('确认') ||
+                response.finalAnswer.includes('记录')
+            ).toBe(true);
+        });
+
+        it('should detect quiz write intent', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            const response = await executor.process('周三有个quiz帮我记到日历');
+
+            expect(response.finalAnswer).toBeTruthy();
+        });
+
+        it('should require date for calendar event', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            const response = await executor.process('帮我记个考试');
+
+            // Should ask for date
+            expect(response.finalAnswer).toBeTruthy();
+        });
+
+        it('should handle assignment deadline write intent', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            const response = await executor.process('作业截止日期5月20号帮我记一下');
+
+            expect(response.finalAnswer).toBeTruthy();
+        });
+    });
+
+    describe('Write Confirmation Flow', () => {
+        it('should confirm before writing schedule entry', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            // Request to write
+            const response1 = await executor.process('周二下午2点数据库课程记进课表');
+            expect(response1.finalAnswer).toContain('确认');
+
+            // User confirms
+            const response2 = await executor.process('确认');
+            expect(response2.finalAnswer).toContain('成功');
+        });
+
+        it('should cancel write when user says no', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            // Request to write
+            const response1 = await executor.process('周三上午有算法课帮我记一下');
+            expect(response1.finalAnswer).toContain('确认');
+
+            // User cancels
+            const response2 = await executor.process('算了');
+            expect(response2.finalAnswer).toContain('取消');
+        });
+
+        it('should ask for missing fields before confirmation', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            // Only provide title, missing day and time
+            const response1 = await executor.process('帮我记一门课');
+            expect(response1.finalAnswer).toBeTruthy();
+            expect(
+                response1.finalAnswer.includes('星期') ||
+                response1.finalAnswer.includes('时间') ||
+                response1.finalAnswer.includes('课程')
+            ).toBe(true);
+        });
+    });
+
+    describe('Schedule Query Still Works', () => {
+        it('should still handle schedule queries normally', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            const response = await executor.process('今天有什么课');
+
+            // Should query schedule without trying to write
+            expect(response.steps[0].action?.tool).toBe('read_user_schedule');
+        });
+
+        it('should not interfere with existing schedule read flow', async () => {
+            const executor = new AgentExecutor('user-1', {
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            });
+
+            const response = await executor.process('明天课表');
+
+            expect(response.steps[0].action?.tool).toBe('read_user_schedule');
+            expect(response.finalAnswer).toBeTruthy();
+        });
+    });
 });
