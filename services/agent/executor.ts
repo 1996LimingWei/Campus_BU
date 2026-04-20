@@ -1024,9 +1024,24 @@ export class AgentExecutor {
         }
 
         const intentDecision = classifyIntent(prompt);
-        let currentStep = 0;
-        const maxSteps = 5;
         const steps: AgentStep[] = [];
+
+        // 优化：如果本地意图分类能判断工具，先执行工具再一次性让 LLM 生成回答
+        // 这样把 2 次 LLM 调用合并为 1 次，节省 5-7 秒
+        if (intentDecision.useTool && intentDecision.confidence >= 0.5) {
+            const toolObservation = await this.executeTool(intentDecision.useTool, { query: prompt });
+            const preStep: AgentStep = {
+                thought: `预执行工具：${intentDecision.useTool}`,
+                action: { tool: intentDecision.useTool, input: { query: prompt } },
+                observation: toolObservation,
+                path: 'prefetch',
+            };
+            steps.push(preStep);
+            this.pushHistory('tool', `${intentDecision.useTool}: ${toolObservation}`);
+        }
+
+        let currentStep = 0;
+        const maxSteps = steps.length > 0 ? 2 : 5; // 已有工具结果时最多再调 2 轮
 
         while (currentStep < maxSteps) {
             const modelRoute = selectModelRoute(prompt, {
@@ -1037,7 +1052,7 @@ export class AgentExecutor {
                 previousSteps: steps,
             });
 
-            // 1. Ask real LLM for next step
+            // Ask LLM for next step (if tool already executed, LLM will directly synthesize answer)
             const decision = await this.realDeepSeekCall(prompt, steps, modelRoute, onUpdate);
             steps.push(decision);
 
@@ -1046,7 +1061,7 @@ export class AgentExecutor {
                 break;
             }
 
-            // 2. Execute the Tool
+            // Execute the Tool
             const observation = await this.executeTool(decision.action.tool, decision.action.input);
             decision.observation = observation;
             this.pushHistory('tool', `${decision.action.tool}: ${observation}`);
