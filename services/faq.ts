@@ -230,7 +230,7 @@ export const FAQService = {
         if (searchTerms.length > 0) {
             const orQuery = searchTerms
                 .filter((word: string) => word.length > 1)
-                .slice(0, 8)
+                .slice(0, 5)
                 .map((word: string) => `content.ilike.%${word}%`)
                 .join(',');
             dbQuery = dbQuery.or(orQuery);

@@ -968,7 +968,11 @@ export class AgentExecutor {
         }
 
         if (options?.runPostResponseMemoryPass !== false) {
-            await this.runPostResponseMemoryPass();
+            // Fire-and-forget: memory extraction runs in background so the user
+            // doesn't wait an extra 5-7 seconds for the DeepSeek LLM call.
+            this.runPostResponseMemoryPass().catch((err) => {
+                console.warn('[Agent] background memory pass failed:', err);
+            });
         }
 
         return response;
