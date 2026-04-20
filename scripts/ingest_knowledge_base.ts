@@ -66,20 +66,24 @@ async function main() {
     console.log('加载 Embedding 模型 (Xenova/all-MiniLM-L6-v2) ...');
     const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 
-    // 先清除旧数据（避免重复）
-    console.log('清除旧的知识库数据...');
-    const { error: deleteError } = await supabase
+    // 查询已有记录的 source，跳过已导入的文件
+    const { data: existing } = await supabase
         .from('agent_knowledge_base')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
-    if (deleteError) {
-        console.warn('清除旧数据时出错（可能是空表）:', deleteError.message);
-    }
+        .select('metadata')
+        .not('metadata', 'is', null);
+    const existingSources = new Set(
+        (existing || []).map((row: any) => row.metadata?.source).filter(Boolean)
+    );
+    console.log(`数据库中已有 ${existingSources.size} 个文件的数据: ${[...existingSources].join(', ')}`);
 
     let totalChunks = 0;
     let totalInserted = 0;
 
     for (const file of files) {
+        if (existingSources.has(file)) {
+            console.log(`\n跳过 ${file}（已存在）`);
+            continue;
+        }
         const filePath = path.join(KB_DIR, file);
         const markdown = fs.readFileSync(filePath, 'utf-8');
         const chunks = chunkMarkdown(markdown, file);
