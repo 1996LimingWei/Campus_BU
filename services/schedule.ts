@@ -7,6 +7,53 @@ import { ensureCourseFavoriteForSchedule } from './favorites';
 import { supabase } from './supabase';
 
 const SCHEDULE_SCREENSHOT_BUCKET = 'schedule-screenshots';
+const USER_SCHEDULE_CACHE_TTL_MS = 5 * 60 * 1000;
+const USER_SCHEDULE_ENTRY_SELECT_COLUMNS = [
+    'id',
+    'user_id',
+    'title',
+    'course_code',
+    'teacher_name',
+    'room',
+    'day_of_week',
+    'start_time',
+    'end_time',
+    'start_period',
+    'end_period',
+    'week_text',
+    'matched_course_id',
+    'source',
+    'is_active',
+].join(',');
+
+type UserScheduleCacheEntry = {
+    entries: UserScheduleEntry[];
+    expiresAt: number;
+};
+
+const userScheduleCache = new Map<string, UserScheduleCacheEntry>();
+
+const cloneScheduleEntries = (entries: UserScheduleEntry[]): UserScheduleEntry[] => (
+    entries.map(entry => ({ ...entry }))
+);
+
+const setUserScheduleCache = (userId: string, entries: UserScheduleEntry[]): UserScheduleEntry[] => {
+    userScheduleCache.set(userId, {
+        entries: cloneScheduleEntries(entries),
+        expiresAt: Date.now() + USER_SCHEDULE_CACHE_TTL_MS,
+    });
+
+    return cloneScheduleEntries(entries);
+};
+
+export const invalidateUserScheduleEntriesCache = (userId?: string): void => {
+    if (userId) {
+        userScheduleCache.delete(userId);
+        return;
+    }
+
+    userScheduleCache.clear();
+};
 
 export interface ScheduleImportJob {
     id: string;
@@ -356,18 +403,37 @@ export const importScheduleScreenshot = async (
     }
 };
 
-export const getUserScheduleEntries = async (userId: string): Promise<UserScheduleEntry[]> => {
-    const { data, error } = await supabase
-        .from('user_schedule_entries')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .order('day_of_week', { ascending: true })
-        .order('start_time', { ascending: true })
-        .order('start_period', { ascending: true });
+export const getUserScheduleEntries = async (
+    userId: string,
+    options?: { forceRefresh?: boolean; allowStaleOnError?: boolean }
+): Promise<UserScheduleEntry[]> => {
+    const cacheEntry = userScheduleCache.get(userId);
+    const cacheIsFresh = Boolean(cacheEntry && Date.now() <= cacheEntry.expiresAt);
 
-    if (error) throw error;
-    return (data || []).map(mapEntryRow);
+    if (!options?.forceRefresh && cacheEntry && cacheIsFresh) {
+        return cloneScheduleEntries(cacheEntry.entries);
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('user_schedule_entries')
+            .select(USER_SCHEDULE_ENTRY_SELECT_COLUMNS)
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .order('day_of_week', { ascending: true })
+            .order('start_time', { ascending: true })
+            .order('start_period', { ascending: true });
+
+        if (error) throw error;
+        const mapped = (data || []).map(mapEntryRow);
+        return setUserScheduleCache(userId, mapped);
+    } catch (error) {
+        if (options?.allowStaleOnError && cacheEntry) {
+            console.warn('Falling back to stale schedule cache due to fetch error:', error);
+            return cloneScheduleEntries(cacheEntry.entries);
+        }
+        throw error;
+    }
 };
 
 export const saveImportItemToSchedule = async (params: {
@@ -450,6 +516,7 @@ export const saveImportItemToSchedule = async (params: {
         courseCode: matchedCourse?.code || item.extractedCourseCode || entryRow.course_code || undefined,
         courseName: matchedCourse?.name || title || entryRow.title,
     });
+    invalidateUserScheduleEntriesCache(userId);
 
     return mapEntryRow(entryRow);
 };
@@ -511,6 +578,7 @@ export const updateUserScheduleEntry = async (params: {
         .single();
 
     if (error) throw error;
+    invalidateUserScheduleEntriesCache(userId);
     await tryAutoFavoriteScheduleCourse({
         userId,
         matchedCourseId: data.matched_course_id || null,
@@ -537,6 +605,7 @@ export const deleteUserScheduleEntry = async (params: {
         .eq('is_active', true);
 
     if (error) throw error;
+    invalidateUserScheduleEntriesCache(userId);
 };
 
 export const createManualScheduleEntry = async (params: {
@@ -576,6 +645,7 @@ export const createManualScheduleEntry = async (params: {
         .single();
 
     if (error) throw error;
+    invalidateUserScheduleEntriesCache(userId);
     await tryAutoFavoriteScheduleCourse({
         userId,
         matchedCourseId: data.matched_course_id || null,

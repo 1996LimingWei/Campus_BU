@@ -1480,68 +1480,73 @@ export class AgentExecutor {
 
     private async executeTool(toolName: string, input: any): Promise<string> {
         console.log(`[Agent] Executing tool: ${toolName}`, input);
+        const startedAt = Date.now();
 
-        if (toolName === 'read_course_community') {
-            const routedPublishIntent = detectCoursePublishIntent(input?.query || '');
-            if (routedPublishIntent) {
-                return this.startCourseAction(input?.query || '', routedPublishIntent, this.pendingCourseAction);
-            }
-        }
-
-        // Real and Mock tool implementations
-        switch (toolName) {
-            case 'read_user_schedule':
-                return this.executeCachedReadonlyTool('read_user_schedule', { query: input?.query || '' }, () => this.readUserSchedule(input?.query || ''));
-            case 'read_campus_building':
-                return this.executeCachedReadonlyTool('read_campus_building', { query: input?.query || '' }, () => this.readCampusBuilding(input?.query || ''));
-            case 'find_nearby_place':
-                return this.executeCachedReadonlyTool(
-                    'find_nearby_place',
-                    {
-                        query: input?.query || '',
-                        latitude: this.context.deviceLocation?.latitude ?? 'none',
-                        longitude: this.context.deviceLocation?.longitude ?? 'none',
-                    },
-                    () => this.findNearbyPlace(input?.query || '')
-                );
-            case 'read_course_community':
-                return this.executeCachedReadonlyTool('read_course_community', { query: input?.query || '' }, () => this.readCourseCommunity(input?.query || ''));
-            case 'post_course_review':
-                return this.startCourseAction(
-                    `${input?.courseCode || input?.courseId || ''} ${input?.rating || ''}星 ${input?.content || ''}`.trim(),
-                    'review'
-                );
-            case 'post_course_teaming':
-                return this.startCourseAction(
-                    `${input?.courseCode || input?.courseId || ''} section ${input?.section || ''} ${input?.content || ''}`.trim(),
-                    'teaming'
-                );
-            case 'send_course_chat_message':
-                return this.startCourseAction(
-                    `${input?.courseCode || input?.courseId || ''} ${input?.content || ''}`.trim(),
-                    'chat'
-                );
-            case 'get_user_profile':
-                const facts = await getAllUserFacts(this.context.userId);
-                if (Object.keys(facts).length === 0) {
-                    return JSON.stringify({ major: 'Computer Science', hall: 'Hall 1', status: 'First Time User' });
+        try {
+            if (toolName === 'read_course_community') {
+                const routedPublishIntent = detectCoursePublishIntent(input?.query || '');
+                if (routedPublishIntent) {
+                    return this.startCourseAction(input?.query || '', routedPublishIntent, this.pendingCourseAction);
                 }
-                return JSON.stringify(facts);
-            case 'save_user_preference':
-                return this.prepareMemoryWrite(input?.key, input?.value);
-            case 'write_user_schedule_entry':
-                return this.prepareScheduleWrite(input);
-            case 'create_user_calendar_event':
-                return this.prepareCalendarEventWrite(input);
-            case 'search_canteen_menu':
-                return "Nearby Harmony Cafeteria has 'Spicy Chicken' on special today. It's only 5 mins from Hall 1.";
-            case 'check_library_availability':
-            case 'book_library_seat':
-                return '图书馆自动化预约功能已下线，当前助手仅提供问答服务。';
-            case 'search_campus_faq':
-                return this.executeCachedReadonlyTool('search_campus_faq', { query: input?.query || '' }, () => this.readCampusFaq(input?.query || ''));
-            default:
-                return `Error: Tool ${toolName} not found.`;
+            }
+
+            // Real and Mock tool implementations
+            switch (toolName) {
+                case 'read_user_schedule':
+                    return this.executeCachedReadonlyTool('read_user_schedule', { query: input?.query || '' }, () => this.readUserSchedule(input?.query || ''));
+                case 'read_campus_building':
+                    return this.executeCachedReadonlyTool('read_campus_building', { query: input?.query || '' }, () => this.readCampusBuilding(input?.query || ''));
+                case 'find_nearby_place':
+                    return this.executeCachedReadonlyTool(
+                        'find_nearby_place',
+                        {
+                            query: input?.query || '',
+                            latitude: this.context.deviceLocation?.latitude ?? 'none',
+                            longitude: this.context.deviceLocation?.longitude ?? 'none',
+                        },
+                        () => this.findNearbyPlace(input?.query || '')
+                    );
+                case 'read_course_community':
+                    return this.executeCachedReadonlyTool('read_course_community', { query: input?.query || '' }, () => this.readCourseCommunity(input?.query || ''));
+                case 'post_course_review':
+                    return this.startCourseAction(
+                        `${input?.courseCode || input?.courseId || ''} ${input?.rating || ''}星 ${input?.content || ''}`.trim(),
+                        'review'
+                    );
+                case 'post_course_teaming':
+                    return this.startCourseAction(
+                        `${input?.courseCode || input?.courseId || ''} section ${input?.section || ''} ${input?.content || ''}`.trim(),
+                        'teaming'
+                    );
+                case 'send_course_chat_message':
+                    return this.startCourseAction(
+                        `${input?.courseCode || input?.courseId || ''} ${input?.content || ''}`.trim(),
+                        'chat'
+                    );
+                case 'get_user_profile':
+                    const facts = await getAllUserFacts(this.context.userId);
+                    if (Object.keys(facts).length === 0) {
+                        return JSON.stringify({ major: 'Computer Science', hall: 'Hall 1', status: 'First Time User' });
+                    }
+                    return JSON.stringify(facts);
+                case 'save_user_preference':
+                    return this.prepareMemoryWrite(input?.key, input?.value);
+                case 'write_user_schedule_entry':
+                    return this.prepareScheduleWrite(input);
+                case 'create_user_calendar_event':
+                    return this.prepareCalendarEventWrite(input);
+                case 'search_canteen_menu':
+                    return "Nearby Harmony Cafeteria has 'Spicy Chicken' on special today. It's only 5 mins from Hall 1.";
+                case 'check_library_availability':
+                case 'book_library_seat':
+                    return '图书馆自动化预约功能已下线，当前助手仅提供问答服务。';
+                case 'search_campus_faq':
+                    return this.executeCachedReadonlyTool('search_campus_faq', { query: input?.query || '' }, () => this.readCampusFaq(input?.query || ''));
+                default:
+                    return `Error: Tool ${toolName} not found.`;
+            }
+        } finally {
+            console.log(`[Agent] Tool completed: ${toolName} (${Date.now() - startedAt}ms)`);
         }
     }
 
@@ -2216,7 +2221,7 @@ export class AgentExecutor {
 
     private async readUserSchedule(query: string): Promise<string> {
         try {
-            const entries = await getUserScheduleEntries(this.context.userId);
+            const entries = await getUserScheduleEntries(this.context.userId, { allowStaleOnError: true });
             if (entries.length === 0) {
                 return '你的个人课表里还没有课程。你可以先去 Profile 里的 My Schedule 导入或手动添加。';
             }
