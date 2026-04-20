@@ -101,6 +101,20 @@ export default function ChatScreen() {
     }, [attachmentAnim, showAttachmentMenu]);
 
     useEffect(() => {
+        if (loading || messages.length === 0) return;
+        const raf = requestAnimationFrame(() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+        });
+        const timer = setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+        }, 120);
+        return () => {
+            cancelAnimationFrame(raf);
+            clearTimeout(timer);
+        };
+    }, [loading, messages.length]);
+
+    useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
         const keyboardShowSubscription = Keyboard.addListener(showEvent, () => {
             setShowAttachmentMenu(false);

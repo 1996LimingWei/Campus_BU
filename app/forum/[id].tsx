@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
 
     commentContainer: { marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F0F2F8', paddingBottom: 16 },
 
-    commentItem: { flexDirection: 'row', marginBottom: 20, gap: 10 },
+    commentItem: { flexDirection: 'row', marginBottom: 8, gap: 10 },
     commentAvatar: {
         width: 34, height: 34, borderRadius: 17,
         backgroundColor: '#1E3A8A',
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
     replyBtnText: { fontSize: 12, fontWeight: '600', color: '#1E3A8A' },
 
     // Nested Replies
-    repliesList: { marginLeft: 44, marginTop: 12, gap: 12 },
+    repliesList: { marginLeft: 44, marginTop: 4, gap: 8 },
     replyItem: { flexDirection: 'row', gap: 8 },
     commentAvatarSmall: {
         width: 24, height: 24, borderRadius: 12,

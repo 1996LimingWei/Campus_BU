@@ -231,10 +231,6 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
 
                         {/* Counts */}
                         <View style={styles.countRow}>
-                            <TouchableOpacity style={styles.countItem} onPress={onPress} activeOpacity={0.7}>
-                                <MessageCircle size={12} color="#9CA3AF" />
-                                <Text style={styles.countText}>{post.comments}</Text>
-                            </TouchableOpacity>
                             <TouchableOpacity style={styles.countItem} onPress={onLike} activeOpacity={0.7}>
                                 <Heart
                                     size={12}
@@ -244,6 +240,10 @@ export const MasonryPostCard: React.FC<MasonryPostCardProps> = React.memo(
                                 <Text style={[styles.countText, post.isLiked && styles.likedText]}>
                                     {post.likes}
                                 </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.countItem} onPress={onPress} activeOpacity={0.7}>
+                                <MessageCircle size={12} color="#9CA3AF" />
+                                <Text style={styles.countText}>{post.comments}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
