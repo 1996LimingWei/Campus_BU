@@ -220,45 +220,25 @@ export const FAQService = {
      */
     async searchKnowledgeBase(query: string) {
         const { supabase } = require('./supabase');
-        try {
-            const { embedText } = require('./agent/embeddings');
-            const queryEmbedding = await embedText(query);
 
-            if (queryEmbedding.length > 0) {
-                const { data, error } = await supabase.rpc('match_knowledge_base', {
-                    query_embedding: queryEmbedding,
-                    match_threshold: 0.55,
-                    match_count: 8,
-                });
-
-                if (error) {
-                    console.error('[FAQService] match_knowledge_base rpc error:', error);
-                } else if (Array.isArray(data) && data.length > 0) {
-                    return rerankKnowledgeBaseResults(query, data);
-                }
-            }
-        } catch (error) {
-            console.warn('[FAQService] Vector knowledge base retrieval unavailable, falling back to keyword search.', error);
-        }
-
+        // 使用关键词搜索（ILIKE），避免在移动端加载 embedding 模型导致卡顿
         const searchTerms = expandRetrievalTerms(query);
         let dbQuery = supabase
             .from('agent_knowledge_base')
             .select('content, metadata');
 
         if (searchTerms.length > 0) {
-            // Match any word in content using OR for broader search
             const orQuery = searchTerms
-                .filter(word => word.length > 1)
+                .filter((word: string) => word.length > 1)
                 .slice(0, 8)
-                .map(word => `content.ilike.%${word}%`)
+                .map((word: string) => `content.ilike.%${word}%`)
                 .join(',');
             dbQuery = dbQuery.or(orQuery);
         } else {
             dbQuery = dbQuery.ilike('content', `%${query}%`);
         }
 
-        const { data: dbData, error } = await dbQuery.limit(5);
+        const { data: dbData, error } = await dbQuery.limit(8);
 
         if (error) {
             console.error('[FAQService] Supabase search error:', error);
