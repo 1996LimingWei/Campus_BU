@@ -215,13 +215,37 @@ export const FAQService = {
     },
 
     /**
-     * Search the Supabase knowledge base (RAG chunks)
-     * Uses ILIKE for fast keyword matching on the 73 ingested chunks.
+     * Search the Supabase knowledge base (RAG chunks).
+     * Primary: Edge Function embed-search (cloud embedding + vector similarity, ~200ms).
+     * Fallback: ILIKE keyword search if Edge Function unavailable.
      */
     async searchKnowledgeBase(query: string) {
         const { supabase } = require('./supabase');
 
-        // 使用关键词搜索（ILIKE），避免在移动端加载 embedding 模型导致卡顿
+        // 优先使用 Edge Function（云端 embedding + 向量搜索）
+        try {
+            const { data: fnData, error: fnError } = await supabase.functions.invoke(
+                'embed-search',
+                { body: { query, match_count: 5 } },
+            );
+
+            if (!fnError && fnData?.data && fnData.data.length > 0) {
+                return (fnData.data as Array<{ content: string; metadata: any; similarity: number }>)
+                    .map((row) => ({
+                        content: row.content,
+                        metadata: row.metadata,
+                        score: row.similarity,
+                    }));
+            }
+
+            if (fnError) {
+                console.warn('[FAQService] Edge Function fallback to ILIKE:', fnError);
+            }
+        } catch (e) {
+            console.warn('[FAQService] Edge Function unavailable, using ILIKE fallback:', e);
+        }
+
+        // Fallback: ILIKE keyword search
         const searchTerms = expandRetrievalTerms(query);
         let dbQuery = supabase
             .from('agent_knowledge_base')
