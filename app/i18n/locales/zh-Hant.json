@@ -398,17 +398,18 @@
         "tabs": {
             "all": "全部",
             "activity": "活動",
-            "guide": "攻略",
-            "lost_found": "失物"
+            "lost_found": "失物",
+            "help": "互助"
         },
         "sections": {
-            "all": "全部貼文",
+            "general": "綜合討論",
             "activity": "校園活動",
             "guide": "新生攻略",
             "lost_found": "失物招領",
-            "marketplace": "閒置市場",
-            "teaming": "組隊尋友",
-            "confession": "萬能牆"
+            "marketplace": "二手市場",
+            "teaming": "組隊",
+            "confession": "表白牆",
+            "help": "互助求助"
         },
         "category_desc": {
             "activity": "分享校園活動、社團動態和學生生活。隨時掌握校園新鮮事！",
@@ -417,6 +418,7 @@
             "marketplace": "學生間值得信賴的交易空間。尋找二手教材、電子產品及更多好物。",
             "teaming": "尋找項目夥伴、球友或比賽隊友的最佳陣地。",
             "confession": "分享你的校園匿名小故事，表達心聲的樹洞空間。",
+            "help": "遇到困難？在這裡發布求助，讓熱心的同學為你解答。",
             "default": "與校園社區保持聯繫，分享你的精彩學生生活。"
         },
         "category_ui": {
@@ -452,7 +454,11 @@
                 "general": "綜合",
                 "activity": "活動",
                 "guide": "攻略",
-                "lost_found": "失物招領"
+                "lost_found": "失物招領",
+                "marketplace": "二手",
+                "teaming": "組隊",
+                "confession": "表白",
+                "help": "互助"
             }
         },
         "detail": {

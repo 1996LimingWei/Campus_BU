@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, Plus } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -52,6 +52,10 @@ const CATEGORY_METADATA: Record<string, {
     confession: {
         icon: LucideIcons.Heart,
         color: '#EF4444',
+    },
+    help: {
+        icon: LucideIcons.HelpCircle,
+        color: '#F59E00',
     }
 };
 
@@ -67,6 +71,7 @@ export default function CategoryForumScreen() {
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [activeSort, setActiveSort] = useState<ForumSort>('recommended');
 
     const loadData = async (isRefresh = false, pageToLoad = 0) => {
         try {
@@ -75,7 +80,7 @@ export default function CategoryForumScreen() {
             setCurrentUser(user);
             
             const category = id as ForumCategory;
-            const data = await fetchForumPosts(category, 'latest_post', user?.uid, pageToLoad, FORUM_PAGE_SIZE);
+            const data = await fetchForumPosts(category, activeSort, user?.uid, pageToLoad, FORUM_PAGE_SIZE);
             const hiddenPostIds = await getHiddenPostIds();
             const filteredData = filterHiddenPosts(data, hiddenPostIds);
 
@@ -99,8 +104,9 @@ export default function CategoryForumScreen() {
     };
 
     useEffect(() => {
-        loadData();
-    }, [id]);
+        setPosts([]);
+        loadData(true, 0);
+    }, [id, activeSort]);
 
     // Handle updates from detail screen
     useEffect(() => {
@@ -159,12 +165,35 @@ export default function CategoryForumScreen() {
             </View>
 
             <View style={styles.tabContainer}>
-                <View style={styles.activeTab}>
-                    <Text style={styles.activeTabText}>{t('forum.category_ui.tab_all')}</Text>
-                    <View style={[styles.tabIndicator, { backgroundColor: meta.color }]} />
-                </View>
-                <TouchableOpacity style={styles.inactiveTab}><Text style={styles.inactiveTabText}>{t('forum.category_ui.tab_latest')}</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.inactiveTab}><Text style={styles.inactiveTabText}>{t('forum.category_ui.tab_hot')}</Text></TouchableOpacity>
+                <TouchableOpacity 
+                    style={activeSort === 'recommended' ? styles.activeTab : styles.inactiveTab}
+                    onPress={() => setActiveSort('recommended')}
+                >
+                    <Text style={activeSort === 'recommended' ? styles.activeTabText : styles.inactiveTabText}>
+                        {t('forum.category_ui.tab_all')}
+                    </Text>
+                    {activeSort === 'recommended' && <View style={[styles.tabIndicator, { backgroundColor: meta.color }]} />}
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={activeSort === 'latest_post' ? styles.activeTab : styles.inactiveTab}
+                    onPress={() => setActiveSort('latest_post')}
+                >
+                    <Text style={activeSort === 'latest_post' ? styles.activeTabText : styles.inactiveTabText}>
+                        {t('forum.category_ui.tab_latest')}
+                    </Text>
+                    {activeSort === 'latest_post' && <View style={[styles.tabIndicator, { backgroundColor: meta.color }]} />}
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={activeSort === 'hot' ? styles.activeTab : styles.inactiveTab}
+                    onPress={() => setActiveSort('hot')}
+                >
+                    <Text style={activeSort === 'hot' ? styles.activeTabText : styles.inactiveTabText}>
+                        {t('forum.category_ui.tab_hot')}
+                    </Text>
+                    {activeSort === 'hot' && <View style={[styles.tabIndicator, { backgroundColor: meta.color }]} />}
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -205,7 +234,13 @@ export default function CategoryForumScreen() {
                         <View style={styles.empty}>
                             <LucideIcons.MessageSquare size={48} color="#D1D5DB" />
                             <Text style={styles.emptyText}>{t('forum.empty.title')}</Text>
-                            <TouchableOpacity style={[styles.emptyActionBtn, { borderColor: meta.color }]}>
+                            <TouchableOpacity 
+                                style={[styles.emptyActionBtn, { borderColor: meta.color }]}
+                                onPress={() => router.push({ 
+                                    pathname: '/forum/compose', 
+                                    params: { category: id } 
+                                })}
+                            >
                                 <Text style={[styles.emptyActionText, { color: meta.color }]}>{t('forum.category_ui.be_first_post')}</Text>
                             </TouchableOpacity>
                         </View>
@@ -213,6 +248,25 @@ export default function CategoryForumScreen() {
                     contentContainerStyle={styles.listContent}
                 />
             )}
+
+            {/* Floating Action Button */}
+            <TouchableOpacity 
+                style={styles.fab}
+                activeOpacity={0.85}
+                onPress={() => router.push({ 
+                    pathname: '/forum/compose', 
+                    params: { category: id } 
+                })}
+            >
+                <LinearGradient
+                    colors={['#3B82F6', '#1E3A8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.fabGradient}
+                >
+                    <Plus size={28} color="#fff" />
+                </LinearGradient>
+            </TouchableOpacity>
         </View>
     );
 }
@@ -397,5 +451,25 @@ const styles = StyleSheet.create({
     emptyActionText: {
         fontSize: 14,
         fontWeight: '700',
+    },
+    fab: {
+        position: 'absolute',
+        bottom: 24,
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        shadowColor: '#1E3A8A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    fabGradient: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

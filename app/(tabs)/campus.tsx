@@ -1,7 +1,7 @@
 import { Image as ExpoImageLib } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Check, X as CloseIcon, Globe, Plus, Search, Calendar, BookOpen, ShoppingBag, Users, Heart, MessageCircle } from 'lucide-react-native';
+import { Check, X as CloseIcon, Globe, Plus, Search, Calendar, BookOpen, ShoppingBag, Users, Heart, MessageCircle, HelpCircle } from 'lucide-react-native';
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -57,7 +57,8 @@ export default function CampusScreen() {
     { id: 'general', label: t('forum.sections.general') || 'General', icon: MessageCircle, color: '#6366F1' },
     { id: 'activity', label: t('forum.sections.activity') || 'Campus Activities', icon: Calendar, color: '#3B82F6' },
     { id: 'guide', label: t('forum.sections.guide') || 'Newbie Guide', icon: BookOpen, color: '#10B981' },
-    { id: 'lost_found', label: t('forum.sections.lost_found') || 'Lost & Found', icon: Search, color: '#F59E00' },
+    { id: 'help', label: t('forum.sections.help') || 'Help & Q&A', icon: HelpCircle, color: '#F59E00' },
+    { id: 'lost_found', label: t('forum.sections.lost_found') || 'Lost & Found', icon: Search, color: '#EF4444' },
     { id: 'marketplace', label: t('forum.sections.marketplace') || 'Marketplace', icon: ShoppingBag, color: '#EC4899' },
     { id: 'teaming', label: t('forum.sections.teaming') || 'Team Up', icon: Users, color: '#8B5CF6' },
     { id: 'confession', label: t('forum.sections.confession') || 'Confession', icon: Heart, color: '#EF4444' },
@@ -316,7 +317,7 @@ const styles = StyleSheet.create({
   sortBtnTextActive: { color: '#1E3A8A' },
   scrollContent: { backgroundColor: '#fff' },
   forumSectionsContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, gap: 8, justifyContent: 'space-between', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingVertical: 14 },
-  forumSectionItem: { width: (Dimensions.get('window').width - 48) / 3, alignItems: 'center', marginBottom: 16 },
+  forumSectionItem: { width: (SCREEN_W - 48) / 4, alignItems: 'center', marginBottom: 16 },
   forumSectionIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   forumSectionLabel: { fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
   fab: { position: 'absolute', bottom: 100, right: 20, width: 60, height: 60, borderRadius: 30, overflow: 'hidden' },

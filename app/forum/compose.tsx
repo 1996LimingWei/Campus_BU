@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { Image as ImageIcon, X } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Image as ImageIcon, X, MessageCircle, Calendar, BookOpen, ShoppingBag, Users, Heart, Search, HelpCircle } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -31,16 +31,25 @@ export default function ForumComposeScreen() {
     const { t } = useTranslation();
     const router = useRouter();
 
-    const CATEGORIES: { id: ForumCategory; label: string }[] = [
-        { id: 'general', label: t('forum.compose.category_label.general') },
-        { id: 'activity', label: t('forum.compose.category_label.activity') },
-        { id: 'guide', label: t('forum.compose.category_label.guide') },
-        { id: 'lost_found', label: t('forum.compose.category_label.lost_found') },
-    ];
+    const SECTIONS = [
+        { id: 'general', label: t('forum.sections.general'), icon: MessageCircle, color: '#6366F1' },
+        { id: 'activity', label: t('forum.sections.activity'), icon: Calendar, color: '#3B82F6' },
+        { id: 'guide', label: t('forum.sections.guide'), icon: BookOpen, color: '#10B981' },
+        { id: 'help', label: t('forum.sections.help'), icon: HelpCircle, color: '#F59E00' },
+        { id: 'lost_found', label: t('forum.sections.lost_found'), icon: Search, color: '#EF4444' },
+        { id: 'marketplace', label: t('forum.sections.marketplace'), icon: ShoppingBag, color: '#EC4899' },
+        { id: 'teaming', label: t('forum.sections.teaming'), icon: Users, color: '#8B5CF6' },
+        { id: 'confession', label: t('forum.sections.confession'), icon: Heart, color: '#EF4444' },
+    ] as const;
 
+    const { category: paramCategory } = useLocalSearchParams<{ category?: string }>();
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
-    const [category, setCategory] = useState<ForumCategory>('general');
+    const [category, setCategory] = useState<ForumCategory>(
+        (paramCategory && SECTIONS.some(s => s.id === paramCategory)) 
+            ? (paramCategory as ForumCategory) 
+            : 'general'
+    );
     const [images, setImages] = useState<string[]>([]);
     const [previewVisible, setPreviewVisible] = useState(false);
     const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -146,22 +155,28 @@ export default function ForumComposeScreen() {
 
             <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
                 {/* Category chips */}
-                <View style={styles.categoryRow}>
-                    {CATEGORIES.map(cat => (
-                        <TouchableOpacity
-                            key={cat.id}
-                            style={[styles.catChip, category === cat.id && styles.catChipActive]}
-                            onPress={() => setCategory(cat.id)}
-                        >
-                            <Text style={[styles.catChipText, category === cat.id && styles.catChipTextActive]}>
-                                {cat.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                {/* Category Grid */}
+                <View style={styles.categoryGrid}>
+                    {SECTIONS.map(item => {
+                        const Icon = item.icon;
+                        const isSelected = category === item.id;
+                        return (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={[styles.gridItem, isSelected && { backgroundColor: '#F0F4FF', borderColor: item.color, borderWidth: 1.5 }]}
+                                onPress={() => setCategory(item.id)}
+                            >
+                                <View style={[styles.iconBox, { backgroundColor: isSelected ? item.color : '#F3F4F6' }]}>
+                                    <Icon size={20} color={isSelected ? '#fff' : '#6B7280'} />
+                                </View>
+                                <Text style={[styles.gridLabel, isSelected && { color: '#1E3A8A', fontWeight: 'bold' }]}>
+                                    {t(`forum.compose.category_label.${item.id}`)}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
 
-                {/* Community Safety Notice */}
-                <SafetyNotice variant="full" />
 
                 {/* Title input */}
                 <View style={styles.titleContainer}>
@@ -218,6 +233,11 @@ export default function ForumComposeScreen() {
                             <Text style={styles.addImageText}>{t('forum.compose.add_media')}</Text>
                         </TouchableOpacity>
                     )}
+                </View>
+
+                {/* Community Safety Notice moved to bottom to emphasize content */}
+                <View style={{ marginTop: 24, marginBottom: 40, paddingHorizontal: 20 }}>
+                    <SafetyNotice variant="full" />
                 </View>
             </ScrollView>
 
@@ -286,23 +306,36 @@ const styles = StyleSheet.create({
 
     form: { padding: 20, paddingBottom: 60 },
 
-    categoryRow: {
+    categoryGrid: {
         flexDirection: 'row',
-        gap: 8,
-        marginBottom: 20,
         flexWrap: 'wrap',
+        paddingHorizontal: 10,
+        paddingVertical: 12,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+        justifyContent: 'space-between',
     },
-    catChip: {
-        paddingHorizontal: 14,
-        paddingVertical: 7,
-        borderRadius: 16,
-        backgroundColor: '#F4F6FB',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
+    gridItem: {
+        width: (SCREEN_W - 20 - 45) / 4,
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderRadius: 12,
+        marginBottom: 4,
     },
-    catChipActive: { backgroundColor: '#1E3A8A', borderColor: '#1E3A8A' },
-    catChipText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
-    catChipTextActive: { color: '#fff' },
+    iconBox: {
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 6,
+    },
+    gridLabel: {
+        fontSize: 11,
+        color: '#4B5563',
+        fontWeight: '500',
+    },
 
     titleContainer: {
         minHeight: 80,

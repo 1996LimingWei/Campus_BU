@@ -105,6 +105,12 @@ export const fetchForumPosts = async (
         query = query
             .order('is_pinned', { ascending: false })
             .order('last_reply_at', { ascending: false });
+    } else if (sort === 'hot') {
+        // Hot logic: Priority to pinned, then engagement (upvotes)
+        query = query
+            .order('is_pinned', { ascending: false })
+            .order('upvote_count', { ascending: false })
+            .order('reply_count', { ascending: false });
     } else {
         const orderCol = sort === 'latest_reply' ? 'last_reply_at' : 'created_at';
         query = query.order(orderCol, { ascending: false });

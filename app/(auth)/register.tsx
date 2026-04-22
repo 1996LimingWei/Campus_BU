@@ -618,7 +618,8 @@ const styles = StyleSheet.create({
     checkboxText: {
         flex: 1,
         color: '#334155',
-        fontSize: 13,
-        lineHeight: 19,
+        fontSize: 12.2,
+        lineHeight: 18,
+        letterSpacing: -0.15,
     },
 });

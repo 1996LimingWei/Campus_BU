@@ -400,17 +400,18 @@
             "all": "全部",
             "activity": "活动",
             "guide": "攻略",
-            "lost_found": "失物"
+            "lost_found": "失物",
+            "help": "互助"
         },
         "sections": {
-            "all": "全部帖子",
             "general": "综合讨论",
             "activity": "校园活动",
             "guide": "新生攻略",
             "lost_found": "失物招领",
-            "marketplace": "闲置市场",
-            "teaming": "组队寻友",
-            "confession": "万能墙"
+            "marketplace": "二手市场",
+            "teaming": "组队",
+            "confession": "表白墙",
+            "help": "互助求助"
         },
         "category_desc": {
             "general": "校园生活的心跳地带。分享任何不属于其他分类的精彩瞬间。",
@@ -420,6 +421,7 @@
             "marketplace": "学生间值得信赖的交易空间。寻找二手教材、电子产品及更多好物。",
             "teaming": "寻找项目伙伴、球友或比赛队友的最佳阵地。",
             "confession": "分享你的校园匿名小故事，表达心声的树洞空间。",
+            "help": "遇到困难？在这里发布求助，让热心的同学为你解答。",
             "default": "与校园社区保持联系，分享你的精彩学生生活。"
         },
         "category_ui": {
@@ -455,7 +457,11 @@
                 "general": "综合",
                 "activity": "活动",
                 "guide": "攻略",
-                "lost_found": "失物招领"
+                "lost_found": "失物招领",
+                "marketplace": "二手",
+                "teaming": "组队",
+                "confession": "表白",
+                "help": "互助"
             }
         },
         "detail": {

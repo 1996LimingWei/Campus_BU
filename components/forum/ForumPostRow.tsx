@@ -20,10 +20,14 @@ interface ForumPostRowProps {
 }
 
 const categoryColor: Record<string, string> = {
-    general: '#6366F1',
-    activity: '#F59E0B',
+    general: '#1E3A8A',
+    activity: '#3B82F6',
     guide: '#10B981',
-    lost_found: '#EF4444',
+    lost_found: '#F59E00',
+    marketplace: '#EC4899',
+    teaming: '#8B5CF6',
+    confession: '#EF4444',
+    help: '#F59E00',
 };
 
 /** Right-side thumbnail: fixed 80×80 square, preserves crop center */

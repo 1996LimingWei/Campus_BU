@@ -203,8 +203,6 @@ export default function ComposeScreen() {
                     </ScrollView>
                 </View>
 
-                {/* Community Safety Notice */}
-                <SafetyNotice variant="full" showAnonymousWarning={isAnonymous} />
 
                 {/* Input Area */}
                 <TextInput
@@ -267,6 +265,11 @@ export default function ComposeScreen() {
                         </View>
                         <Text style={styles.optionText}>{t('teachers.anonymous_student')}</Text>
                     </TouchableOpacity>
+                </View>
+
+                {/* Safety Notice moved to bottom for better UX focus */}
+                <View style={{ marginTop: 20, marginBottom: 30 }}>
+                    <SafetyNotice variant="full" showAnonymousWarning={isAnonymous} />
                 </View>
             </ScrollView>
 

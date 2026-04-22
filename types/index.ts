@@ -76,8 +76,8 @@ export interface Post {
 }
 
 // Forum Types (独立于发现板块)
-export type ForumCategory = 'general' | 'activity' | 'guide' | 'lost_found' | 'marketplace' | 'teaming' | 'confession';
-export type ForumSort = 'latest_reply' | 'latest_post' | 'recommended';
+export type ForumCategory = 'general' | 'activity' | 'guide' | 'lost_found' | 'marketplace' | 'teaming' | 'confession' | 'help';
+export type ForumSort = 'latest_reply' | 'latest_post' | 'recommended' | 'hot';
 
 // 帖子类型：普通用户帖 / 编辑部攻略 / 官方公告
 export type ForumContentType = 'user_post' | 'editorial' | 'official';

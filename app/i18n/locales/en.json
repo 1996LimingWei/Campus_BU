@@ -399,17 +399,18 @@
             "all": "All",
             "activity": "Activity",
             "guide": "Guide",
-            "lost_found": "Lost"
+            "lost_found": "Lost & Found",
+            "help": "Help"
         },
         "sections": {
-            "all": "All Posts",
-            "general": "General",
+            "general": "General Discussion",
             "activity": "Campus Activities",
             "guide": "Newbie Guide",
             "lost_found": "Lost & Found",
             "marketplace": "Marketplace",
             "teaming": "Team Up",
-            "confession": "Confession"
+            "confession": "Confession Wall",
+            "help": "Help & Q&A"
         },
         "category_desc": {
             "general": "The heart of our campus conversation. Share anything that doesn't fit elsewhere.",
@@ -419,6 +420,7 @@
             "marketplace": "Trusted student-to-student trading. Find great deals on textbooks, electronics, and more.",
             "teaming": "The best place to find your next project partner, teammates for sports or competitions.",
             "confession": "A safe space to share your anonymous campus stories and express your feelings.",
+            "help": "Need help? Post your questions here and let the campus community assist you.",
             "default": "Stay connected with your campus community and share your student life."
         },
         "category_ui": {
@@ -454,7 +456,11 @@
                 "general": "General",
                 "activity": "Activity",
                 "guide": "Guide",
-                "lost_found": "Lost & Found"
+                "lost_found": "Lost & Found",
+                "marketplace": "Market",
+                "teaming": "Team",
+                "confession": "Confession",
+                "help": "Help"
             }
         },
         "detail": {
