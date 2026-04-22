@@ -100,8 +100,15 @@ export const fetchForumPosts = async (
         query = query.eq('category', category);
     }
 
-    const orderCol = sort === 'latest_reply' ? 'last_reply_at' : 'created_at';
-    query = query.order(orderCol, { ascending: false });
+    if (sort === 'recommended') {
+        // Recommended logic: Priority to pinned posts, then most recent activity
+        query = query
+            .order('is_pinned', { ascending: false })
+            .order('last_reply_at', { ascending: false });
+    } else {
+        const orderCol = sort === 'latest_reply' ? 'last_reply_at' : 'created_at';
+        query = query.order(orderCol, { ascending: false });
+    }
 
     if (page !== undefined) {
         const from = page * pageSize;

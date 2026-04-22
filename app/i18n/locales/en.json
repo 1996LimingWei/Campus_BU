@@ -439,7 +439,7 @@
         },
         "compose": {
             "title": "Create Post",
-            "publish": "✏️ Publish Now",
+            "publish": "Publish Now",
             "placeholder_title": "Share your thoughts, views and experiences...",
             "placeholder_content": "Add post content (required)",
             "add_media": "Add images or video",

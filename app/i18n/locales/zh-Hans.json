@@ -440,7 +440,7 @@
         },
         "compose": {
             "title": "发布帖子",
-            "publish": "✏️ 立即发布",
+            "publish": "立即发布",
             "placeholder_title": "分享你的心情、观点和经历...",
             "placeholder_content": "补充帖子内容（必填）",
             "add_media": "添加图片或视频",

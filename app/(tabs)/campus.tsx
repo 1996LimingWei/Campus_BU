@@ -1,7 +1,7 @@
 import { Image as ExpoImageLib } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Check, X as CloseIcon, Globe, Plus, Search, Calendar, BookOpen, ShoppingBag, Users, Heart } from 'lucide-react-native';
+import { Check, X as CloseIcon, Globe, Plus, Search, Calendar, BookOpen, ShoppingBag, Users, Heart, MessageCircle } from 'lucide-react-native';
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -54,6 +54,7 @@ export default function CampusScreen() {
   ];
 
   const FORUM_SECTIONS = [
+    { id: 'general', label: t('forum.sections.general') || 'General', icon: MessageCircle, color: '#6366F1' },
     { id: 'activity', label: t('forum.sections.activity') || 'Campus Activities', icon: Calendar, color: '#3B82F6' },
     { id: 'guide', label: t('forum.sections.guide') || 'Newbie Guide', icon: BookOpen, color: '#10B981' },
     { id: 'lost_found', label: t('forum.sections.lost_found') || 'Lost & Found', icon: Search, color: '#F59E00' },
@@ -131,7 +132,7 @@ export default function CampusScreen() {
     try {
       if (isRefresh) setForumRefreshing(true);
       const user = await getCurrentUser();
-      const data = await fetchForumPosts('all', 'latest_reply', user?.uid, p, FORUM_PAGE_SIZE);
+      const data = await fetchForumPosts('all', 'recommended', user?.uid, p, FORUM_PAGE_SIZE);
       const hiddenIds = await getHiddenPostIds();
       const filtered = filterHiddenPosts(data, hiddenIds);
       if (p === 0) setForumPosts(filtered);

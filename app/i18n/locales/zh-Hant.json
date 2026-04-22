@@ -437,7 +437,7 @@
         },
         "compose": {
             "title": "發佈貼文",
-            "publish": "✏️ 立即發佈",
+            "publish": "立即發佈",
             "placeholder_title": "分享你的心情、觀點和經歷...",
             "placeholder_content": "補充貼文內容（必填）",
             "add_media": "添加圖片或影片",

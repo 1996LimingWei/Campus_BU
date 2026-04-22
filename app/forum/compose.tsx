@@ -120,20 +120,28 @@ export default function ForumComposeScreen() {
         >
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
-                    <X size={24} color="#374151" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>{t('forum.compose.title')}</Text>
-                <TouchableOpacity
-                    style={[styles.publishBtn, (!title.trim() || !content.trim() || submitting) && styles.publishBtnDisabled]}
-                    onPress={handleSubmit}
-                    disabled={!title.trim() || !content.trim() || submitting}
-                >
-                    {submitting
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Text style={styles.publishText}>{t('forum.compose.publish')}</Text>
-                    }
-                </TouchableOpacity>
+                <View style={styles.headerSide}>
+                    <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+                        <X size={24} color="#374151" />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.headerCenter}>
+                    <Text style={styles.headerTitle}>{t('forum.compose.title')}</Text>
+                </View>
+
+                <View style={[styles.headerSide, { alignItems: 'flex-end' }]}>
+                    <TouchableOpacity
+                        style={[styles.publishBtn, (!title.trim() || !content.trim() || submitting) && styles.publishBtnDisabled]}
+                        onPress={handleSubmit}
+                        disabled={!title.trim() || !content.trim() || submitting}
+                    >
+                        {submitting
+                            ? <ActivityIndicator size="small" color="#fff" />
+                            : <Text style={styles.publishText}>{t('forum.compose.publish')}</Text>
+                        }
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
@@ -243,21 +251,34 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingTop: Platform.OS === 'ios' ? 56 : 16,
-        paddingBottom: 14,
+        paddingTop: Platform.OS === 'ios' ? 44 : 0, // Adjusted for standard status bar height in flex flow
+        height: Platform.OS === 'ios' ? 94 : 64, // (44+50) or constant height
         borderBottomWidth: 1,
         borderBottomColor: '#F0F2F8',
     },
+    headerSide: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    headerCenter: {
+        flex: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     closeBtn: { padding: 4 },
-    headerTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
+    headerTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'center',
+    },
     publishBtn: {
         backgroundColor: '#1E3A8A',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        minWidth: 90,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 18,
+        minWidth: 70,
         alignItems: 'center',
     },
     publishBtnDisabled: { backgroundColor: '#D1D5DB' },

@@ -147,21 +147,29 @@ export default function ComposeScreen() {
         >
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-                    <X size={24} color="#374151" />
-                </TouchableOpacity>
-                <Text style={styles.title}>{t('map.alerts.create_post_title')}</Text>
-                <TouchableOpacity
-                    style={[styles.publishButton, (!content.trim() || submitting) && styles.publishButtonDisabled]}
-                    onPress={handleSubmit}
-                    disabled={!content.trim() || submitting}
-                >
-                    {submitting ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                        <Text style={styles.publishText}>{t('map.modal.post')}</Text>
-                    )}
-                </TouchableOpacity>
+                <View style={styles.headerSide}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+                        <X size={24} color="#374151" />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.headerCenter}>
+                    <Text style={styles.title}>{t('map.alerts.create_post_title')}</Text>
+                </View>
+
+                <View style={[styles.headerSide, { alignItems: 'flex-end' }]}>
+                    <TouchableOpacity
+                        style={[styles.publishButton, (!content.trim() || submitting) && styles.publishButtonDisabled]}
+                        onPress={handleSubmit}
+                        disabled={!content.trim() || submitting}
+                    >
+                        {submitting ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                            <Text style={styles.publishText}>{t('map.modal.post')}</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {fromMap === 'true' && lat && lng && (
@@ -293,13 +301,21 @@ const styles = StyleSheet.create({
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingTop: 60,
-        paddingBottom: 16,
+        paddingTop: Platform.OS === 'ios' ? 44 : 0,
+        height: Platform.OS === 'ios' ? 94 : 64,
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
+    },
+    headerSide: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    headerCenter: {
+        flex: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     closeButton: {
         padding: 4,
@@ -308,13 +324,14 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#111827',
+        textAlign: 'center',
     },
     publishButton: {
         backgroundColor: '#1E3A8A',
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-        borderRadius: 20,
-        minWidth: 80,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 18,
+        minWidth: 70,
         alignItems: 'center',
     },
     publishButtonDisabled: {
