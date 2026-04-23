@@ -34,7 +34,14 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.budev.hkcampus",
-      "versionCode": 4
+      "versionCode": 5,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -75,6 +82,12 @@
       "eas": {
         "projectId": "44c59701-d20a-45ae-bf97-d3f3d8cae72d"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/44c59701-d20a-45ae-bf97-d3f3d8cae72d"
     }
   }
 }
