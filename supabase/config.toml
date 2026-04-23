@@ -1,4 +1,9 @@
 
+[functions.embed-search]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/embed-search/index.ts"
+
 [functions.send_push_notification]
 enabled = true
 verify_jwt = true
