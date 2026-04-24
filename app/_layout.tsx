@@ -16,6 +16,7 @@ import { getUserProfile, onAuthChange, shouldSkipAuthRedirect } from '../service
 import { prefetchBuildings } from '../services/buildings';
 import { prefetchLocalCourses } from '../services/courses';
 import { acceptCommunityEula, hasAcceptedCommunityEula } from '../services/moderation';
+import { syncScheduleToWidgetForUser } from '../services/widgetBridge';
 import './i18n/i18n'; // Initialize i18n
 import { i18nPromise } from './i18n/i18n';
 
@@ -192,6 +193,12 @@ export default function RootLayout() {
       cancelled = true;
     };
   }, [currentUser?.uid, segments]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    void syncScheduleToWidgetForUser(currentUser.uid);
+  }, [currentUser?.uid]);
 
   const handleAcceptEula = async () => {
     const accepted = await acceptCommunityEula(currentUser?.uid || null);

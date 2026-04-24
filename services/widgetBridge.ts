@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
-import type { UserScheduleEntry } from './schedule';
+import { getUserScheduleEntries, type UserScheduleEntry } from './schedule';
 
 const WIDGET_APP_GROUP = 'group.com.budev.HKCampus';
 const WIDGET_SCHEDULE_KEY = 'hkcampus_schedule_entries';
@@ -37,6 +37,19 @@ export const writeScheduleToWidget = async (entries: UserScheduleEntry[]): Promi
         await SharedGroupPreferences.setItem(WIDGET_SCHEDULE_KEY, payload, WIDGET_APP_GROUP);
     } catch (error) {
         console.warn('Failed to sync schedule entries to iOS widget:', error);
+    }
+};
+
+export const syncScheduleToWidgetForUser = async (userId: string): Promise<void> => {
+    if (Platform.OS !== 'ios' || !userId) return;
+
+    try {
+        const entries = await getUserScheduleEntries(userId, {
+            allowStaleOnError: true,
+        });
+        await writeScheduleToWidget(entries);
+    } catch (error) {
+        console.warn('Failed to load and sync schedule entries to iOS widget:', error);
     }
 };
 

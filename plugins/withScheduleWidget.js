@@ -314,6 +314,8 @@ const addWidgetTargetToXcodeProject = (config) =>
         const project = nextConfig.modResults;
         const appBundleId = nextConfig.ios?.bundleIdentifier ?? 'com.budev.HKCampus';
         const widgetBundleId = `${appBundleId}.${WIDGET_BUNDLE_SUFFIX}`;
+        const marketingVersion = nextConfig.version ?? '1.0.0';
+        const buildNumber = nextConfig.ios?.buildNumber ?? '1';
         const existing = project.pbxTargetByName(WIDGET_NAME);
         // addTarget returns { uuid, pbxNativeTarget }; pbxTargetByName returns raw object
         let targetUuid, targetObj;
@@ -390,6 +392,9 @@ const addWidgetTargetToXcodeProject = (config) =>
         updateBuildPropertyForTarget(project, 'IPHONEOS_DEPLOYMENT_TARGET', '17.0', targetName);
         updateBuildPropertyForTarget(project, 'APPLICATION_EXTENSION_API_ONLY', 'YES', targetName);
         updateBuildPropertyForTarget(project, 'TARGETED_DEVICE_FAMILY', '"1,2"', targetName);
+        updateBuildPropertyForTarget(project, 'MARKETING_VERSION', marketingVersion, targetName);
+        updateBuildPropertyForTarget(project, 'CURRENT_PROJECT_VERSION', buildNumber, targetName);
+        updateBuildPropertyForTarget(project, 'VERSIONING_SYSTEM', '"apple-generic"', targetName);
 
         // Add widget as dependency of main app target
         const mainTarget = project.getTarget('com.apple.product-type.application');
