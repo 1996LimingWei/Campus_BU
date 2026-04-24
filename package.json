@@ -83,5 +83,14 @@
     "tsx": "^4.21.0",
     "typescript": "~5.9.2"
   },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-shared-group-preferences"
+        ]
+      }
+    }
+  },
   "private": true
 }

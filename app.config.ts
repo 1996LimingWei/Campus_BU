@@ -1,15 +1,5 @@
 import type { ExpoConfig } from "expo/config";
 
-import appJson from "./app.json";
-
-type AppJsonShape = {
-    expo: ExpoConfig & {
-        extra?: Record<string, unknown>;
-    };
-};
-
-const config = appJson as AppJsonShape;
-
 const SCHEDULE_WIDGET_PLUGIN = "./plugins/withScheduleWidget";
 const APP_GROUP = "group.com.budev.HKCampus";
 const WIDGET_TARGET_NAME = "ScheduleWidget";
@@ -30,20 +20,7 @@ export default (): ExpoConfig => {
     const ocrApiUrl = (process.env.EXPO_PUBLIC_OCR_API_URL || "").trim();
     const deepseekBaseUrl = (process.env.EXPO_PUBLIC_DEEPSEEK_BASE_URL || "").trim();
     const widgetEnabled = shouldEnableScheduleWidget();
-    const existingExtra = (config.expo.extra || {}) as Record<string, unknown>;
-    const existingEas = (existingExtra.eas || {}) as Record<string, unknown>;
-    const existingBuild = (existingEas.build || {}) as Record<string, unknown>;
-    const existingExperimental = (existingBuild.experimental || {}) as Record<string, unknown>;
-    const existingIosExperimental = (existingExperimental.ios || {}) as Record<string, unknown>;
-    const plugins = (config.expo.plugins || []).filter((plugin) => {
-        const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
-
-        if (pluginName !== SCHEDULE_WIDGET_PLUGIN) {
-            return true;
-        }
-
-        return widgetEnabled;
-    });
+    const buildNumber = "23";
     const appExtensions = widgetEnabled
         ? [
               {
@@ -57,25 +34,111 @@ export default (): ExpoConfig => {
         : [];
 
     return {
-        ...config.expo,
-        plugins,
+        name: "HKCampus",
+        slug: "HKCampus",
+        version: "1.2.2",
+        orientation: "portrait",
+        icon: "./assets/images/icon.png",
+        scheme: "hkcampus",
+        userInterfaceStyle: "automatic",
+        newArchEnabled: true,
+        splash: {
+            image: "./assets/images/HKCampusicon.png",
+            resizeMode: "contain",
+            backgroundColor: "#ffffff",
+        },
+        ios: {
+            supportsTablet: true,
+            bundleIdentifier: "com.budev.HKCampus",
+            buildNumber,
+            appleTeamId: "7HQ8YJC7KQ",
+            infoPlist: {
+                ITSAppUsesNonExemptEncryption: false,
+                NSPhotoLibraryUsageDescription:
+                    "HKCampus accesses your photo library so you can choose images for your avatar, posts, messages, and schedule import.",
+                NSCameraUsageDescription:
+                    "HKCampus accesses the camera so you can take and send photos in messages.",
+                NSLocationWhenInUseUsageDescription:
+                    "HKCampus accesses your location only when you choose location-based campus features such as centering the map or attaching a location to a post.",
+                NSFaceIDUsageDescription:
+                    "HKCampus uses Face ID to help you sign in securely on this device.",
+            },
+        },
+        android: {
+            adaptiveIcon: {
+                foregroundImage: "./assets/images/adaptive-icon.png",
+                backgroundColor: "#ffffff",
+            },
+            edgeToEdgeEnabled: true,
+            predictiveBackGestureEnabled: false,
+            package: "com.budev.hkcampus",
+            versionCode: 5,
+            permissions: [
+                "android.permission.RECORD_AUDIO",
+                "android.permission.USE_BIOMETRIC",
+                "android.permission.USE_FINGERPRINT",
+                "android.permission.ACCESS_COARSE_LOCATION",
+                "android.permission.ACCESS_FINE_LOCATION",
+            ],
+        },
+        web: {
+            bundler: "metro",
+            output: "static",
+            favicon: "./assets/images/favicon.png",
+        },
+        plugins: [
+            "expo-router",
+            "expo-secure-store",
+            [
+                "expo-image-picker",
+                {
+                    photosPermission:
+                        "HKCampus accesses your photo library so you can choose images for your avatar, posts, messages, and schedule import.",
+                    cameraPermission:
+                        "HKCampus accesses the camera so you can take and send photos in messages.",
+                },
+            ],
+            [
+                "expo-local-authentication",
+                {
+                    faceIDPermission:
+                        "HKCampus uses Face ID to help you sign in securely on this device.",
+                },
+            ],
+            [
+                "expo-location",
+                {
+                    locationWhenInUsePermission:
+                        "HKCampus accesses your location only when you choose location-based campus features such as centering the map or attaching a location to a post.",
+                },
+            ],
+            "expo-notifications",
+            ...(widgetEnabled ? [SCHEDULE_WIDGET_PLUGIN] : []),
+        ],
+        owner: "timchindev",
+        experiments: {
+            typedRoutes: true,
+        },
         extra: {
-            ...existingExtra,
+            router: {},
+            ocrApiUrl,
+            deepseekBaseUrl,
             eas: {
-                ...existingEas,
+                projectId: "44c59701-d20a-45ae-bf97-d3f3d8cae72d",
                 build: {
-                    ...existingBuild,
                     experimental: {
-                        ...existingExperimental,
                         ios: {
-                            ...existingIosExperimental,
                             appExtensions,
                         },
                     },
                 },
             },
-            ocrApiUrl,
-            deepseekBaseUrl,
+        },
+        runtimeVersion: {
+            policy: "appVersion",
+        },
+        updates: {
+            url: "https://u.expo.dev/44c59701-d20a-45ae-bf97-d3f3d8cae72d",
         },
     };
 };
