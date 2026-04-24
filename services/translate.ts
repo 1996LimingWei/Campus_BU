@@ -42,7 +42,7 @@ export async function translateText(text: string): Promise<string> {
             Authorization: `Bearer ${AGENT_CONFIG.DEEPSEEK_API_KEY}`,
         },
         body: JSON.stringify({
-            model: 'deepseek-chat',
+            model: AGENT_CONFIG.FAST_MODEL,
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: text },

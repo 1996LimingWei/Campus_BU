@@ -20,7 +20,7 @@ def main() -> None:
         "ocr_space_timeout": os.environ.get("OCR_SPACE_TIMEOUT", "30"),
         "ocr_space_api_key_present": bool(os.environ.get("OCR_SPACE_API_KEY")),
         "deepseek_base_url": os.environ.get("DEEPSEEK_BASE_URL", os.environ.get("EXPO_PUBLIC_DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")),
-        "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+        "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
         "deepseek_api_key_present": bool(os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("EXPO_PUBLIC_DEEPSEEK_API_KEY")),
     }
     print(json.dumps(checks, indent=2))

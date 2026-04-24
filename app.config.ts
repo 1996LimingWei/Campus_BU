@@ -20,7 +20,7 @@ export default (): ExpoConfig => {
     const ocrApiUrl = (process.env.EXPO_PUBLIC_OCR_API_URL || "").trim();
     const deepseekBaseUrl = (process.env.EXPO_PUBLIC_DEEPSEEK_BASE_URL || "").trim();
     const widgetEnabled = shouldEnableScheduleWidget();
-    const buildNumber = "23";
+    const buildNumber = "25";
     const appExtensions = widgetEnabled
         ? [
               {
@@ -38,7 +38,7 @@ export default (): ExpoConfig => {
         slug: "HKCampus",
         version: "1.2.2",
         orientation: "portrait",
-        icon: "./assets/images/icon.png",
+        icon: "./assets/images/HKCampusicon.png",
         scheme: "hkcampus",
         userInterfaceStyle: "automatic",
         newArchEnabled: true,
@@ -66,7 +66,7 @@ export default (): ExpoConfig => {
         },
         android: {
             adaptiveIcon: {
-                foregroundImage: "./assets/images/adaptive-icon.png",
+                foregroundImage: "./assets/images/HKCampusicon.png",
                 backgroundColor: "#ffffff",
             },
             edgeToEdgeEnabled: true,

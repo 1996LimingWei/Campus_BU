@@ -106,7 +106,7 @@ def _get_deepseek_config() -> dict[str, object]:
     return {
         "api_key": api_key,
         "base_url": base_url.rstrip("/"),
-        "model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat").strip() or "deepseek-chat",
+        "model": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash").strip() or "deepseek-v4-flash",
         "timeout": _getenv_int("DEEPSEEK_TIMEOUT", 45),
     }
 

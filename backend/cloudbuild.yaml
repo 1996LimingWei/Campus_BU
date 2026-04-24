@@ -15,7 +15,7 @@ substitutions:
   _OCR_SPACE_ENGINE: "2"
   _OCR_SPACE_TIMEOUT: "30"
   _DEEPSEEK_BASE_URL: https://api.deepseek.com/v1
-  _DEEPSEEK_MODEL: deepseek-chat
+  _DEEPSEEK_MODEL: deepseek-v4-flash
   _DEEPSEEK_API_KEY_SECRET: DEEPSEEK_API_KEY
   _DEEPSEEK_API_KEY_VERSION: latest
 

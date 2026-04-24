@@ -18,8 +18,11 @@ const looksLikePlaceholderKey = (key: string): boolean => {
 export const AGENT_CONFIG = {
     DEEPSEEK_API_KEY: rawDeepSeekApiKey,
     DEEPSEEK_BASE_URL: process.env.EXPO_PUBLIC_DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
-    FAST_MODEL: process.env.EXPO_PUBLIC_AGENT_FAST_MODEL || 'deepseek-chat',
-    REASONING_MODEL: process.env.EXPO_PUBLIC_AGENT_REASONING_MODEL || process.env.EXPO_PUBLIC_AGENT_FAST_MODEL || 'deepseek-chat',
+    FAST_MODEL: process.env.EXPO_PUBLIC_AGENT_FAST_MODEL || 'deepseek-v4-flash',
+    REASONING_MODEL:
+        process.env.EXPO_PUBLIC_AGENT_REASONING_MODEL ||
+        process.env.EXPO_PUBLIC_AGENT_FAST_MODEL ||
+        'deepseek-v4-pro',
     DEEPSEEK_ENABLED: !looksLikePlaceholderKey(rawDeepSeekApiKey),
     IS_PROD: false, // Set to true to use real backend proxy in future
 };

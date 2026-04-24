@@ -68,4 +68,23 @@ describe('app config widget plugin gating', () => {
             ])
         );
     });
+
+    it('uses the HKCampus brand asset for the home screen icons', () => {
+        process.env = {
+            ...originalEnv,
+        };
+
+        const createConfig = require('../app.config').default as () => {
+            icon?: string;
+            android?: {
+                adaptiveIcon?: {
+                    foregroundImage?: string;
+                };
+            };
+        };
+        const config = createConfig();
+
+        expect(config.icon).toBe('./assets/images/HKCampusicon.png');
+        expect(config.android?.adaptiveIcon?.foregroundImage).toBe('./assets/images/HKCampusicon.png');
+    });
 });
