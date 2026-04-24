@@ -75,7 +75,7 @@ struct ScheduleWidgetProvider: TimelineProvider {
 
     private func buildEntry(at date: Date) -> ScheduleWidgetEntry {
         let classes = loadClasses()
-        let today = classesForToday(classes, date: date)
+        let today = upcomingClassesForToday(classes, date: date)
         let nextClass = findNextClass(classes, from: date)
         return ScheduleWidgetEntry(date: date, nextClass: nextClass, todayClasses: today)
     }
@@ -107,10 +107,17 @@ struct ScheduleWidgetProvider: TimelineProvider {
         }
     }
 
-    private func classesForToday(_ classes: [ScheduleWidgetClass], date: Date) -> [ScheduleWidgetClass] {
+    private func upcomingClassesForToday(_ classes: [ScheduleWidgetClass], date: Date) -> [ScheduleWidgetClass] {
         let today = appWeekday(for: date)
+        let currentMinutes = minutesFromMidnight(for: date)
         return classes
-            .filter { $0.dayOfWeek == today }
+            .filter { classItem in
+                guard classItem.dayOfWeek == today,
+                      let start = classItem.startTime else {
+                    return false
+                }
+                return parseMinutes(start) > currentMinutes
+            }
             .sorted(by: sortByTime)
     }
 
@@ -130,7 +137,7 @@ struct ScheduleWidgetProvider: TimelineProvider {
             if dayOffset == 0 {
                 if let todayNext = dayClasses.first(where: { classItem in
                     guard let start = classItem.startTime else { return false }
-                    return parseMinutes(start) >= currentMinutes
+                    return parseMinutes(start) > currentMinutes
                 }) {
                     return todayNext
                 }
@@ -173,10 +180,44 @@ struct ScheduleWidgetProvider: TimelineProvider {
 
     private func nextRefreshDate(from date: Date) -> Date {
         let calendar = Calendar.current
-        let halfHourLater = calendar.date(byAdding: .minute, value: 30, to: date) ?? date
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: date) ?? date
         let midnight = calendar.startOfDay(for: tomorrow)
-        return min(halfHourLater, midnight)
+        let nextClassStart = nextClassStartDate(from: date)
+        return min(nextClassStart ?? midnight, midnight)
+    }
+
+    private func nextClassStartDate(from date: Date) -> Date? {
+        let calendar = Calendar.current
+        let classes = loadClasses()
+        let currentMinutes = minutesFromMidnight(for: date)
+
+        for dayOffset in 0...6 {
+            guard let targetDate = calendar.date(byAdding: .day, value: dayOffset, to: date) else {
+                continue
+            }
+            let weekday = appWeekday(for: targetDate)
+            let dayClasses = classes
+                .filter { $0.dayOfWeek == weekday }
+                .sorted(by: sortByTime)
+
+            for classItem in dayClasses {
+                guard let start = classItem.startTime else {
+                    continue
+                }
+
+                let startMinutes = parseMinutes(start)
+                if dayOffset == 0 && startMinutes <= currentMinutes {
+                    continue
+                }
+
+                var components = calendar.dateComponents([.year, .month, .day], from: targetDate)
+                components.hour = startMinutes / 60
+                components.minute = startMinutes % 60
+                components.second = 0
+                return calendar.date(from: components)
+            }
+        }
+
+        return nil
     }
 }
-
