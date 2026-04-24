@@ -1,4 +1,4 @@
-import { getTabLabel } from '../../app/(tabs)/tabLabels';
+import { getTabLabel } from '../../utils/tabLabels';
 
 describe('getTabLabel', () => {
     it('returns the translated label when i18n resolves it', () => {

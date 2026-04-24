@@ -99,6 +99,7 @@ describe('filterMemoryCandidates', () => {
             })
         ).toEqual([
             {
+                should_store: true,
                 key: 'favorite_food',
                 value: 'likes spicy food',
                 memoryType: 'long_term_preference',
@@ -106,6 +107,7 @@ describe('filterMemoryCandidates', () => {
                 reason: 'stable food preference',
             },
             {
+                should_store: true,
                 key: 'future_plan.exchange',
                 value: 'exchange next term',
                 memoryType: 'background_fact',
@@ -153,6 +155,7 @@ describe('filterMemoryCandidates', () => {
 
         expect(filterMemoryCandidates(candidates, {})).toEqual([
             {
+                should_store: true,
                 key: 'nickname',
                 value: 'Tim',
                 memoryType: 'long_term_preference',
@@ -160,6 +163,7 @@ describe('filterMemoryCandidates', () => {
                 reason: 'name',
             },
             {
+                should_store: true,
                 key: 'favorite_food',
                 value: 'dumplings',
                 memoryType: 'long_term_preference',
@@ -167,6 +171,7 @@ describe('filterMemoryCandidates', () => {
                 reason: 'food',
             },
             {
+                should_store: true,
                 key: 'major',
                 value: 'Computer Science',
                 memoryType: 'background_fact',
@@ -206,6 +211,7 @@ describe('filterMemoryCandidates', () => {
 
         expect(filterMemoryCandidates(candidates, {})).toEqual([
             {
+                should_store: true,
                 key: 'nickname',
                 value: 'Tim',
                 memoryType: 'long_term_preference',
@@ -213,6 +219,7 @@ describe('filterMemoryCandidates', () => {
                 reason: 'name preference',
             },
             {
+                should_store: true,
                 key: 'favorite_food',
                 value: 'dumplings',
                 memoryType: 'long_term_preference',

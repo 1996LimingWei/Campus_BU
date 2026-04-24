@@ -1,6 +1,7 @@
 export type ToolParameter = {
     type: 'string' | 'number' | 'boolean' | 'object';
     description: string;
+    enum?: string[];
     required?: boolean;
 };
 
@@ -20,7 +21,7 @@ export type AgentStep = {
     modelTier?: 'fast' | 'reasoning';
     modelName?: string;
     routeReason?: string;
-    path?: 'pending' | 'stable_task' | 'local_rule' | 'intent_route' | 'cache' | 'llm';
+    path?: 'pending' | 'stable_task' | 'local_rule' | 'intent_route' | 'cache' | 'llm' | 'prefetch';
     action?: {
         tool: string;
         input: any;

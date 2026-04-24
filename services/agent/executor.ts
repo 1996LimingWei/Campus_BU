@@ -604,6 +604,7 @@ const toScheduleEntry = (
         endPeriod: draft.endPeriod,
         weekText: draft.weekText?.trim() || '1-16',
         matchedCourseId: undefined,
+        isActive: true,
     };
 };
 
@@ -627,9 +628,9 @@ const toCalendarEventInput = (
         courseCode: draft.courseCode,
         matchedCourseId: draft.matchedCourseId,
         eventDate: draft.eventDate,
-        startTime: draft.startTime || null,
-        endTime: draft.endTime || (draft.startTime ? addOneHour(draft.startTime) : null),
-        location: draft.location || null,
+        startTime: draft.startTime || undefined,
+        endTime: draft.endTime || (draft.startTime ? addOneHour(draft.startTime) : undefined),
+        location: draft.location || undefined,
         note: draft.note,
     };
 };
@@ -1357,7 +1358,16 @@ export class AgentExecutor {
 
                 const readyEntry = toScheduleEntry(mergedDraft);
                 if (!readyEntry) {
-                    return formatMissingFieldsPrompt(getMissingScheduleFields(mergedDraft), 'schedule');
+                    const missingPrompt = formatMissingFieldsPrompt(getMissingScheduleFields(mergedDraft), 'schedule');
+                    return {
+                        steps: [{
+                            thought: '待确认课表写入仍缺少必要字段',
+                            reply: missingPrompt,
+                            routeReason: stableDecision.reason,
+                            path: 'pending',
+                        }],
+                        finalAnswer: missingPrompt,
+                    };
                 }
 
                 const reply = await this.executePendingWriteAction();
@@ -1398,7 +1408,16 @@ export class AgentExecutor {
 
                 const readyEvent = toCalendarEventInput(mergedDraft);
                 if (!readyEvent) {
-                    return formatMissingFieldsPrompt(getMissingCalendarEventFields(mergedDraft), 'calendar_event');
+                    const missingPrompt = formatMissingFieldsPrompt(getMissingCalendarEventFields(mergedDraft), 'calendar_event');
+                    return {
+                        steps: [{
+                            thought: '待确认日历写入仍缺少必要字段',
+                            reply: missingPrompt,
+                            routeReason: stableDecision.reason,
+                            path: 'pending',
+                        }],
+                        finalAnswer: missingPrompt,
+                    };
                 }
 
                 const reply = await this.executePendingWriteAction();

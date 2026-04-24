@@ -276,6 +276,7 @@ export const filterMemoryCandidates = (
         acceptedPairs.add(acceptedPairKey);
         acceptedKeys.add(normalizedKey);
         accepted.push({
+            should_store: true,
             key: normalizedKey,
             value: normalizedValue,
             memoryType: candidate.memory_type,

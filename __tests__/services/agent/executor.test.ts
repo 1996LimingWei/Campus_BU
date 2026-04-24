@@ -765,6 +765,7 @@ describe('AgentExecutor course publishing flow', () => {
 
         const executor = new AgentExecutor('user-1');
         await executor.process('以后叫我 Tim，我读 CS，喜欢吃辣，下学期想交换');
+        await new Promise(resolve => setImmediate(resolve));
 
         expect(saveMemoryFact).toHaveBeenCalledTimes(3);
     });
@@ -805,27 +806,21 @@ describe('AgentExecutor course publishing flow', () => {
 
     describe.skip('Legacy Schedule Write Intent', () => {
         it('should detect schedule write intent and request confirmation', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const response = await executor.process('帮我把COMP3015周二9点记进课表');
 
             // Should ask for missing day of week or provide confirmation
             expect(response.finalAnswer).toBeTruthy();
             expect(
-                response.finalAnswer.includes('确认') ||
-                response.finalAnswer.includes('星期') ||
-                response.finalAnswer.includes('时间')
+                response.finalAnswer!.includes('确认') ||
+                response.finalAnswer!.includes('星期') ||
+                response.finalAnswer!.includes('时间')
             ).toBe(true);
         });
 
         it('should require day of week for schedule write', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // Without day of week
             const response = await executor.process('帮我记一门课到课表');
@@ -835,10 +830,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('should not write schedule without user confirmation', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // First request to write
             const response1 = await executor.process('周二9点COMP3015记进课表');
@@ -853,27 +845,21 @@ describe('AgentExecutor course publishing flow', () => {
 
     describe.skip('Legacy Calendar Event Write Intent', () => {
         it('should detect exam write intent and request confirmation', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const response = await executor.process('我5月15号有COMP3015 final，帮我记一下');
 
             // Should detect exam intent and ask for confirmation
             expect(response.finalAnswer).toBeTruthy();
             expect(
-                response.finalAnswer.includes('考试') ||
-                response.finalAnswer.includes('确认') ||
-                response.finalAnswer.includes('记录')
+                response.finalAnswer!.includes('考试') ||
+                response.finalAnswer!.includes('确认') ||
+                response.finalAnswer!.includes('记录')
             ).toBe(true);
         });
 
         it('should detect quiz write intent', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const response = await executor.process('周三有个quiz帮我记到日历');
 
@@ -881,10 +867,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('should require date for calendar event', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const response = await executor.process('帮我记个考试');
 
@@ -893,10 +876,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('should handle assignment deadline write intent', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const response = await executor.process('作业截止日期5月20号帮我记一下');
 
@@ -906,10 +886,7 @@ describe('AgentExecutor course publishing flow', () => {
 
     describe.skip('Legacy Write Confirmation Flow', () => {
         it('should confirm before writing schedule entry', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // Request to write
             const response1 = await executor.process('周二下午2点数据库课程记进课表');
@@ -921,10 +898,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('should cancel write when user says no', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // Request to write
             const response1 = await executor.process('周三上午有算法课帮我记一下');
@@ -936,28 +910,22 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('should ask for missing fields before confirmation', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // Only provide title, missing day and time
             const response1 = await executor.process('帮我记一门课');
             expect(response1.finalAnswer).toBeTruthy();
             expect(
-                response1.finalAnswer.includes('星期') ||
-                response1.finalAnswer.includes('时间') ||
-                response1.finalAnswer.includes('课程')
+                response1.finalAnswer!.includes('星期') ||
+                response1.finalAnswer!.includes('时间') ||
+                response1.finalAnswer!.includes('课程')
             ).toBe(true);
         });
     });
 
     describe('Structured schedule and calendar writes', () => {
         it('collects schedule details, waits for confirmation, then writes the entry', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const draft = await executor.process('帮我把 COMP3015 周二 09:00-10:00 在 WLB204 记进课表');
             expect(mockCreateManualScheduleEntry).not.toHaveBeenCalled();
@@ -979,10 +947,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('accepts relaxed confirmation phrase like 确认一下 for schedule write', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const draft = await executor.process('帮我把 COMP3015 周二 09:00-10:00 在 WLB204 记进课表');
             expect(draft.finalAnswer).toContain('确认');
@@ -999,10 +964,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('supports single-turn confirm with schedule detail update', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const draft = await executor.process('帮我把 COMP3015 周二 09:00-10:00 在 WLB204 记进课表');
             expect(draft.finalAnswer).toContain('确认');
@@ -1023,10 +985,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('supports follow-up completion before schedule confirmation', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const first = await executor.process('帮我把 COMP3026 记进课表');
             expect(first.finalAnswer).toBeTruthy();
@@ -1051,10 +1010,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('cancels schedule writes cleanly', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             await executor.process('帮我把 COMP3015 周二 09:00-10:00 在 WLB204 记进课表');
             const cancelled = await executor.process('取消');
@@ -1064,10 +1020,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('does not write schedule entries before confirmation', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             await executor.process('帮我把数据库课 周二 14:00-16:00 在 WLB205 记进课表');
             expect(mockCreateManualScheduleEntry).not.toHaveBeenCalled();
@@ -1077,10 +1030,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('collects exam details with time and location, waits for confirmation, then writes the event', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 用户提供了完整信息（包括时间和地点）
             const draft = await executor.process('帮我记一下 COMP3015 final，2026-05-15 14:00-16:00 在 HSH201');
@@ -1104,10 +1054,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('allows exam events with only course and date, time and location are optional', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 考试只需要课程名+日期，时间和地点是可选的
             const draft = await executor.process('帮我记一下COMP3015期末考试，2025-05-15');
@@ -1118,7 +1065,7 @@ describe('AgentExecutor course publishing flow', () => {
             expect(draft.finalAnswer).toContain('COMP3015');
             expect(draft.finalAnswer).toContain('2025-05-15');
             // 如果系统没有提取到时间，应该提示可以补充
-            if (!draft.finalAnswer.includes('20:')) {
+            if (!draft.finalAnswer!.includes('20:')) {
                 expect(draft.finalAnswer).toContain('如需补充具体时间或地点');
             }
 
@@ -1135,10 +1082,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('allows quiz events with only course and date, time and location are optional', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 测验只需要课程名+日期，时间和地点是可选的
             const first = await executor.process('帮我记个 COMP3026 quiz，2026-06-01');
@@ -1161,10 +1105,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('allows adding time and location to quiz after confirmation prompt', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 用户提供课程和日期
             const first = await executor.process('帮我记个 COMP3026 quiz，2026-06-01');
@@ -1191,10 +1132,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('asks for missing fields (title and date) before calendar-event confirmation', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 只说了"帮我记个考试"，系统推导标题为"考试"，只需要追问日期
             const response = await executor.process('帮我记个考试');
@@ -1206,10 +1144,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('allows assignment events without time and location, asks for confirmation directly', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 作业类型只需要标题、日期、类型，不需要时间和地点
             const draft = await executor.process('帮我记一下COMP7650 assignment3作业，2025-04-29');
@@ -1236,10 +1171,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('allows adding time and location to assignment after initial confirmation prompt', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 先提交作业基本信息
             const first = await executor.process('帮我记个作业 COMP3015 assignment2 2025-05-01');
@@ -1289,10 +1221,7 @@ describe('AgentExecutor course publishing flow', () => {
             courseCode,
             eventDate,
         }) => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const draft = await executor.process(firstPrompt);
             expect(draft.finalAnswer).toContain('确认');
@@ -1311,10 +1240,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('accepts relaxed confirmation phrase like 确认一下 for calendar-event write', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const draft = await executor.process('帮我记一下COMP7650 assignment3作业，2025-04-29');
             expect(draft.finalAnswer).toContain('确认');
@@ -1331,10 +1257,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('after follow-up with complete info, goes directly to confirmation without asking for time/location', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 第一次只说了"帮我记个作业" - 系统推导标题为"作业"，只需要追问日期
             const first = await executor.process('帮我记个作业');
@@ -1361,10 +1284,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('supports step-by-step information collection for assignment (date required, course optional)', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 第一步：用户只说"帮我记个作业"，系统只追问日期（标题可自动推导）
             const first = await executor.process('帮我记个作业');
@@ -1394,10 +1314,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('supports step-by-step information collection for exam (date after course)', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 第一步：用户说要记考试，系统追问日期
             const first = await executor.process('帮我记一下COMP3015有个考试');
@@ -1420,10 +1337,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('supports adding optional time and location in separate messages after initial info', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             // 第一步：用户提供课程和日期
             const first = await executor.process('帮我记个作业 COMP3015 2025-05-15');
@@ -1459,10 +1373,7 @@ describe('AgentExecutor course publishing flow', () => {
 
     describe('Schedule Query Still Works', () => {
         it('should still handle schedule queries normally', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const response = await executor.process('今天有什么课');
 
@@ -1471,10 +1382,7 @@ describe('AgentExecutor course publishing flow', () => {
         });
 
         it('should not interfere with existing schedule read flow', async () => {
-            const executor = new AgentExecutor('user-1', {
-                history: [],
-                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
-            });
+            const executor = new AgentExecutor('user-1');
 
             const response = await executor.process('明天课表');
 
