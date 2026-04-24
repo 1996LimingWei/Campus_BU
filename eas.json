@@ -12,7 +12,10 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_ENABLE_SCHEDULE_WIDGET": "0"
+      }
     }
   },
   "submit": {
