@@ -46,3 +46,13 @@ yarn-error.*
 # OCR backend local runtime artifacts
 backend/.paddlex_cache/
 backend/__pycache__/
+
+# local AI tooling/workspace artifacts
+.agents/
+.claude/
+.codebuddy/
+.qoder/
+.trae/
+.windsurf/
+skills/
+skills-lock.json

@@ -18,7 +18,7 @@
     },
     "production": {
       "env": {
-        "EXPO_ENABLE_SCHEDULE_WIDGET": "0"
+        "EXPO_ENABLE_SCHEDULE_WIDGET": "1"
       }
     }
   },

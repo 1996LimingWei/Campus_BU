@@ -1,0 +1,10 @@
+.agents/
+.claude/
+.codebuddy/
+.qoder/
+.trae/
+.windsurf/
+skills/
+skills-lock.json
+.git/
+node_modules/
