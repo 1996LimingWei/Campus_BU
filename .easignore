@@ -8,3 +8,5 @@ skills/
 skills-lock.json
 .git/
 node_modules/
+/ios
+/android
