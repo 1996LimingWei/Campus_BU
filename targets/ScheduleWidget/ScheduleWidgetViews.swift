@@ -133,7 +133,8 @@ private struct MediumClassRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
-            .frame(width: 49, minHeight: 46)
+            .frame(width: 49)
+            .frame(minHeight: 46)
             .padding(.vertical, 6)
             .background(WidgetPalette.timeBlock)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
