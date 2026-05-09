@@ -5,8 +5,8 @@ import subprocess
 import os
 import time
 
-SUPABASE_URL = 'https://baihmybeajpfitionsbv.supabase.co'
-SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhaWhteWJlYWpwZml0aW9uc2J2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1Mzc4MjksImV4cCI6MjA4NjExMzgyOX0.wS-XzFRyZAJhaxl21rT32Ij2dCbWLDdCGl1hObk9OOo'
+SUPABASE_URL = 'https://fcbsekidlijtidqzkddx.supabase.co'
+SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZjYnNla2lkbGlqdGlkcXprZGR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzgzMDAsImV4cCI6MjA4ODI1NDMwMH0.nOSFfSYw0_xAF9zt4S1qpppsCX3cD7BzRJoJI33Kxoo'
 TABLE_NAME = 'teachers'
 
 def import_with_curl():
