@@ -411,6 +411,39 @@ const addWidgetTargetToXcodeProject = (config) =>
             );
         }
 
+        // Ensure widget Info.plist has all required keys. Expo/RN may overwrite it.
+        const projectRoot = nextConfig.modRequest.projectRoot;
+        const infoPlistPath = path.join(projectRoot, 'ios', WIDGET_NAME, 'Info.plist');
+        const templateInfoPlistPath = path.join(projectRoot, 'targets', WIDGET_NAME, 'Info.plist');
+        if (fs.existsSync(infoPlistPath) && fs.existsSync(templateInfoPlistPath)) {
+            const plist = require('simple-plist');
+            let infoPlist = plist.readFileSync(infoPlistPath);
+            const templatePlist = plist.readFileSync(templateInfoPlistPath);
+            const requiredKeys = [
+                'CFBundleDevelopmentRegion',
+                'CFBundleDisplayName',
+                'CFBundleExecutable',
+                'CFBundleIdentifier',
+                'CFBundleInfoDictionaryVersion',
+                'CFBundleName',
+                'CFBundlePackageType',
+                'CFBundleShortVersionString',
+                'CFBundleVersion',
+                'MinimumOSVersion',
+                'NSExtension',
+            ];
+            let modified = false;
+            for (const key of requiredKeys) {
+                if (infoPlist[key] === undefined && templatePlist[key] !== undefined) {
+                    infoPlist[key] = templatePlist[key];
+                    modified = true;
+                }
+            }
+            if (modified) {
+                plist.writeFileSync(infoPlistPath, infoPlist);
+            }
+        }
+
         return nextConfig;
     });
 
