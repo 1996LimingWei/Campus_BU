@@ -20,7 +20,7 @@ export default (): ExpoConfig => {
     const ocrApiUrl = (process.env.EXPO_PUBLIC_OCR_API_URL || "").trim();
     const deepseekBaseUrl = (process.env.EXPO_PUBLIC_DEEPSEEK_BASE_URL || "").trim();
     const widgetEnabled = shouldEnableScheduleWidget();
-    const buildNumber = "25";
+    const buildNumber = "1";
     const appExtensions = widgetEnabled
         ? [
               {
@@ -36,7 +36,7 @@ export default (): ExpoConfig => {
     return {
         name: "HKCampus",
         slug: "HKCampus",
-        version: "1.2.2",
+        version: "1.2.3",
         orientation: "portrait",
         icon: "./assets/images/HKCampusicon.png",
         scheme: "hkcampus",
@@ -72,7 +72,7 @@ export default (): ExpoConfig => {
             edgeToEdgeEnabled: true,
             predictiveBackGestureEnabled: false,
             package: "com.budev.hkcampus",
-            versionCode: 5,
+            versionCode: 6,
             permissions: [
                 "android.permission.RECORD_AUDIO",
                 "android.permission.USE_BIOMETRIC",
@@ -118,6 +118,13 @@ export default (): ExpoConfig => {
         owner: "timchindev",
         experiments: {
             typedRoutes: true,
+            inlineModules: {
+                watchedDirectories: ["app"],
+            },
+        } as ExpoConfig["experiments"] & {
+            inlineModules: {
+                watchedDirectories: string[];
+            };
         },
         extra: {
             router: {},

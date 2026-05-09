@@ -76,6 +76,11 @@ describe('app config widget plugin gating', () => {
 
         const createConfig = require('../app.config').default as () => {
             icon?: string;
+            experiments?: {
+                inlineModules?: {
+                    watchedDirectories?: string[];
+                };
+            };
             android?: {
                 adaptiveIcon?: {
                     foregroundImage?: string;
@@ -86,5 +91,6 @@ describe('app config widget plugin gating', () => {
 
         expect(config.icon).toBe('./assets/images/HKCampusicon.png');
         expect(config.android?.adaptiveIcon?.foregroundImage).toBe('./assets/images/HKCampusicon.png');
+        expect(config.experiments?.inlineModules?.watchedDirectories).toContain('app');
     });
 });
