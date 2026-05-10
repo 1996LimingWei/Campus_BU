@@ -23,7 +23,8 @@ const AgentTabIcon = ({ color, focused }: { color: string; focused: boolean }) =
 );
 
 export default function TabLayout() {
-  const { t } = useTranslation('translation', { keyPrefix: 'tabs' });
+  const { t: tTabs } = useTranslation('translation', { keyPrefix: 'tabs' });
+  const { t } = useTranslation();
   const scrollX = useRef(new Animated.Value(0)).current;
   const [containerWidth, setContainerWidth] = useState(0);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -112,7 +113,7 @@ export default function TabLayout() {
             const { options } = descriptors[route.key];
             const routeLabelKey = routeLabelKeyMap[route.name];
             const label = routeLabelKey
-              ? getTabLabel(t, routeLabelKey)
+              ? getTabLabel(tTabs, routeLabelKey)
               : (typeof options.tabBarLabel === 'string' ? options.tabBarLabel : route.name);
             const isFocused = activeIndex === index;
 
@@ -189,7 +190,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="campus"
         options={{
-          tabBarLabel: getTabLabel(t, 'home'),
+          tabBarLabel: getTabLabel(tTabs, 'home'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={CalendarIcon} />
           ),
@@ -198,7 +199,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="map"
         options={{
-          tabBarLabel: getTabLabel(t, 'map'),
+          tabBarLabel: getTabLabel(tTabs, 'map'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={MapIcon} />
           ),
@@ -213,7 +214,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="agent"
         options={{
-          tabBarLabel: getTabLabel(t, 'agent'),
+          tabBarLabel: getTabLabel(tTabs, 'agent'),
           tabBarIcon: ({ color, focused }) => (
             <AgentTabIcon color={color} focused={focused} />
           ),
@@ -222,7 +223,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="course"
         options={{
-          tabBarLabel: getTabLabel(t, 'course'),
+          tabBarLabel: getTabLabel(tTabs, 'course'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={GraduationCap} />
           ),
@@ -237,7 +238,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarLabel: getTabLabel(t, 'me'),
+          tabBarLabel: getTabLabel(tTabs, 'me'),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused} color={color} size={22} IconComponent={UserIcon} />
           ),
