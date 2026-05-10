@@ -7,6 +7,7 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 interface GuestLoginModalProps {
     visible: boolean;
     onClose: () => void;
+    onLogin?: () => void;
     title?: string;
     message?: string;
 }
@@ -14,6 +15,7 @@ interface GuestLoginModalProps {
 export const GuestLoginModal: React.FC<GuestLoginModalProps> = ({
     visible,
     onClose,
+    onLogin,
     title,
     message,
 }) => {
@@ -41,7 +43,11 @@ export const GuestLoginModal: React.FC<GuestLoginModalProps> = ({
                         <TouchableOpacity
                             style={styles.primaryButton}
                             onPress={() => {
-                                onClose();
+                                if (onLogin) {
+                                    onLogin();
+                                } else {
+                                    onClose();
+                                }
                                 router.push('/(auth)/login');
                             }}
                         >

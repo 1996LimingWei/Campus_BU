@@ -6,8 +6,9 @@ import { useTranslation } from 'react-i18next';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AnimatedTabIcon } from '../../components/common/AnimatedTabIcon';
 import { useCourseActivity } from '../../context/CourseActivityContext';
+import { useLoginPromptContext } from '../../context/LoginPromptContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { getCurrentUser } from '../../services/auth';
+import { getCurrentUser, onAuthChange } from '../../services/auth';
 import { getTabLabel } from '../../utils/tabLabels';
 
 const AgentTabIcon = ({ color, focused }: { color: string; focused: boolean }) => (
@@ -26,6 +27,7 @@ export default function TabLayout() {
   const scrollX = useRef(new Animated.Value(0)).current;
   const [containerWidth, setContainerWidth] = useState(0);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const { showLoginPrompt } = useLoginPromptContext();
   const routeLabelKeyMap: Partial<Record<string, 'home' | 'map' | 'agent' | 'course' | 'me'>> = {
     campus: 'home',
     map: 'map',
@@ -45,9 +47,15 @@ export default function TabLayout() {
     };
 
     void loadCurrentUser();
+    const unsubscribe = onAuthChange((user) => {
+      if (!cancelled) {
+        setCurrentUser(user);
+      }
+    });
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -117,6 +125,17 @@ export default function TabLayout() {
 
               if (route.name === 'map' && !event.defaultPrevented) {
                 navigation.navigate(route.name, { openFoodMap: 'true' });
+                return;
+              }
+
+              if (route.name === 'agent' && !currentUser) {
+                showLoginPrompt(
+                  t('auth.guest_prompt_title', 'Login Required'),
+                  t('auth.guest_prompt_msg', 'Please login to continue.'),
+                  {
+                    onClose: () => navigation.navigate('campus'),
+                  },
+                );
                 return;
               }
 
@@ -194,7 +213,6 @@ export default function TabLayout() {
       <Tabs.Screen
         name="agent"
         options={{
-          href: currentUser ? undefined : null,
           tabBarLabel: getTabLabel(t, 'agent'),
           tabBarIcon: ({ color, focused }) => (
             <AgentTabIcon color={color} focused={focused} />
