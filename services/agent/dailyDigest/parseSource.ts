@@ -159,7 +159,7 @@ export const parseDailyDigestItems = (html: string, sourceUrl: string): DigestIt
     const unique = new Map<string, DigestItem>();
 
     for (const item of candidateLinks) {
-        if (item.url.includes('ai.hubtoday.app') && item.title.includes('AI资讯日报')) {
+        if (item.url.includes('hex2077.dev') && item.title.includes('AI资讯日报')) {
             continue;
         }
         const key = `${item.title}|${item.url}`;

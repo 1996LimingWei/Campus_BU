@@ -19,7 +19,7 @@ describe('parseDailyDigestItems', () => {
             </html>
         `;
 
-        const items = parseDailyDigestItems(html, 'https://ai.hubtoday.app/2026-03/2026-03-26/');
+        const items = parseDailyDigestItems(html, 'https://hex2077.dev/docs/2026-03/2026-03-26/');
 
         expect(items).toEqual([
             {

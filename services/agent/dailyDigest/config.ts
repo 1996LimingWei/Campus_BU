@@ -1,4 +1,4 @@
-export const DAILY_DIGEST_SOURCE_HOST = 'https://ai.hubtoday.app';
+export const DAILY_DIGEST_SOURCE_HOST = 'https://hex2077.dev';
 
 export const DAILY_DIGEST_CONFIG = {
     requestTimeoutMs: 12000,
@@ -18,5 +18,5 @@ export const getDailyDigestDate = (date: Date = new Date()): string => {
 
 export const buildDailyDigestSourceUrl = (dateStr: string): string => {
     const [year, month] = dateStr.split('-');
-    return `${DAILY_DIGEST_SOURCE_HOST}/${year}-${month}/${dateStr}/`;
+    return `${DAILY_DIGEST_SOURCE_HOST}/docs/${year}-${month}/${dateStr}/`;
 };
