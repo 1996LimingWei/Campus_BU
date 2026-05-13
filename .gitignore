@@ -44,8 +44,12 @@ yarn-error.*
 /android
 
 # OCR backend local runtime artifacts
+.paddlex_cache/
 backend/.paddlex_cache/
 backend/__pycache__/
+
+# Python virtual environment
+.venv/
 
 # local AI tooling/workspace artifacts
 .agents/
