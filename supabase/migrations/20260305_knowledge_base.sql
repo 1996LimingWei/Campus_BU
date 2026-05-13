@@ -48,3 +48,8 @@ as $$
   order by similarity desc
   limit match_count;
 $$;
+
+-- Data API GRANT（公开读取知识库）
+grant select                                                     on public.agent_knowledge_base to anon;
+grant select, insert, update, delete                             on public.agent_knowledge_base to authenticated;
+grant select, insert, update, delete                             on public.agent_knowledge_base to service_role;

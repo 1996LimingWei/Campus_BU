@@ -70,6 +70,10 @@
     "tailwindcss": "^3.3.2"
   },
   "devDependencies": {
+    "@roots/bud-preset-wordpress": "^6.24.0",
+    "@roots/bud-sass": "^6.24.0",
+    "@roots/bud-stylelint": "^6.24.0",
+    "@roots/bud-tailwindcss": "^6.24.0",
     "@testing-library/jest-native": "^5.4.3",
     "@testing-library/react-native": "^13.3.3",
     "@types/base64-arraybuffer": "^0.1.0",

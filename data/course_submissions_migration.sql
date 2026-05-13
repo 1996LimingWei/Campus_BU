@@ -147,3 +147,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 注意：管理员审核功能需要配合管理后台或通过 Supabase Dashboard 直接操作
 -- 更完善的方案可以添加 admin 角色检查
+
+-- Data API GRANT（公开查看已批准提交 + 自己的提交）
+grant select                                                     on public.course_submissions to anon;
+grant select, insert, update, delete                             on public.course_submissions to authenticated;
+grant select, insert, update, delete                             on public.course_submissions to service_role;

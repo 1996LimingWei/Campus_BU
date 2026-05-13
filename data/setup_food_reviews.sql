@@ -68,3 +68,16 @@ alter table public.food_review_comments enable row level security;
 create policy "Comments are viewable by everyone" on public.food_review_comments for select using (true);
 create policy "Authenticated users can reply to reviews" on public.food_review_comments for insert with check (auth.role() = 'authenticated' and (auth.uid() = author_id or author_id is null));
 create policy "Authors can delete their own replies" on public.food_review_comments for delete using (auth.uid() = author_id);
+
+-- 7. Data API GRANT（公开数据，anon 可读）
+grant select                                                     on public.food_reviews        to anon;
+grant select, insert, update, delete                             on public.food_reviews        to authenticated;
+grant select, insert, update, delete                             on public.food_reviews        to service_role;
+
+grant select                                                     on public.food_review_likes   to anon;
+grant select, insert, update, delete                             on public.food_review_likes   to authenticated;
+grant select, insert, update, delete                             on public.food_review_likes   to service_role;
+
+grant select                                                     on public.food_review_comments to anon;
+grant select, insert, update, delete                             on public.food_review_comments to authenticated;
+grant select, insert, update, delete                             on public.food_review_comments to service_role;

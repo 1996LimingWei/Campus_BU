@@ -103,3 +103,16 @@ create index if not exists forum_posts_last_reply_idx  on public.forum_posts (la
 create index if not exists forum_posts_created_at_idx  on public.forum_posts (created_at desc);
 create index if not exists forum_posts_category_idx    on public.forum_posts (category);
 create index if not exists forum_comments_post_idx     on public.forum_comments (post_id, created_at);
+
+-- Data API GRANT（公开数据，anon 可读）
+grant select                                                     on public.forum_posts     to anon;
+grant select, insert, update, delete                             on public.forum_posts     to authenticated;
+grant select, insert, update, delete                             on public.forum_posts     to service_role;
+
+grant select                                                     on public.forum_comments  to anon;
+grant select, insert, update, delete                             on public.forum_comments  to authenticated;
+grant select, insert, update, delete                             on public.forum_comments  to service_role;
+
+grant select                                                     on public.forum_upvotes   to anon;
+grant select, insert, update, delete                             on public.forum_upvotes   to authenticated;
+grant select, insert, update, delete                             on public.forum_upvotes   to service_role;

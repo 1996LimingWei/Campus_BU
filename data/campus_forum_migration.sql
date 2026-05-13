@@ -43,3 +43,12 @@ CREATE POLICY "Users can unlike." ON public.post_likes FOR DELETE USING (auth.ui
 -- 5. Enable Realtime for new tables
 ALTER PUBLICATION supabase_realtime ADD TABLE public.post_comments;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.post_likes;
+
+-- 6. Data API GRANT（公开数据，anon 可读）
+grant select                                                     on public.post_comments to anon;
+grant select, insert, update, delete                             on public.post_comments to authenticated;
+grant select, insert, update, delete                             on public.post_comments to service_role;
+
+grant select                                                     on public.post_likes    to anon;
+grant select, insert, update, delete                             on public.post_likes    to authenticated;
+grant select, insert, update, delete                             on public.post_likes    to service_role;

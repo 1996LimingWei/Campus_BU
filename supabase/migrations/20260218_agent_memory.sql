@@ -20,3 +20,7 @@ CREATE POLICY "Users can manage their own agent memory"
     TO authenticated
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
+
+-- Data API GRANT（私有用户数据，不给 anon）
+grant select, insert, update, delete on public.agent_memory to authenticated;
+grant select, insert, update, delete on public.agent_memory to service_role;

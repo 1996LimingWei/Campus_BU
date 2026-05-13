@@ -104,3 +104,12 @@ BEGIN
   WHERE id = row_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. Data API GRANT（公开数据，anon 可读）
+grant select                                                     on public.course_exchanges  to anon;
+grant select, insert, update, delete                             on public.course_exchanges  to authenticated;
+grant select, insert, update, delete                             on public.course_exchanges  to service_role;
+
+grant select                                                     on public.exchange_comments to anon;
+grant select, insert, update, delete                             on public.exchange_comments to authenticated;
+grant select, insert, update, delete                             on public.exchange_comments to service_role;

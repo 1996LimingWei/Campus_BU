@@ -86,8 +86,21 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 7. 向量检索函数 (Interview Highlight)
--- 面试时可以演示：如何通过语义搜索老师（比如搜索“人工智能专家”）
+-- 7. Data API GRANT（公开数据，anon 可读）
+grant select                                                     on public.teachers             to anon;
+grant select, insert, update, delete                             on public.teachers             to authenticated;
+grant select, insert, update, delete                             on public.teachers             to service_role;
+
+grant select                                                     on public.teacher_reviews      to anon;
+grant select, insert, update, delete                             on public.teacher_reviews      to authenticated;
+grant select, insert, update, delete                             on public.teacher_reviews      to service_role;
+
+grant select                                                     on public.teacher_review_likes to anon;
+grant select, insert, update, delete                             on public.teacher_review_likes to authenticated;
+grant select, insert, update, delete                             on public.teacher_review_likes to service_role;
+
+-- 8. 向量检索函数 (Interview Highlight)
+-- 面试时可以演示：如何通过语义搜索老师（比如搜索”人工智能专家”）
 create or replace function public.match_teachers (
   query_embedding vector(1536),
   match_threshold float,

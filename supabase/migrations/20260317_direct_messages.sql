@@ -158,3 +158,10 @@ begin
     end if;
 end
 $$;
+
+-- Data API GRANT（私有用户数据，不给 anon）
+grant select, insert, update, delete on public.direct_conversations to authenticated;
+grant select, insert, update, delete on public.direct_conversations to service_role;
+
+grant select, insert, update, delete on public.direct_messages to authenticated;
+grant select, insert, update, delete on public.direct_messages to service_role;

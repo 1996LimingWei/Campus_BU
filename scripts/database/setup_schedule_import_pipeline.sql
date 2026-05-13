@@ -349,4 +349,17 @@ begin
   end if;
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- Data API GRANT（私有用户数据，不给 anon）
+-- ---------------------------------------------------------------------------
+
+grant select, insert, update, delete on public.schedule_import_jobs  to authenticated;
+grant select, insert, update, delete on public.schedule_import_jobs  to service_role;
+
+grant select, insert, update, delete on public.schedule_import_items to authenticated;
+grant select, insert, update, delete on public.schedule_import_items to service_role;
+
+grant select, insert, update, delete on public.user_schedule_entries to authenticated;
+grant select, insert, update, delete on public.user_schedule_entries to service_role;
+
 commit;

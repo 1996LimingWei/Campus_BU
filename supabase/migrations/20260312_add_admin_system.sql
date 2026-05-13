@@ -184,10 +184,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- For now, this is a template - you'll need to manually get the user_id from auth.users
 -- Example:
 -- INSERT INTO public.app_admins (user_id, email, granted_by, is_active)
--- SELECT 
+-- SELECT
 --   u.id,
 --   '25421751@life.hkbu.edu.hk',
 --   u.id, -- Self-granted for initial setup
 --   true
 -- FROM auth.users u
 -- WHERE u.email = '25421751@life.hkbu.edu.hk';
+
+-- Data API GRANT（管理员表，仅 authenticated + service_role）
+grant select, insert, update, delete                             on public.app_admins to authenticated;
+grant select, insert, update, delete                             on public.app_admins to service_role;

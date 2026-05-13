@@ -31,3 +31,8 @@ create policy "user_follows_delete_own"
 on public.user_follows
 for delete
 using (auth.uid() = follower_id);
+
+-- Data API GRANT（公开读取关注关系）
+grant select                                                     on public.user_follows to anon;
+grant select, insert, update, delete                             on public.user_follows to authenticated;
+grant select, insert, update, delete                             on public.user_follows to service_role;

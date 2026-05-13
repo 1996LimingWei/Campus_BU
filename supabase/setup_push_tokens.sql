@@ -53,3 +53,7 @@ CREATE TRIGGER set_user_push_tokens_updated_at
     BEFORE UPDATE ON public.user_push_tokens
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
+
+-- Data API GRANT（私有用户数据，不给 anon）
+grant select, insert, update, delete on public.user_push_tokens to authenticated;
+grant select, insert, update, delete on public.user_push_tokens to service_role;

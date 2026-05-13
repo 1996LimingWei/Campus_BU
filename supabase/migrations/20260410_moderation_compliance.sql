@@ -379,3 +379,19 @@ begin
     end if;
 end
 $$;
+
+-- Data API GRANT（本迁移新建的表，私有/审核数据，不给 anon）
+grant select, insert, update, delete on public.user_eula_consents  to authenticated;
+grant select, insert, update, delete on public.user_eula_consents  to service_role;
+
+grant select, insert, update, delete on public.user_blocks         to authenticated;
+grant select, insert, update, delete on public.user_blocks         to service_role;
+
+grant select, insert, update, delete on public.reports             to authenticated;
+grant select, insert, update, delete on public.reports             to service_role;
+
+grant select, insert, update, delete on public.moderation_actions  to authenticated;
+grant select, insert, update, delete on public.moderation_actions  to service_role;
+
+grant select, insert, update, delete on public.user_bans           to authenticated;
+grant select, insert, update, delete on public.user_bans           to service_role;

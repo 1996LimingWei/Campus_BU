@@ -41,3 +41,7 @@ END $$;
 
 -- 2. Enable Realtime (Crucial for the "Alert" tab to update live)
 ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+
+-- 3. Data API GRANT（私有用户数据，不给 anon）
+grant select, insert, update, delete on public.notifications to authenticated;
+grant select, insert, update, delete on public.notifications to service_role;

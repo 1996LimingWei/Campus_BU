@@ -19,3 +19,7 @@ create policy "Users can view their own schedules" on public.user_schedules
 
 create policy "Users can insert their own schedules" on public.user_schedules
     for insert with check (auth.uid() = user_id);
+
+-- Data API GRANT（私有用户数据，不给 anon）
+grant select, insert, update, delete on public.user_schedules to authenticated;
+grant select, insert, update, delete on public.user_schedules to service_role;

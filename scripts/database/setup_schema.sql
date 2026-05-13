@@ -377,3 +377,59 @@ begin
   where id = row_id;
 end;
 $$ language plpgsql security definer;
+
+-- ============================================================================
+-- 16. Data API GRANT（Supabase 2026-05-30 起不再默认暴露 public 表给 Data API）
+-- ============================================================================
+
+-- 公开数据表：anon SELECT + authenticated CRUD
+grant select                                                     on public.courses            to anon;
+grant select, insert, update, delete                             on public.courses            to authenticated;
+grant select, insert, update, delete                             on public.courses            to service_role;
+
+grant select                                                     on public.buildings          to anon;
+grant select, insert, update, delete                             on public.buildings          to authenticated;
+grant select, insert, update, delete                             on public.buildings          to service_role;
+
+grant select                                                     on public.course_reviews     to anon;
+grant select, insert, update, delete                             on public.course_reviews     to authenticated;
+grant select, insert, update, delete                             on public.course_reviews     to service_role;
+
+grant select                                                     on public.course_exchanges   to anon;
+grant select, insert, update, delete                             on public.course_exchanges   to authenticated;
+grant select, insert, update, delete                             on public.course_exchanges   to service_role;
+
+grant select                                                     on public.exchange_comments  to anon;
+grant select, insert, update, delete                             on public.exchange_comments  to authenticated;
+grant select, insert, update, delete                             on public.exchange_comments  to service_role;
+
+grant select                                                     on public.course_teaming     to anon;
+grant select, insert, update, delete                             on public.course_teaming     to authenticated;
+grant select, insert, update, delete                             on public.course_teaming     to service_role;
+
+grant select                                                     on public.teaming_comments   to anon;
+grant select, insert, update, delete                             on public.teaming_comments   to authenticated;
+grant select, insert, update, delete                             on public.teaming_comments   to service_role;
+
+-- 发现板块
+grant select                                                     on public.posts              to anon;
+grant select, insert, update, delete                             on public.posts              to authenticated;
+grant select, insert, update, delete                             on public.posts              to service_role;
+
+grant select                                                     on public.post_comments      to anon;
+grant select, insert, update, delete                             on public.post_comments      to authenticated;
+grant select, insert, update, delete                             on public.post_comments      to service_role;
+
+grant select                                                     on public.post_likes         to anon;
+grant select, insert, update, delete                             on public.post_likes         to authenticated;
+grant select, insert, update, delete                             on public.post_likes         to service_role;
+
+-- 私有用户数据表：仅 authenticated + service_role
+grant select, insert, update, delete                             on public.users              to authenticated;
+grant select, insert, update, delete                             on public.users              to service_role;
+
+grant select, insert, update, delete                             on public.interactions       to authenticated;
+grant select, insert, update, delete                             on public.interactions       to service_role;
+
+grant select, insert, update, delete                             on public.messages           to authenticated;
+grant select, insert, update, delete                             on public.messages           to service_role;

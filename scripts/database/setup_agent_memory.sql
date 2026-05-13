@@ -23,3 +23,7 @@ on public.agent_memory
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- Data API GRANT（私有用户数据，不给 anon）
+grant select, insert, update, delete on public.agent_memory to authenticated;
+grant select, insert, update, delete on public.agent_memory to service_role;

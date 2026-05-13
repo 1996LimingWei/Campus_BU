@@ -59,3 +59,10 @@ create policy "building_favorites_delete_own"
 on public.building_favorites
 for delete
 using (auth.uid() = user_id);
+
+-- Data API GRANT（私有用户数据，不给 anon）
+grant select, insert, update, delete on public.course_favorites to authenticated;
+grant select, insert, update, delete on public.course_favorites to service_role;
+
+grant select, insert, update, delete on public.building_favorites to authenticated;
+grant select, insert, update, delete on public.building_favorites to service_role;
