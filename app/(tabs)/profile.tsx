@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { Bell, ChevronRight, Copy, Globe, Heart as HeartIcon, HelpCircle, LogOut, Mail, MessageSquare, Shield, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Linking, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Linking, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { FollowListModal } from '../../components/profile/FollowListModal';
 import MyScheduleCard from '../../components/profile/MyScheduleCard';
@@ -390,6 +390,29 @@ export default function ProfileScreen() {
     };
 
     const handleSignOut = () => {
+        const performSignOut = async () => {
+            try {
+                await signOut();
+                profileScreenCache = null;
+                router.replace('/(auth)/login');
+            } catch (err: any) {
+                if (Platform.OS === 'web') {
+                    window.alert('Sign Out Failed: ' + (err?.message || String(err)));
+                } else {
+                    Alert.alert('Sign Out Failed', err?.message || String(err));
+                }
+            }
+        };
+
+        // Web fallback: Alert.alert is a no-op on React Native Web. Use window.confirm.
+        if (Platform.OS === 'web') {
+            const ok = typeof window !== 'undefined' && window.confirm(t('profile.sign_out_confirm'));
+            if (ok) {
+                performSignOut();
+            }
+            return;
+        }
+
         Alert.alert(
             t('profile.sign_out'),
             t('profile.sign_out_confirm'),
@@ -398,12 +421,8 @@ export default function ProfileScreen() {
                 {
                     text: t('profile.sign_out'),
                     style: 'destructive',
-                    onPress: async () => {
-                        await signOut();
-                        profileScreenCache = null;
-                        router.replace('/(auth)/login');
-                    }
-                }
+                    onPress: performSignOut,
+                },
             ]
         );
     };
@@ -957,7 +976,10 @@ export default function ProfileScreen() {
                     {/* Sign Out / Sign In */}
                     {userId ? (
                         <View>
-                            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+                            <TouchableOpacity
+                                style={styles.signOutButton}
+                                onPress={handleSignOut}
+                            >
                                 <LogOut size={20} color="#EF4444" />
                                 <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
                             </TouchableOpacity>
