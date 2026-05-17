@@ -1,7 +1,7 @@
 import * as Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import storage from '../lib/storage';
 import { supabase } from './supabase';
 
@@ -16,7 +16,7 @@ const PUSH_NOTIFICATIONS_ENABLED_KEY_PREFIX = 'hkcampus_push_notifications_enabl
 
 const getPushNotificationsEnabledKey = (userId: string) => `${PUSH_NOTIFICATIONS_ENABLED_KEY_PREFIX}:${userId}`;
 
-// Global configuration for how notifications are handled when the app is in foreground
+// Global configuration for how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldShowAlert: true,
@@ -27,14 +27,53 @@ Notifications.setNotificationHandler({
     }),
 });
 
+// --- Deferred push token registration ---
+// When initial registration fails due to network, we store the userId and
+// retry once the app comes back to the foreground (a common signal that
+// network may have been restored).
+
+let pendingUserId: string | null = null;
+let appStateListenerRegistered = false;
+
+function scheduleDeferredRegistration(userId: string) {
+    pendingUserId = userId;
+
+    if (!appStateListenerRegistered) {
+        appStateListenerRegistered = true;
+        AppState.addEventListener('change', async (state) => {
+            if (state === 'active' && pendingUserId) {
+                const uid = pendingUserId;
+                pendingUserId = null;
+                console.log('[Push] Retrying deferred push token registration for:', uid);
+                await enablePushForUser(uid);
+            }
+        });
+    }
+}
+
+async function enablePushForUser(userId: string): Promise<boolean> {
+    const token = await registerForPushNotificationsAsync();
+    if (!token) {
+        scheduleDeferredRegistration(userId);
+        return false;
+    }
+
+    const saved = await savePushToken(userId, token);
+    if (!saved) {
+        scheduleDeferredRegistration(userId);
+        return false;
+    }
+
+    pendingUserId = null;
+    return true;
+}
+
 /**
  * Requests permission and gets the Expo Push Token for the current device.
- * @param projectId Optional EAS project ID if not defined in app.json
+ * Includes retry logic for transient network failures.
  * @returns The Expo push token string or undefined if failed/denied
  */
 export async function registerForPushNotificationsAsync(): Promise<string | undefined> {
-    let token;
-
     if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
             name: 'default',
@@ -44,42 +83,58 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
         });
     }
 
-    if (Device.isDevice) {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-
-        if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-        }
-
-        if (finalStatus !== 'granted') {
-            console.log('Failed to get push token for push notification! (Permission denied)');
-            return undefined;
-        }
-
-        try {
-            const projectId = Constants.default.expoConfig?.extra?.eas?.projectId || Constants.default.easConfig?.projectId;
-
-            if (!projectId) {
-                console.warn('Project ID not found in app.json. Add it in extra.eas.projectId.');
-            }
-
-            const tokenData = await Notifications.getExpoPushTokenAsync({
-                projectId,
-            });
-            token = tokenData.data;
-            console.log('Expo Push Token generated:', token);
-        } catch (e) {
-            console.error('Error generating Expo Push Token:', e);
-            // Optionally fallback to device token if Expo token fails (less common)
-            // token = (await Notifications.getDevicePushTokenAsync()).data;
-        }
-    } else {
+    if (!Device.isDevice) {
         console.log('Must use physical device for Push Notifications');
+        return undefined;
     }
 
-    return token;
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+        console.log('Failed to get push token for push notification! (Permission denied)');
+        return undefined;
+    }
+
+    const projectId = Constants.default.expoConfig?.extra?.eas?.projectId || Constants.default.easConfig?.projectId;
+    if (!projectId) {
+        console.warn('Project ID not found in app.json. Add it in extra.eas.projectId.');
+    }
+
+    // Retry up to 3 times with exponential backoff for transient network errors
+    const MAX_RETRIES = 3;
+    const BASE_DELAY_MS = 1000;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+            console.log('Expo Push Token generated:', tokenData.data);
+            return tokenData.data;
+        } catch (e: any) {
+            const isNetworkError =
+                e?.message?.includes('Network request failed') ||
+                e?.message?.includes('fetch') ||
+                e?.code === 'ECONNABORTED' ||
+                e?.code === 'ENOTFOUND';
+
+            if (isNetworkError && attempt < MAX_RETRIES) {
+                const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+                console.warn(`[Push] Token registration failed (attempt ${attempt}/${MAX_RETRIES}), retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+
+            console.error('Error generating Expo Push Token:', e);
+            return undefined;
+        }
+    }
+
+    return undefined;
 }
 
 /**
@@ -93,9 +148,6 @@ export async function savePushToken(userId: string, token: string): Promise<bool
     try {
         const platform = Platform.OS;
 
-        // Use upsert semantics to avoid duplicate constraint errors
-        // Note: we might not need to update anything if it exists, so ignoreDuplicates is okay if that's preferred, 
-        // but often we want to update the 'updated_at' timestamp.
         const { error } = await supabase
             .from('user_push_tokens')
             .upsert(
@@ -137,11 +189,8 @@ export async function setPushNotificationsEnabled(userId: string, enabled: boole
 
     try {
         if (enabled) {
-            const token = await registerForPushNotificationsAsync();
-            if (!token) return false;
-
-            const saved = await savePushToken(userId, token);
-            if (!saved) return false;
+            const success = await enablePushForUser(userId);
+            if (!success) return false;
         } else {
             const removed = await removePushToken(userId);
             if (!removed) return false;
@@ -160,6 +209,11 @@ export async function setPushNotificationsEnabled(userId: string, enabled: boole
  */
 export async function removePushToken(userId: string, token?: string): Promise<boolean> {
     if (!userId) return false;
+
+    // Cancel any pending deferred registration for this user
+    if (pendingUserId === userId) {
+        pendingUserId = null;
+    }
 
     try {
         const query = supabase
