@@ -1,16 +1,14 @@
-jest.mock('../../services/agent/embeddings', () => ({
-    embedText: jest.fn(),
-}));
-
 jest.mock('../../services/supabase', () => ({
     supabase: {
         rpc: jest.fn(),
         from: jest.fn(),
+        functions: {
+            invoke: jest.fn(),
+        },
     },
 }));
 
 import { FAQService } from '../../services/faq';
-import { embedText } from '../../services/agent/embeddings';
 import { rerankKnowledgeBaseResults } from '../../services/agent/retrieval';
 import { supabase } from '../../services/supabase';
 
@@ -82,32 +80,31 @@ describe('FAQ retrieval formatting', () => {
         expect(answer).not.toContain('结论：这是图书馆介绍。');
     });
 
-    it('uses vector rpc retrieval when embedding is available', async () => {
-        (embedText as jest.Mock).mockResolvedValue([0.1, 0.2, 0.3]);
-        (supabase.rpc as jest.Mock).mockResolvedValue({
-            data: [
-                {
-                    content: 'Semester GPA is calculated by total grade points divided by total credits attempted.',
-                    metadata: { h2: '评分制度与GPA' },
-                    similarity: 0.92,
-                },
-            ],
+    it('uses edge function retrieval when available', async () => {
+        (supabase.functions.invoke as jest.Mock).mockResolvedValue({
+            data: {
+                data: [
+                    {
+                        content: 'Semester GPA is calculated by total grade points divided by total credits attempted.',
+                        metadata: { h2: '评分制度与GPA' },
+                        similarity: 0.92,
+                    },
+                ],
+            },
             error: null,
         });
 
         const results = await FAQService.searchKnowledgeBase('GPA 怎么算？');
 
-        expect(embedText).toHaveBeenCalledWith('GPA 怎么算？');
-        expect(supabase.rpc).toHaveBeenCalledWith('match_knowledge_base', {
-            query_embedding: [0.1, 0.2, 0.3],
-            match_threshold: 0.55,
-            match_count: 8,
+        expect(supabase.functions.invoke).toHaveBeenCalledWith('embed-search', {
+            body: { query: 'GPA 怎么算？', match_count: 5 },
         });
         expect(results[0].content).toContain('Semester GPA');
+        expect(results[0].score).toBe(0.92);
     });
 
-    it('falls back to keyword search when vector rpc is unavailable', async () => {
-        (embedText as jest.Mock).mockRejectedValue(new Error('embedding unavailable'));
+    it('falls back to keyword search when edge function is unavailable', async () => {
+        (supabase.functions.invoke as jest.Mock).mockRejectedValue(new Error('edge function unavailable'));
         const limit = jest.fn().mockResolvedValue({
             data: [
                 {
@@ -123,7 +120,9 @@ describe('FAQ retrieval formatting', () => {
 
         const results = await FAQService.searchKnowledgeBase('图书馆几点开门？');
 
-        expect(supabase.rpc).not.toHaveBeenCalled();
+        expect(supabase.functions.invoke).toHaveBeenCalledWith('embed-search', {
+            body: { query: '图书馆几点开门？', match_count: 5 },
+        });
         expect(supabase.from).toHaveBeenCalledWith('agent_knowledge_base');
         expect(results[0].content).toContain('Library opening hours');
     });

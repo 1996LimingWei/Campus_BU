@@ -33,8 +33,13 @@ jest.mock('../../context/CourseActivityContext', () => ({
     useCourseActivity: () => ({ hasAnyUnread: false }),
 }));
 
+jest.mock('../../context/LoginPromptContext', () => ({
+    useLoginPromptContext: () => ({ showLoginPrompt: jest.fn() }),
+}));
+
 jest.mock('../../services/auth', () => ({
     getCurrentUser: jest.fn(),
+    onAuthChange: jest.fn(() => jest.fn()),
 }));
 
 const { getCurrentUser } = require('../../services/auth');
@@ -46,12 +51,12 @@ describe('agent tab access control', () => {
         jest.clearAllMocks();
     });
 
-    it('hides the agent tab for guests', async () => {
+    it('keeps the agent tab visible for guests (login prompt on click)', async () => {
         getCurrentUser.mockResolvedValue(null);
         render(<TabLayout />);
 
         await waitFor(() => {
-            expect(getLatestScreen('agent')?.options?.href).toBe(null);
+            expect(getLatestScreen('agent')?.options?.href).toBeUndefined();
         });
     });
 
