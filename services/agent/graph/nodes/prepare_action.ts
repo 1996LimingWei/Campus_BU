@@ -33,8 +33,14 @@ const extractTimeRange = (value: string) => {
 };
 
 const extractRating = (value: string) => {
-    const match = value.match(/\b([1-5])\s*(?:stars?|星|分)\b/i);
-    return match ? Number(match[1]) : undefined;
+    const englishMatch = value.match(/\b([1-5])\s*(?:stars?)\b/i);
+    if (englishMatch) return Number(englishMatch[1]);
+
+    const chineseMatch = value.match(/(^|[^\d])([1-5])\s*星/);
+    if (chineseMatch) return Number(chineseMatch[2]);
+
+    const standaloneMatch = value.trim().match(/^([1-5])$/);
+    return standaloneMatch ? Number(standaloneMatch[1]) : undefined;
 };
 
 const extractContentAfterSeparator = (value: string) => {
@@ -42,14 +48,78 @@ const extractContentAfterSeparator = (value: string) => {
     return match?.[1]?.trim();
 };
 
+const extractRoom = (value: string): string | undefined => {
+    const atMatch = value.match(/(?:在|@)\s*([A-Za-z]{2,}[ -]?\d{2,}[A-Za-z]?)/);
+    if (atMatch?.[1]) return atMatch[1].trim().replace(/\s+/g, '');
+
+    const bareMatch = value.match(/\b([A-Za-z]{2,}[ -]?\d{2,}[A-Za-z]?)\b/);
+    return bareMatch?.[1]?.trim().replace(/\s+/g, '');
+};
+
+const mergeDefined = <T extends Record<string, any>>(base: T, patch: Partial<T>): T => {
+    const next = { ...base };
+    for (const [key, value] of Object.entries(patch)) {
+        if (value !== undefined && value !== null && value !== '') {
+            (next as any)[key] = value;
+        }
+    }
+    return next;
+};
+
+const looksLikeQuestion = (value: string): boolean => (
+    /[?？]|什么时候|什麼時候|怎么|怎麼|如何|why|what|when|where|which|how/i.test(value)
+);
+
+const isSlotFillingFollowUp = (input: string, existing: PendingAction | null): boolean => {
+    if (!existing) return false;
+
+    const hasNewActionKeyword = /帮我|幫我|发布|發佈|发到|發到|写评价|寫評價|组队|組隊|记进|記進|记到|記到|记一下|記一下|记个|記個/i.test(input);
+    if (hasNewActionKeyword) return false;
+
+    const trimmed = input.trim();
+    if (!trimmed || looksLikeQuestion(trimmed)) return false;
+
+    const looksLikeDate = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+    const looksLikeRating = /^[1-5]\s*(?:星|stars?)?$/i.test(trimmed);
+    const looksLikeSection = /^section\s+[A-Za-z0-9-]+/i.test(trimmed);
+    const looksLikeWeekday = /^(周一|周二|周三|周四|周五|周六|周日|星期[一二三四五六日天])/.test(trimmed);
+    const looksLikeTime = /^\d{1,2}:\d{2}/.test(trimmed);
+    const looksLikeRoomValue = /^(?:@?\s*[A-Za-z]{2,}[ -]?\d{2,}[A-Za-z]?)$/.test(trimmed);
+    const looksLikePlainContent = trimmed.length >= 2 && trimmed.length <= 120;
+
+    if (existing.type === 'write_user_schedule_entry') {
+        return looksLikeWeekday || looksLikeTime || looksLikeRoomValue || looksLikeDate;
+    }
+
+    if (existing.type === 'create_user_calendar_event') {
+        return looksLikeDate || looksLikeTime || looksLikeRoomValue;
+    }
+
+    if (existing.type === 'post_course_review') {
+        return looksLikeRating || (existing.missingRequiredFields.includes('content') && looksLikePlainContent);
+    }
+
+    if (existing.type === 'post_course_teaming') {
+        return looksLikeSection || (existing.missingRequiredFields.includes('content') && looksLikePlainContent);
+    }
+
+    if (existing.type === 'send_course_chat_message') {
+        return existing.missingRequiredFields.includes('content') && looksLikePlainContent;
+    }
+
+    return false;
+};
+
 const buildScheduleAction = (state: AgentGraphState): PendingAction => {
     const courseCode = extractCourseCode(state.input);
     const dayOfWeek = extractDayOfWeek(state.input);
     const timeRange = extractTimeRange(state.input);
+    const room = extractRoom(state.input);
     const params = {
         title: courseCode || 'Manual schedule entry',
         courseCode,
         dayOfWeek,
+        room,
         ...timeRange,
     };
     const hasTime = Boolean(params.startTime && params.endTime);
@@ -136,15 +206,178 @@ const buildCourseChatAction = (state: AgentGraphState): PendingAction => {
     };
 };
 
+const mergeScheduleAction = (
+    existing: PendingAction & { type: 'write_user_schedule_entry' },
+    state: AgentGraphState
+): PendingAction => {
+    const courseCode = extractCourseCode(state.input) || existing.params.courseCode;
+    const dayOfWeek = extractDayOfWeek(state.input) ?? existing.params.dayOfWeek;
+    const timeRange = extractTimeRange(state.input);
+    const room = extractRoom(state.input) || existing.params.room;
+    const params = mergeDefined(existing.params, {
+        title: courseCode || existing.params.title,
+        courseCode,
+        dayOfWeek,
+        room,
+        ...timeRange,
+    });
+    const hasTime = Boolean(params.startTime && params.endTime);
+    const missingRequiredFields = [
+        ...(!params.title ? ['title'] : []),
+        ...(!dayOfWeek ? ['dayOfWeek'] : []),
+        ...(!hasTime ? ['timeRange'] : []),
+    ];
+
+    return {
+        type: 'write_user_schedule_entry',
+        params,
+        missingRequiredFields,
+        userVisibleSummary: hasTime
+            ? `Write ${params.title} to schedule on day ${dayOfWeek}, ${params.startTime}-${params.endTime}`
+            : `Write ${params.title} to schedule`,
+        safeToExecute: missingRequiredFields.length === 0,
+    };
+};
+
+const mergeCalendarEventAction = (
+    existing: PendingAction & { type: 'create_user_calendar_event' },
+    state: AgentGraphState
+): PendingAction => {
+    const courseCode = extractCourseCode(state.input) || existing.params.courseCode;
+    const eventDateMatch = state.input.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    const timeRange = extractTimeRange(state.input);
+    const room = extractRoom(state.input) || existing.params.location;
+    const params = mergeDefined(existing.params, {
+        title: courseCode ? `${courseCode} ${existing.params.eventType || 'Event'}` : existing.params.title,
+        eventDate: eventDateMatch?.[1] || existing.params.eventDate,
+        courseCode,
+        location: room,
+        ...timeRange,
+    });
+    const missingRequiredFields = [
+        ...(!params.eventDate ? ['eventDate'] : []),
+    ];
+
+    return {
+        type: 'create_user_calendar_event',
+        params,
+        missingRequiredFields,
+        userVisibleSummary: params.eventDate
+            ? `创建 ${params.eventDate} 的 ${courseCode || 'Event'} 日历事件`
+            : `创建 ${courseCode || 'Event'} 日历事件`,
+        safeToExecute: missingRequiredFields.length === 0,
+    };
+};
+
+const mergeReviewAction = (
+    existing: PendingAction & { type: 'post_course_review' },
+    state: AgentGraphState
+): PendingAction => {
+    const courseCode = extractCourseCode(state.input) || existing.params.courseCode;
+    const rating = extractRating(state.input) ?? existing.params.rating;
+    const content = extractContentAfterSeparator(state.input) || existing.params.content;
+    const missingRequiredFields = [
+        ...(!courseCode ? ['courseCode'] : []),
+        ...(!rating ? ['rating'] : []),
+        ...(!content ? ['content'] : []),
+    ];
+
+    return {
+        type: 'post_course_review',
+        params: { courseCode, rating, content },
+        missingRequiredFields,
+        userVisibleSummary: `Post ${rating || '?'} star review to ${courseCode || 'the course'}`,
+        safeToExecute: missingRequiredFields.length === 0,
+    };
+};
+
+const mergeTeamingAction = (
+    existing: PendingAction & { type: 'post_course_teaming' },
+    state: AgentGraphState
+): PendingAction => {
+    const courseCode = extractCourseCode(state.input) || existing.params.courseCode;
+    const section = state.input.match(/\bsection\s+([A-Za-z0-9-]+)/i)?.[1] || existing.params.section;
+    const content = extractContentAfterSeparator(state.input) || existing.params.content;
+    const missingRequiredFields = [
+        ...(!courseCode ? ['courseCode'] : []),
+        ...(!section ? ['section'] : []),
+        ...(!content ? ['content'] : []),
+    ];
+
+    return {
+        type: 'post_course_teaming',
+        params: { courseCode, section, content },
+        missingRequiredFields,
+        userVisibleSummary: `Post teaming request to ${courseCode || 'the course'}`,
+        safeToExecute: missingRequiredFields.length === 0,
+    };
+};
+
+const mergeChatAction = (
+    existing: PendingAction & { type: 'send_course_chat_message' },
+    state: AgentGraphState
+): PendingAction => {
+    const courseCode = extractCourseCode(state.input) || existing.params.courseCode;
+    const content = extractContentAfterSeparator(state.input) || existing.params.content;
+    const missingRequiredFields = [
+        ...(!courseCode ? ['courseCode'] : []),
+        ...(!content ? ['content'] : []),
+    ];
+
+    return {
+        type: 'send_course_chat_message',
+        params: { courseCode, content },
+        missingRequiredFields,
+        userVisibleSummary: `Send message to ${courseCode || 'the course'} chat`,
+        safeToExecute: missingRequiredFields.length === 0,
+    };
+};
+
 export const prepareActionNode = async (state: AgentGraphState): Promise<AgentGraphState> => {
+    const existing = state.pendingAction;
+    const isFollowUp = isSlotFillingFollowUp(state.input, existing);
+
+    if (existing && isFollowUp) {
+        let merged: PendingAction;
+
+        if (existing.type === 'write_user_schedule_entry') {
+            merged = mergeScheduleAction(existing, state);
+        } else if (existing.type === 'create_user_calendar_event') {
+            merged = mergeCalendarEventAction(existing, state);
+        } else if (existing.type === 'post_course_review') {
+            merged = mergeReviewAction(existing, state);
+        } else if (existing.type === 'post_course_teaming') {
+            merged = mergeTeamingAction(existing, state);
+        } else if (existing.type === 'send_course_chat_message') {
+            merged = mergeChatAction(existing, state);
+        } else {
+            merged = existing;
+        }
+
+        return pushTrace(
+            { ...state, pendingAction: merged },
+            'prepare_action',
+            `merged: ${merged.userVisibleSummary}`
+        );
+    }
+
+    const isNewActionRequest = /帮我|幫我|发布|發佈|发到|發到|写评价|寫評價|组队|組隊|记进|記進|记到|記到|记一下|記一下|记个|記個/i.test(state.input);
+    if (existing && !isFollowUp && !isNewActionRequest) {
+        return pushTrace(
+            { ...state, pendingAction: existing },
+            'prepare_action',
+            'preserved existing pending action'
+        );
+    }
+
     if (state.plan.proposedActionType === 'create_user_calendar_event') {
         const courseCode = extractCourseCode(state.input);
         const eventDateMatch = state.input.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-        const pendingAction = {
-            type: 'create_user_calendar_event' as const,
+        const pendingAction: PendingAction = {
+            type: 'create_user_calendar_event',
             params: {
                 title: courseCode ? `${courseCode} Quiz` : 'Quiz',
-                eventType: 'quiz' as const,
+                eventType: 'quiz',
                 eventDate: eventDateMatch?.[1],
                 courseCode,
             },
@@ -156,10 +389,7 @@ export const prepareActionNode = async (state: AgentGraphState): Promise<AgentGr
         };
 
         return pushTrace(
-            {
-                ...state,
-                pendingAction,
-            },
+            { ...state, pendingAction },
             'prepare_action',
             pendingAction.userVisibleSummary
         );
@@ -179,10 +409,7 @@ export const prepareActionNode = async (state: AgentGraphState): Promise<AgentGr
         const pendingAction = actionBuilder(state);
 
         return pushTrace(
-            {
-                ...state,
-                pendingAction,
-            },
+            { ...state, pendingAction },
             'prepare_action',
             pendingAction.userVisibleSummary
         );
@@ -194,7 +421,7 @@ export const prepareActionNode = async (state: AgentGraphState): Promise<AgentGr
             clarification: {
                 needed: true,
                 missingSlots: ['supported_action_type'],
-                question: '我暂时还不能安全地准备这个写操作，请先改成课程评论、组队、课表或日历事件。',
+                question: '我暂时还不能安全地准备这个写操作，请先改成课程评价、组队、课表或日历事件。',
                 scope: 'action_parameters',
             },
         },

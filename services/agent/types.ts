@@ -34,12 +34,71 @@ export type AgentResponse = {
     steps: AgentStep[];
     finalAnswer?: string;
     quickReplies?: string[];
+    debug?: {
+        trace: Array<Record<string, any>>;
+    };
 };
 
 export type AgentHistoryItem = {
     role: 'user' | 'assistant' | 'tool';
     content: string;
 };
+
+export type PendingAction =
+    | {
+        type: 'post_course_review';
+        params: { courseCode?: string; rating?: number; content?: string };
+        missingRequiredFields: string[];
+        userVisibleSummary: string;
+        safeToExecute: boolean;
+    }
+    | {
+        type: 'post_course_teaming';
+        params: { courseCode?: string; section?: string; content?: string };
+        missingRequiredFields: string[];
+        userVisibleSummary: string;
+        safeToExecute: boolean;
+    }
+    | {
+        type: 'send_course_chat_message';
+        params: { courseCode?: string; content?: string };
+        missingRequiredFields: string[];
+        userVisibleSummary: string;
+        safeToExecute: boolean;
+    }
+    | {
+        type: 'write_user_schedule_entry';
+        params: {
+            title?: string;
+            dayOfWeek?: number;
+            courseCode?: string;
+            startTime?: string;
+            endTime?: string;
+            startPeriod?: number;
+            endPeriod?: number;
+            room?: string;
+            weekText?: string;
+        };
+        missingRequiredFields: string[];
+        userVisibleSummary: string;
+        safeToExecute: boolean;
+    }
+    | {
+        type: 'create_user_calendar_event';
+        params: {
+            title?: string;
+            eventType?: 'exam' | 'quiz' | 'assignment' | 'custom';
+            eventDate?: string;
+            courseCode?: string;
+            startTime?: string;
+            endTime?: string;
+            location?: string;
+            note?: string;
+        };
+        missingRequiredFields: string[];
+        userVisibleSummary: string;
+        safeToExecute: boolean;
+    };
 
 export type AgentSessionState = {
     goal?: string;
@@ -50,6 +109,7 @@ export type AgentSessionState = {
     referencedCourse?: string;
     referencedBuilding?: string;
     summary?: string;
+    pendingAction?: PendingAction | null;
 };
 
 export type MemoryCandidateType =

@@ -187,6 +187,34 @@ describe('clarifyUserNode', () => {
         expect(result.clarification.needed).toBe(true);
         expect(result.clarification.question).toContain('评价');
     });
+    it('records llm latency using the real node start time', async () => {
+        (callDeepSeek as jest.Mock).mockImplementation(async () => {
+            await new Promise(resolve => setTimeout(resolve, 25));
+            return JSON.stringify({
+                question: '请补充课程代码',
+                missingSlots: ['courseCode'],
+                scope: 'action_parameters',
+            });
+        });
+
+        const result = await clarifyUserNode({
+            ...createInitialAgentGraphState({
+                input: '帮我发评价',
+                userId: 'user-1',
+                sessionId: 'session-1',
+                history: [],
+                sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            }),
+            plan: {
+                decision: 'clarify',
+                reason: 'missing course code',
+                selectedEvidenceIds: [],
+            },
+        });
+
+        expect(result.trace[0]?.llmCalls?.[0]?.latencyMs).toBeGreaterThanOrEqual(20);
+        expect(result.trace[0]?.durationMs).toBeGreaterThanOrEqual(20);
+    });
 });
 
 describe('synthesizeResponseNode', () => {
@@ -231,11 +259,14 @@ describe('graph runtime', () => {
             userId: 'user-1',
             sessionId: 'session-1',
             history: [],
-            sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            sessionState: { facts: {}, recentDecisions: [], openLoops: [], pendingAction: null },
         });
 
-        expect(typeof result.finalAnswer).toBe('string');
-        expect(Array.isArray(result.steps)).toBe(true);
+        expect(typeof result.response.finalAnswer).toBe('string');
+        expect(Array.isArray(result.response.steps)).toBe(true);
+        expect(result.sessionState).toBeDefined();
+        expect(result.finalState).toBeDefined();
+        expect(result.response.debug?.trace).toEqual(result.finalState.trace);
     });
 
     it('returns the confirmation prompt without calling synthesis when an action is awaiting confirmation', async () => {
@@ -252,11 +283,159 @@ describe('graph runtime', () => {
             userId: 'user-1',
             sessionId: 'session-1',
             history: [],
-            sessionState: { facts: {}, recentDecisions: [], openLoops: [] },
+            sessionState: { facts: {}, recentDecisions: [], openLoops: [], pendingAction: null },
         });
 
-        expect(result.finalAnswer).toContain('确认');
-        expect(result.finalAnswer).toContain('COMP3015');
-        expect(result.finalAnswer).toContain('2026-05-18');
+        expect(result.response.finalAnswer).toContain('确认');
+        expect(result.response.finalAnswer).toContain('COMP3015');
+        expect(result.response.finalAnswer).toContain('2026-05-18');
+    });
+
+    it('persists pendingAction in returned session state across a graph run', async () => {
+        (callDeepSeek as jest.Mock).mockResolvedValueOnce(JSON.stringify({
+            decision: 'act',
+            reason: 'user asked to create a calendar event',
+            selectedEvidenceIds: [],
+            proposedActionType: 'create_user_calendar_event',
+        }));
+
+        const runtime = createAgentGraphRuntime();
+        const result = await runtime.run({
+            input: '帮我记一个 COMP3015 quiz，2026-05-18',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            history: [],
+            sessionState: { facts: {}, recentDecisions: [], openLoops: [], pendingAction: null },
+        });
+
+        expect(result.sessionState.pendingAction).toBeDefined();
+        expect(result.sessionState.pendingAction?.type).toBe('create_user_calendar_event');
+    });
+
+    it('clears pendingAction and returns cancellation response when user cancels', async () => {
+        (callDeepSeek as jest.Mock).mockResolvedValueOnce(JSON.stringify({
+            decision: 'act',
+            reason: 'user asked to create a calendar event',
+            selectedEvidenceIds: [],
+            proposedActionType: 'create_user_calendar_event',
+        }));
+
+        const runtime = createAgentGraphRuntime();
+
+        // First turn: create a pending action
+        const first = await runtime.run({
+            input: '帮我记一个 COMP3015 quiz，2026-05-18',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            history: [],
+            sessionState: { facts: {}, recentDecisions: [], openLoops: [], pendingAction: null },
+        });
+
+        expect(first.sessionState.pendingAction).toBeDefined();
+
+        // Second turn: cancel
+        (callDeepSeek as jest.Mock).mockReset();
+        (callDeepSeek as jest.Mock).mockResolvedValueOnce(JSON.stringify({
+            decision: 'act',
+            reason: 'user is interacting with pending action',
+            selectedEvidenceIds: [],
+        }));
+
+        const second = await runtime.run({
+            input: '取消',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            history: [],
+            sessionState: first.sessionState,
+        });
+
+        expect(second.response.finalAnswer).toContain('取消');
+        expect(second.sessionState.pendingAction).toBeNull();
+    });
+
+    it('schedule write: draft -> confirm -> tool executes', async () => {
+        (callDeepSeek as jest.Mock).mockResolvedValueOnce(JSON.stringify({
+            decision: 'act',
+            reason: 'user asked to write schedule',
+            selectedEvidenceIds: [],
+            proposedActionType: 'write_user_schedule_entry',
+        }));
+
+        const runtime = createAgentGraphRuntime();
+
+        // First turn: draft
+        const first = await runtime.run({
+            input: 'Add COMP3015 Tuesday 09:00-10:00 to my schedule',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            history: [],
+            sessionState: { facts: {}, recentDecisions: [], openLoops: [], pendingAction: null },
+        });
+
+        expect(first.sessionState.pendingAction).toBeDefined();
+        expect(first.sessionState.pendingAction?.type).toBe('write_user_schedule_entry');
+        expect(first.response.finalAnswer).toContain('确认');
+
+        // Second turn: confirm - planner routes to act, then confirm_action satisfied, then execute_tools, then synthesize
+        (callDeepSeek as jest.Mock).mockReset();
+        (callDeepSeek as jest.Mock)
+            .mockResolvedValueOnce(JSON.stringify({
+                decision: 'act',
+                reason: 'user confirmed',
+                selectedEvidenceIds: [],
+                proposedActionType: 'write_user_schedule_entry',
+            }))
+            .mockResolvedValueOnce('已成功将 COMP3015 添加到你的课表！');
+
+        const second = await runtime.run({
+            input: '确认',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            history: [],
+            sessionState: first.sessionState,
+        });
+
+        expect(second.response.finalAnswer).toBeTruthy();
+        expect(second.sessionState.pendingAction).toBeNull();
+    });
+
+    it('preserves and merges pendingAction across multiple graph runs', async () => {
+        // Create an initial pending action with missing fields
+        const initialPendingAction = {
+            type: 'create_user_calendar_event' as const,
+            params: { title: 'COMP3015 Quiz', eventType: 'quiz' as const, courseCode: 'COMP3015' },
+            missingRequiredFields: ['eventDate'],
+            userVisibleSummary: '创建 COMP3015 Quiz 日历事件',
+            safeToExecute: false,
+        };
+
+        (callDeepSeek as jest.Mock).mockResolvedValueOnce(JSON.stringify({
+            decision: 'act',
+            reason: 'slot filling',
+            selectedEvidenceIds: [],
+            proposedActionType: 'create_user_calendar_event',
+        }));
+
+        const runtime = createAgentGraphRuntime();
+
+        // Run with existing pending action, user supplies date
+        const result = await runtime.run({
+            input: '2026-05-18',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            history: [],
+            sessionState: {
+                facts: {},
+                recentDecisions: [],
+                openLoops: [],
+                pendingAction: initialPendingAction,
+            },
+        });
+
+        // The pending action should have the date merged in
+        expect(result.sessionState.pendingAction).toBeDefined();
+        const params = (result.sessionState.pendingAction?.params ?? {}) as any;
+        expect(params.eventDate).toBe('2026-05-18');
+        expect(params.courseCode).toBe('COMP3015');
     });
 });

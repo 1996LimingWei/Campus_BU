@@ -37,7 +37,7 @@ export const createInitialAgentGraphState = (input: GraphEntryInput): AgentGraph
         needed: false,
         missingSlots: [],
     },
-    pendingAction: null,
+    pendingAction: input.sessionState.pendingAction ?? null,
     confirmation: {
         required: false,
         satisfied: false,

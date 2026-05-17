@@ -1,6 +1,6 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import type { AgentResponse } from '../types';
-import type { AgentGraphState, GraphEntryInput, GraphRuntime } from './types';
+import type { AgentGraphState, GraphEntryInput, GraphRunResult, GraphRuntime } from './types';
 import { createInitialAgentGraphState } from './state';
 import { normalizeInputNode } from './nodes/normalize_input';
 import { routeIntentNode } from './nodes/route_intent';
@@ -19,12 +19,16 @@ import {
     getPostPrepareBranch,
 } from './edges';
 
-const toAgentResponse = (finalState: any): AgentResponse => ({
+const toAgentResponse = (finalState: AgentGraphState): AgentResponse => ({
     finalAnswer: finalState.finalResponse,
-    steps: finalState.trace.map((entry: any) => ({
+    steps: finalState.trace.map((entry) => ({
         thought: `${entry.node}: ${entry.summary}`,
-        path: 'llm',
+        path: 'llm' as const,
+        ...(entry.llmCalls?.length ? { modelName: entry.llmCalls[0].model } : {}),
     })),
+    debug: {
+        trace: finalState.trace,
+    },
 });
 
 const AgentGraphAnnotation = Annotation.Root({
@@ -71,12 +75,19 @@ export const createCompiledAgentGraph = () => new StateGraph(AgentGraphAnnotatio
     .compile();
 
 export const createAgentGraphRuntime = (): GraphRuntime => ({
-    async run(input: GraphEntryInput) {
+    async run(input: GraphEntryInput): Promise<GraphRunResult> {
         const graph = createCompiledAgentGraph();
         const result = await graph.invoke({
             state: createInitialAgentGraphState(input),
         });
 
-        return toAgentResponse(result.state);
+        const finalState: AgentGraphState = result.state;
+        const response = toAgentResponse(finalState);
+        const sessionState = {
+            ...finalState.sessionState,
+            pendingAction: finalState.pendingAction,
+        };
+
+        return { response, sessionState, finalState };
     },
 });

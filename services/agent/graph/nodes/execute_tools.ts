@@ -6,7 +6,7 @@ import {
 } from '../tools/course_community_tools';
 import { writeUserScheduleTool } from '../tools/schedule_tools';
 import type { AgentGraphState, PendingAction, PreparedToolCall } from '../types';
-import { pushTrace } from '../telemetry';
+import { pushTraceWithDuration, startTraceTimer } from '../telemetry';
 
 const buildToolInput = (action: PendingAction, state: AgentGraphState): Record<string, any> => {
     if (action.type === 'create_user_calendar_event') {
@@ -74,6 +74,7 @@ const buildToolCalls = (state: AgentGraphState): PreparedToolCall[] => {
 };
 
 export const executeToolsNode = async (state: AgentGraphState): Promise<AgentGraphState> => {
+    const timer = startTraceTimer();
     const toolCalls = buildToolCalls(state);
     const results = [];
 
@@ -103,13 +104,23 @@ export const executeToolsNode = async (state: AgentGraphState): Promise<AgentGra
         }
     }
 
-    return pushTrace(
+    const toolTraceEntries = results.map(r => ({
+        toolName: r.toolName,
+        success: r.success,
+        retryable: r.retryable,
+    }));
+    const allSucceeded = results.length > 0 && results.every(result => result.success);
+
+    return pushTraceWithDuration(
         {
             ...state,
+            pendingAction: allSucceeded ? null : state.pendingAction,
             toolCalls,
             toolResults: results,
         },
         'execute_tools',
-        `executed=${results.length}`
+        `executed=${results.length}, success=${results.filter(r => r.success).length}`,
+        timer.startedAt,
+        { toolCalls: toolTraceEntries }
     );
 };

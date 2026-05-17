@@ -27,8 +27,9 @@ export const getPostPrepareBranch = (pendingAction: PendingAction | null) => {
 };
 
 export const getConfirmationBranch = (
-    confirmation: { required: boolean; satisfied: boolean }
+    confirmation: { required: boolean; satisfied: boolean; cancelled?: boolean }
 ) => {
+    if (confirmation.cancelled) return 'synthesize_response';
     if (confirmation.required && !confirmation.satisfied) return 'synthesize_response';
     return 'execute_tools';
 };

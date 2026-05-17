@@ -1,6 +1,6 @@
 import { callDeepSeek, resolveModelName } from '../../llm';
 import type { AgentGraphState } from '../types';
-import { pushTrace } from '../telemetry';
+import { pushTrace, pushTraceWithDuration, startTraceTimer } from '../telemetry';
 import { buildSynthesizerPrompt } from '../prompts/synthesizer';
 
 export const synthesizeResponseNode = async (state: AgentGraphState): Promise<AgentGraphState> => {
@@ -11,7 +11,20 @@ export const synthesizeResponseNode = async (state: AgentGraphState): Promise<Ag
                 finalResponse: state.clarification.question,
             },
             'synthesize_response',
-            'clarification response'
+            'clarification response',
+            { checkpoint: 'clarification' }
+        );
+    }
+
+    if (state.confirmation.cancelled) {
+        return pushTrace(
+            {
+                ...state,
+                finalResponse: '已取消这次操作。你如果想改内容，直接重新告诉我，我会先给你确认稿。',
+            },
+            'synthesize_response',
+            'cancellation response',
+            { checkpoint: 'cancelled' }
         );
     }
 
@@ -22,20 +35,27 @@ export const synthesizeResponseNode = async (state: AgentGraphState): Promise<Ag
                 finalResponse: state.confirmation.prompt,
             },
             'synthesize_response',
-            'confirmation prompt'
+            'confirmation prompt',
+            { checkpoint: 'confirmation' }
         );
     }
 
-    const raw = await callDeepSeek(buildSynthesizerPrompt(state), {
-        model: resolveModelName('fast'),
-    });
+    const model = resolveModelName('fast');
+    const timer = startTraceTimer();
+    const raw = await callDeepSeek(buildSynthesizerPrompt(state), { model });
+    const latencyMs = timer.getDuration();
 
-    return pushTrace(
+    return pushTraceWithDuration(
         {
             ...state,
             finalResponse: raw,
         },
         'synthesize_response',
-        'llm synthesis'
+        'llm synthesis',
+        timer.startedAt,
+        {
+            checkpoint: 'completed',
+            llmCalls: [{ model, success: true, latencyMs }],
+        }
     );
 };

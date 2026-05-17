@@ -5,7 +5,10 @@ import type {
     AgentSessionState,
     AgentStep,
     MemoryCandidate,
+    PendingAction,
 } from '../types';
+
+export type { PendingAction };
 
 export type GraphIntentKind = 'unknown' | 'qa' | 'action' | 'hybrid' | 'unsupported';
 export type GraphDomain =
@@ -75,62 +78,6 @@ export type ClarificationState = {
     scope?: 'intent' | 'action_parameters' | 'confirmation' | 'retrieval_disambiguation';
 };
 
-export type PendingAction =
-    | {
-        type: 'post_course_review';
-        params: { courseCode?: string; rating?: number; content?: string };
-        missingRequiredFields: string[];
-        userVisibleSummary: string;
-        safeToExecute: boolean;
-    }
-    | {
-        type: 'post_course_teaming';
-        params: { courseCode?: string; section?: string; content?: string };
-        missingRequiredFields: string[];
-        userVisibleSummary: string;
-        safeToExecute: boolean;
-    }
-    | {
-        type: 'send_course_chat_message';
-        params: { courseCode?: string; content?: string };
-        missingRequiredFields: string[];
-        userVisibleSummary: string;
-        safeToExecute: boolean;
-    }
-    | {
-        type: 'write_user_schedule_entry';
-        params: {
-            title?: string;
-            dayOfWeek?: number;
-            courseCode?: string;
-            startTime?: string;
-            endTime?: string;
-            startPeriod?: number;
-            endPeriod?: number;
-            room?: string;
-            weekText?: string;
-        };
-        missingRequiredFields: string[];
-        userVisibleSummary: string;
-        safeToExecute: boolean;
-    }
-    | {
-        type: 'create_user_calendar_event';
-        params: {
-            title?: string;
-            eventType?: 'exam' | 'quiz' | 'assignment' | 'custom';
-            eventDate?: string;
-            courseCode?: string;
-            startTime?: string;
-            endTime?: string;
-            location?: string;
-            note?: string;
-        };
-        missingRequiredFields: string[];
-        userVisibleSummary: string;
-        safeToExecute: boolean;
-    };
-
 export type PreparedToolCall = {
     toolName: string;
     input: Record<string, any>;
@@ -143,6 +90,18 @@ export type ToolExecutionResult = {
     rawResult: any;
     userVisibleData?: Record<string, any>;
     retryable: boolean;
+};
+
+export type GraphTraceEntry = {
+    node: string;
+    summary: string;
+    startedAt: string;
+    finishedAt: string;
+    durationMs: number;
+    branch?: string;
+    llmCalls?: Array<{ model: string; success: boolean; latencyMs?: number }>;
+    toolCalls?: Array<{ toolName: string; success: boolean; retryable: boolean }>;
+    checkpoint?: 'clarification' | 'confirmation' | 'cancelled' | 'completed';
 };
 
 export type AgentGraphState = {
@@ -163,6 +122,8 @@ export type AgentGraphState = {
     confirmation: {
         required: boolean;
         satisfied: boolean;
+        cancelled?: boolean;
+        updatedPendingAction?: PendingAction | null;
         prompt?: string;
     };
     toolCalls: PreparedToolCall[];
@@ -170,7 +131,7 @@ export type AgentGraphState = {
     finalResponse?: string;
     memoryCandidates: MemoryCandidate[];
     steps: AgentStep[];
-    trace: Array<{ node: string; summary: string }>;
+    trace: GraphTraceEntry[];
     errors: string[];
 };
 
@@ -184,6 +145,12 @@ export type GraphEntryInput = {
     deviceLocation?: AgentGeoPoint | null;
 };
 
+export type GraphRunResult = {
+    response: AgentResponse;
+    sessionState: AgentSessionState;
+    finalState: AgentGraphState;
+};
+
 export type GraphRuntime = {
-    run(input: GraphEntryInput): Promise<AgentResponse>;
+    run(input: GraphEntryInput): Promise<GraphRunResult>;
 };
