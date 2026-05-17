@@ -1,0 +1,34 @@
+import type {
+    GraphIntentState,
+    GraphPlanState,
+    PendingAction,
+} from './types';
+
+export const getIntentBranch = (
+    intent: Pick<GraphIntentState, 'kind' | 'requiresRetrieval'>
+) => {
+    if (intent.kind === 'unsupported') return 'synthesize_response';
+    if (intent.requiresRetrieval) return 'retrieve_context';
+    return 'plan_next_step';
+};
+
+export const getPlannerBranch = (
+    plan: Pick<GraphPlanState, 'decision'>
+) => {
+    if (plan.decision === 'answer') return 'synthesize_response';
+    if (plan.decision === 'clarify') return 'clarify_user';
+    return 'prepare_action';
+};
+
+export const getPostPrepareBranch = (pendingAction: PendingAction | null) => {
+    if (!pendingAction) return 'clarify_user';
+    if (pendingAction.missingRequiredFields.length > 0) return 'clarify_user';
+    return 'confirm_action';
+};
+
+export const getConfirmationBranch = (
+    confirmation: { required: boolean; satisfied: boolean }
+) => {
+    if (confirmation.required && !confirmation.satisfied) return 'synthesize_response';
+    return 'execute_tools';
+};

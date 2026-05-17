@@ -5,6 +5,15 @@ import { callDeepSeek, callDeepSeekStream } from '../../../services/agent/llm';
 import { getMemoryFact, saveMemoryFact } from '../../../services/agent/memory';
 import { FAQService } from '../../../services/faq';
 
+const mockRunAgentGraph = jest.fn().mockResolvedValue({
+    finalAnswer: 'graph answer',
+    steps: [{ thought: 'graph runtime used', path: 'llm' }],
+});
+
+jest.mock('../../../services/agent', () => ({
+    runAgentGraph: (...args: any[]) => mockRunAgentGraph(...args),
+}));
+
 jest.mock('../../../services/agent/llm', () => ({
     callDeepSeek: jest.fn(),
     callDeepSeekStream: jest.fn(),
@@ -173,6 +182,7 @@ describe('AgentExecutor course publishing flow', () => {
         mockGetUpcomingUserCalendarEvents.mockResolvedValue([]);
         (callDeepSeek as jest.Mock).mockReset();
         AGENT_CONFIG.DEEPSEEK_ENABLED = false;
+        (AGENT_CONFIG as any).LANGGRAPH_ENABLED = false;
     });
 
     it('asks for course code when user says 我想组队 without usable context', async () => {
@@ -1389,5 +1399,42 @@ describe('AgentExecutor course publishing flow', () => {
             expect(response.steps[0].action?.tool).toBe('read_user_schedule');
             expect(response.finalAnswer).toBeTruthy();
         });
+    });
+});
+
+describe('AgentExecutor graph delegation', () => {
+    it('delegates process to the graph runtime when the graph flag is enabled', async () => {
+        mockRunAgentGraph.mockClear();
+        mockRunAgentGraph.mockResolvedValue({
+            finalAnswer: 'graph answer',
+            steps: [{ thought: 'graph runtime used', path: 'llm' }],
+        });
+        (AGENT_CONFIG as any).LANGGRAPH_ENABLED = true;
+
+        const executor = new AgentExecutor('user-1');
+        const response = await executor.process('GPA 怎么算？');
+
+        expect(mockRunAgentGraph).toHaveBeenCalledWith(expect.objectContaining({
+            input: 'GPA 怎么算？',
+            userId: 'user-1',
+        }));
+        expect(response.finalAnswer).toBe('graph answer');
+    });
+
+    it('delegates processWithGraph to the graph runtime entrypoint', async () => {
+        mockRunAgentGraph.mockClear();
+        mockRunAgentGraph.mockResolvedValue({
+            finalAnswer: 'graph answer',
+            steps: [{ thought: 'graph runtime used', path: 'llm' }],
+        });
+
+        const executor = new AgentExecutor('user-1');
+        const response = await executor.processWithGraph('GPA 怎么算？');
+
+        expect(mockRunAgentGraph).toHaveBeenCalledWith(expect.objectContaining({
+            input: 'GPA 怎么算？',
+            userId: 'user-1',
+        }));
+        expect(response.finalAnswer).toBe('graph answer');
     });
 });

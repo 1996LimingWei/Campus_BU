@@ -19,6 +19,7 @@ import {
 import { ContactMethod, Course, CourseTeaming, Review } from '../../types';
 import { getCachedValue, getOrSetCachedValue, setCachedValue } from './cache';
 import { buildResponseCacheKey, buildToolCacheKey } from './cache_keys';
+import { AGENT_CONFIG } from './config';
 import { callDeepSeekStream, resolveModelName } from './llm';
 import { getAllUserFacts, getMemoryFact, saveMemoryFact } from './memory';
 import {
@@ -30,6 +31,7 @@ import { createInitialSessionState, formatSessionState, updateSessionStateWithTu
 import { inferStableTask } from './stable_tasks';
 import { refineHistorySummary, summarizeHistory } from './summarizer';
 import { TOOLS } from './tools';
+import { runAgentGraph } from '.';
 import { AgentContext, AgentGeoPoint, AgentResponse, AgentStep } from './types';
 
 type ScheduleQueryIntent = 'today' | 'tomorrow' | 'next' | 'weekday' | 'all';
@@ -877,6 +879,32 @@ export class AgentExecutor {
         this.context.deviceLocation = location;
     }
 
+    /**
+     * Delegates processing to the new LangGraph-based runtime.
+     * Use this method to run through the structured graph pipeline
+     * (normalize → route → retrieve → plan → clarify/answer/act → synthesize → memory).
+     */
+    async processWithGraph(prompt: string, onUpdate?: (text: string) => void): Promise<AgentResponse> {
+        this.pushHistory('user', prompt);
+
+        const response = await runAgentGraph({
+            input: prompt,
+            userId: this.context.userId,
+            sessionId: this.context.sessionId,
+            history: this.context.history,
+            historySummary: this.context.historySummary,
+            sessionState: this.context.sessionState,
+            deviceLocation: this.context.deviceLocation,
+        });
+
+        if (response.finalAnswer) {
+            this.pushHistory('assistant', response.finalAnswer);
+            if (onUpdate) onUpdate(response.finalAnswer);
+        }
+
+        return response;
+    }
+
     private pushHistory(role: 'user' | 'assistant' | 'tool', content: string) {
         const item = { role, content } as const;
         this.context.history.push(item);
@@ -983,6 +1011,10 @@ export class AgentExecutor {
      * Main entry point for user prompts
      */
     async process(prompt: string, onUpdate?: (text: string) => void): Promise<AgentResponse> {
+        if (AGENT_CONFIG.LANGGRAPH_ENABLED) {
+            return this.processWithGraph(prompt, onUpdate);
+        }
+
         this.pushHistory('user', prompt);
         await this.maybeRefreshHistorySummary();
 

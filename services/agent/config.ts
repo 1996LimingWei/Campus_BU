@@ -24,5 +24,6 @@ export const AGENT_CONFIG = {
         process.env.EXPO_PUBLIC_AGENT_FAST_MODEL ||
         'deepseek-v4-pro',
     DEEPSEEK_ENABLED: !looksLikePlaceholderKey(rawDeepSeekApiKey),
+    LANGGRAPH_ENABLED: process.env.EXPO_PUBLIC_AGENT_LANGGRAPH_ENABLED === 'true',
     IS_PROD: false, // Set to true to use real backend proxy in future
 };

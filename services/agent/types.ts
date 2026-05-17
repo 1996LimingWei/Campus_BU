@@ -93,3 +93,5 @@ export interface AgentContext {
     sessionState: AgentSessionState;
     deviceLocation?: AgentGeoPoint | null;
 }
+
+export type AgentRuntimeResponse = AgentResponse;
