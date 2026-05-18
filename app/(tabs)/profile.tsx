@@ -13,7 +13,7 @@ import { ProfilePostFeed } from '../../components/profile/ProfilePostFeed';
 import { ProfileTabs, ProfileTabType } from '../../components/profile/ProfileTabs';
 import { useNotifications } from '../../context/NotificationContext';
 import { useLoginPrompt } from '../../hooks/useLoginPrompt';
-import { deleteAccount, getCurrentUser, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
+import { getCurrentUser, getUserProfile, signOut, uploadAndUpdateAvatar } from '../../services/auth';
 import { getDailyDigestEnabled, setDailyDigestEnabled as updateDailyDigestEnabled } from '../../services/agent/dailyDigest';
 import { fetchAnonymousPostsByAuthor, fetchLikedPosts, fetchPostsByAuthor, togglePostLike } from '../../services/campus';
 import { getFollowCounts } from '../../services/follows';
@@ -23,7 +23,6 @@ import { supabase } from '../../services/supabase';
 import { fetchUnreadModerationAlertCount } from '../../services/moderation';
 import { Post, User as UserProfile } from '../../types';
 import { isAdmin } from '../../utils/userUtils';
-import { getDeleteAccountErrorAlertCopy, getDeleteAccountSuccessAlertCopy } from '../../utils/deleteAccountFeedback';
 import { changeLanguage } from '../i18n/i18n';
 
 // Helper to check if avatar URL is valid (not a local file path)
@@ -428,34 +427,7 @@ export default function ProfileScreen() {
     };
 
     const handleDeleteAccount = () => {
-        Alert.alert(
-            t('profile.delete_account'),
-            t('profile.delete_account_confirm'),
-            [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                    text: t('profile.delete_account'),
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await deleteAccount();
-                            const successCopy = getDeleteAccountSuccessAlertCopy(t);
-                            profileScreenCache = null;
-                            Alert.alert(successCopy.title, successCopy.message, [
-                                {
-                                    text: t('common.ok'),
-                                    onPress: () => router.replace('/(auth)/login'),
-                                }
-                            ]);
-                        } catch (e) {
-                            console.error('Delete account failed:', e);
-                            const errorCopy = getDeleteAccountErrorAlertCopy(t);
-                            Alert.alert(errorCopy.title, errorCopy.message);
-                        }
-                    }
-                }
-            ]
-        );
+        router.push('/profile/delete-account' as any);
     };
 
     const handleCopyText = async (text: string) => {
@@ -984,10 +956,10 @@ export default function ProfileScreen() {
                                 <Text style={styles.signOutText}>{t('profile.sign_out')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.signOutButton, { marginTop: 12, backgroundColor: 'transparent', borderWidth: 0 }]}
+                                style={[styles.signOutButton, { marginTop: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#1E3A8A' }]}
                                 onPress={handleDeleteAccount}
                             >
-                                <Text style={[styles.signOutText, { color: '#9CA3AF', fontSize: 13 }]}>{t('profile.delete_account')}</Text>
+                                <Text style={[styles.signOutText, { color: '#6B7280', fontSize: 14 }]}>{t('profile.delete_account')}</Text>
                             </TouchableOpacity>
                         </View>
                     ) : (
